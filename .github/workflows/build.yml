@@ -1,0 +1,36 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos-native:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build native Metal probe
+        run: cmake --build build --target native_metal_sharing_probe --parallel
+
+  windows-cross:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: NikNakk/dxmt
+          ref: macos-xr-native-sharing
+          path: dxmt
+      - name: Install MinGW
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64
+      - name: Configure
+        run: >
+          cmake -S . -B build-win
+          -DCMAKE_SYSTEM_NAME=Windows
+          -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc
+          -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++
+          -DDXMT_INCLUDE_DIR="$GITHUB_WORKSPACE/dxmt/include"
+      - name: Build DXMT metadata probe
+        run: cmake --build build-win --target dxmt_native_sharing_probe --parallel
