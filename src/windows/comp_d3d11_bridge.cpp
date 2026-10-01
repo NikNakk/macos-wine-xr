@@ -5,10 +5,11 @@
  * @brief D3D11 client compositor for the macOS Wine XR bridge.
  *
  * This intentionally avoids WIL and Windows shared-handle import. D3D11
- * textures are created on the application's DXMT device. Simple 2D images use
- * Basalt IOSurface IDs; array textures use DXMT's existing shared-Metal Mach
- * port registration so native Monado can import the same MTLTexture directly.
- * A local D3D11 fence establishes producer completion before layer commit.
+ * textures are created on the application's DXMT device. Both ordinary 2D
+ * and array swapchains use DXMT's existing shared-Metal Mach-port registration,
+ * which the standalone native proxy resolves and republishes through Monado's
+ * generic Metal XPC handoff. A shared D3D11 fence provides the same path for
+ * producer-completion synchronization.
  */
 
 #include "client/comp_d3d11_client.h"
@@ -301,7 +302,7 @@ create_shared_metal_swapchain(struct client_d3d11_compositor *c,
 		ID3D11Texture2D *texture = NULL;
 		HRESULT hr = c->device->CreateTexture2D(&desc, NULL, &texture);
 		if (FAILED(hr) || texture == NULL) {
-			U_LOG_W("Wine D3D11 direct array texture creation failed image=%u hr=0x%08lx", i,
+			U_LOG_W("macOS Wine XR shared texture creation failed image=%u hr=0x%08lx", i,
 			        (unsigned long)hr);
 			swapchain_destroy(&sc->base.base);
 			return XRT_ERROR_NOT_IMPLEMENTED;
@@ -332,7 +333,7 @@ create_shared_metal_swapchain(struct client_d3d11_compositor *c,
 	xret = ipc_client_compositor_import_metal_bootstrap_textures(c->xcn, &native_info, props.image_count,
 	                                                             bootstrap_names, &sc->native);
 	if (xret != XRT_SUCCESS) {
-		U_LOG_W("macOS Wine XR shared-Metal import failed: result=%d; using side-by-side fallback", xret);
+		U_LOG_W("macOS Wine XR shared-Metal import failed: result=%d", xret);
 		swapchain_destroy(&sc->base.base);
 		return XRT_ERROR_NOT_IMPLEMENTED;
 	}
@@ -654,10 +655,10 @@ client_d3d11_compositor_create(struct xrt_compositor_native *xcn, ID3D11Device *
 		hr = c->device->QueryInterface(IID_ID3D11Device5, (void **)&device5);
 		if (SUCCEEDED(hr) && device5 != NULL) {
 			/*
-			 * DXMT shared fences are backed by bootstrap-registered
-			 * MTLSharedEvents. The DXMT native-sharing contract exposes that bootstrap
-			 * name through GetPrivateData so native Monado can import the same
-			 * event as a Vulkan timeline semaphore.
+			 * DXMT shared fences are backed by bootstrap-registered MTLSharedEvents.
+			 * The DXMT native-sharing contract exposes the opaque registration
+			 * name through GetPrivateData; macos-wine-xr resolves and republishes
+			 * the event before native Monado imports it as a Vulkan timeline.
 			 */
 			hr = device5->CreateFence(0, D3D11_FENCE_FLAG_SHARED, IID_ID3D11Fence, (void **)&c->fence);
 			if (FAILED(hr) || c->fence == NULL) {
