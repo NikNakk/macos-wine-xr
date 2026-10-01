@@ -147,11 +147,72 @@ end-frame intervals were 16.632 ms (simulated Monado) and 13.857 ms (Meta).
 These short simulator runs include transport, scheduling and runtime behavior;
 they are not headset latency or a pacing comparison with the transitional path.
 
-Meta's default alpha-blend run submitted 30 frames, then its passthrough code
-asserted that an IOSurface texture must use shared/managed storage. The opaque
-run above passed. The bridge does not suppress validation or special-case the
-runtime name. Use opaque composition for the verified regression command;
-alpha-blend passthrough needs investigation in Meta's runtime.
+Meta's original default alpha-blend run submitted 30 frames, then its passthrough
+code asserted that an IOSurface texture must use shared/managed storage. The
+opaque run above passed. The bridge does not suppress validation or special-case
+the runtime name. Use opaque composition for the verified validation-enabled
+regression command.
+
+### Alpha-blend isolation, 2026-10-02
+
+The user first confirmed that native `psvr2-openxr-test` ran against Meta XR
+Simulator with `--blendmode AlphaBlend`, without `--passthrough`, and did not
+crash. That run's duration and validation settings were not recorded. Controlled
+repeats on Apple M5 / Meta XR Simulator 207.0.0 isolated Metal validation:
+
+| Client / mode | Metal validation | Result |
+|---|---|---|
+| Native diagnostic / Opaque | `MTL_DEBUG_LAYER=1` | Survived 6 seconds; SIGINT, exit 0 |
+| Native diagnostic / AlphaBlend | `MTL_DEBUG_LAYER=1` | Aborted with the same IOSurface storage-mode assertion |
+| Native diagnostic / AlphaBlend | `MTL_DEBUG_LAYER` unset | Survived 8 seconds; SIGINT, exit 0 |
+| Bridged hello_xr / AlphaBlend, corrected event check | `MTL_DEBUG_LAYER` unset | 348 submitted frames; exit 0 |
+
+Native source: Monado `7fd7f2835693d447d46da933e9a54c9f71ddfae9` plus local
+blend-mode selection changes. Bridge source: `df2106148cfff8b13d05773bbff3e2b359d909d2`
+plus the shared-event check correction below. No headset hardware was used.
+
+Both clients use two separate 1680x1760 swapchains, one image layer per eye,
+one sample/mip/face, array size 1, BGRA8 sRGB (Metal 81; DXGI 91), LOCAL space,
+and one stereo projection layer. The native app requests COLOR_ATTACHMENT
+usage and premultiplied source alpha. hello_xr additionally requests SAMPLED
+usage and UNPREMULTIPLIED_ALPHA. The thunk/host preserve those usage flags,
+layer flags, blend mode, poses, FOVs, rectangles, and array indices. Those
+client differences are not required to reproduce the validation assertion:
+the native client fails without Wine, DXMT, RPC, shared imports, or bridge blits.
+This establishes a native Meta reproduction; it does not identify the exact
+internal texture descriptor field. LLDB could not launch the app under the
+host's debugserver permissions, so no native backtrace was obtained.
+
+A separate bridge failure appeared without validation: the blit guard rejected
+`event.device == nil`. Apple's SDK documents that MTLSharedEvent's device may
+be nil because shared events span devices. Removing that invalid device check
+preserves texture device/descriptor checks and the producer timeline wait.
+Before correction, bridged alpha blending failed at xrReleaseSwapchainImage
+with XR_ERROR_FEATURE_UNSUPPORTED; afterward it passed the 348-frame run.
+The existing three-image, two-slice GPU pattern probe and unsignaled-event timeout
+checks passed on both Meta and simulated Monado without validation. The four
+bridge CTest suites also passed with macOS bootstrap access.
+
+Evidence logs are in the local `.build/reverse-sharing/` directory of the
+Monado workspace: `native-meta-{Opaque,AlphaBlend}-validation.log`,
+`native-meta-AlphaBlend-no-validation.log`,
+`meta-alpha-compare-no-validation-{host,wine}.log`, and
+`{meta,monado}-blit-no-validation.log`.
+
+To reproduce natively, use the diagnostic built from the source above:
+
+```sh
+MTL_DEBUG_LAYER=1 \
+XR_RUNTIME_JSON=/Applications/MetaXRSimulator.app/Contents/Resources/MetaXRSimulator/meta_openxr_simulator.json \
+PSVR2_OPENXR_LOADER=/path/to/libopenxr_loader.dylib \
+  /path/to/psvr2-openxr-test --blendmode AlphaBlend
+```
+
+Opaque remains the validation-enabled regression baseline. Disabling validation
+allows the short alpha runs to complete but does not repair Meta's invalid
+IOSurface texture descriptor. The next runtime-side step is to inspect/report
+that native reproduction to Meta; no bridge workaround is justified by these
+results.
 
 Native capability/auth/serialization/framing tests pass. Native and MinGW
 builds pass, including the legacy metadata probe and transitional proxy.

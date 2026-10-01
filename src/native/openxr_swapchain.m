@@ -170,7 +170,8 @@ mwxr_native_swapchain_blit(struct mwxr_native_swapchain *s, uint32_t index,
 	id<MTLTexture> src = (id<MTLTexture>)source_texture;
 	id<MTLTexture> dst = (id<MTLTexture>)s->images[index].texture;
 	id<MTLSharedEvent> event = (id<MTLSharedEvent>)producer_event;
-	if (src.device != s->backend->device || event.device != s->backend->device ||
+	/* MTLSharedEvent spans devices: its device property may legitimately be nil. */
+	if (src.device != s->backend->device ||
 	    src.width != dst.width || src.height != dst.height || src.arrayLength != dst.arrayLength ||
 	    src.pixelFormat != dst.pixelFormat || src.mipmapLevelCount != 1 || dst.mipmapLevelCount != 1 ||
 	    src.sampleCount != 1 || dst.sampleCount != 1 || src.framebufferOnly || dst.framebufferOnly ||
