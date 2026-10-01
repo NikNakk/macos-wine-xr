@@ -86,9 +86,11 @@ if(APPLE)
 			COMMAND "${Python3_EXECUTABLE}"
 				"${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_monado_wire.py"
 				--monado-source "${MONADO_SOURCE_DIR}"
+				--generated-header "${MONADO_BUILD_DIR}/src/xrt/ipc/ipc_protocol_generated.h"
 				--output "${MONADO_WIRE_GENERATED_HEADER}"
 			DEPENDS
 				"${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_monado_wire.py"
+				"${MONADO_BUILD_DIR}/src/xrt/ipc/ipc_protocol_generated.h"
 				${MONADO_PROTO_JSON}
 			VERBATIM
 			COMMENT "Generating Monado IPC wire description for Wine proxy"
