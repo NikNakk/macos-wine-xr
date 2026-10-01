@@ -1,6 +1,7 @@
 #include "macos_wine_xr/dxmt_native_sharing.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 #include <d3d11_4.h>
 #include <dxgi.h>
@@ -93,9 +94,20 @@ main()
 
 	std::printf("texture=%s\n", texture_name.value);
 	std::printf("fence=%s\n", fence_name.value);
-	std::printf("resources are live; press Enter after the native macOS probe finishes\n");
 	std::fflush(stdout);
-	(void)std::getchar();
+
+	const char *hold_text = std::getenv("MACOS_WINE_XR_PROBE_HOLD_MS");
+	if (hold_text != nullptr && hold_text[0] != '\0') {
+		char *end = nullptr;
+		unsigned long hold_ms = std::strtoul(hold_text, &end, 10);
+		if (end != hold_text && *end == '\0' && hold_ms > 0 && hold_ms <= 120000) {
+			Sleep(static_cast<DWORD>(hold_ms));
+		}
+	} else {
+		std::printf("resources are live; press Enter after the native macOS probe finishes\n");
+		std::fflush(stdout);
+		(void)std::getchar();
+	}
 
 	fence->Release();
 	device5->Release();
