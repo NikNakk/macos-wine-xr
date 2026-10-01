@@ -24,6 +24,16 @@ repo_root=${script_dir:h}
 port=${IPC_WINE_TCP_PORT:-4242}
 build_dir=${MACOS_WINE_XR_PROXY_BUILD:-${repo_root}/build-proxy}
 
+monado_wire_header=${MONADO_BUILD_DIR}/src/xrt/ipc/ipc_protocol_generated.h
+if [[ ! -f ${monado_wire_header} ]]; then
+	print "Generating Monado IPC protocol headers..."
+	cmake --build "${MONADO_BUILD_DIR}" --target ipc_shared --parallel
+fi
+if [[ ! -f ${monado_wire_header} ]]; then
+	print -u2 "Missing generated Monado IPC header after build: ${monado_wire_header}"
+	exit 1
+fi
+
 if [[ -z ${IPC_WINE_TCP_TOKEN:-} ]]; then
 	cache_root=${XDG_CACHE_HOME:-${HOME}/Library/Caches}
 	token_dir=${cache_root}/macos-wine-xr
