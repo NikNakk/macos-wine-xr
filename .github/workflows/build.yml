@@ -11,8 +11,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-      - name: Build native Metal probe
-        run: cmake --build build --target native_metal_sharing_probe --parallel
+      - name: Build native Metal and auth probes
+        run: cmake --build build --target native_metal_sharing_probe tcp_auth_test --parallel
+      - name: Run TCP auth test
+        run: ./build/tcp_auth_test
 
   windows-cross:
     runs-on: ubuntu-latest
