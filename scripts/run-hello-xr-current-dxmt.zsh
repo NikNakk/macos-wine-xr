@@ -110,7 +110,9 @@ if [[ ! -f ${client_ipc_header} || ! -f ${service_ipc_header} ]]; then
 fi
 python3 "${repo_root}/tools/check_monado_wire_compat.py" \
 	--client-header "${client_ipc_header}" \
-	--service-header "${service_ipc_header}"
+	--service-header "${service_ipc_header}" \
+	--client-source "${client_source}" \
+	--service-source "${MONADO_SOURCE_DIR}"
 
 # Shared token for the old Windows byte-stream client and the new proxy.
 if [[ -z ${IPC_WINE_TCP_TOKEN:-} ]]; then
