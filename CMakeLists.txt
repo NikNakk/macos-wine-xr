@@ -37,6 +37,7 @@ if(APPLE)
 
 	add_library(macos_wine_xr_native_metal STATIC
 		src/macos/native_metal_sharing.m
+		src/macos/monado_handoff.c
 	)
 	target_include_directories(macos_wine_xr_native_metal
 		PUBLIC
@@ -46,12 +47,23 @@ if(APPLE)
 		PRIVATE
 			"-framework Foundation"
 			"-framework Metal"
+			${CMAKE_DL_LIBS}
 	)
 
 	add_executable(native_metal_sharing_probe
 		tests/macos/native_metal_sharing_probe.m
 	)
 	target_link_libraries(native_metal_sharing_probe
+		PRIVATE
+			macos_wine_xr_native_metal
+			"-framework Foundation"
+			"-framework Metal"
+	)
+
+	add_executable(dxmt_to_monado_token_probe
+		tests/macos/dxmt_to_monado_token_probe.m
+	)
+	target_link_libraries(dxmt_to_monado_token_probe
 		PRIVATE
 			macos_wine_xr_native_metal
 			"-framework Foundation"
