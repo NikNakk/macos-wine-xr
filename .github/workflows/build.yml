@@ -63,3 +63,23 @@ jobs:
       - name: Build proxy
         run: cmake --build macos-wine-xr/build-proxy --target macos_wine_xr_proxy --parallel
 
+  macos-windows-client:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: macos-wine-xr
+      - uses: actions/checkout@v4
+        with:
+          repository: NikNakk/dxmt
+          ref: macos-xr-native-sharing
+          path: dxmt
+      - name: Install cross-build dependencies
+        run: brew install cmake ninja mingw-w64
+      - name: Build bridge-owned Win64 OpenXR client
+        working-directory: macos-wine-xr
+        env:
+          DXMT_SOURCE_DIR: ${{ github.workspace }}/dxmt
+          MACOS_WINE_XR_CLIENT_ROOT: ${{ github.workspace }}/client-build
+        run: ./scripts/build-wine-openxr-client.zsh
+
