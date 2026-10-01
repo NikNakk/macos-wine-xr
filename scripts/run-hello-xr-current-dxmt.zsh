@@ -100,6 +100,18 @@ if [[ -z ${runtime_dll} ]]; then
 	exit 1
 fi
 
+client_ipc_header=${runtime_build}/src/xrt/ipc/ipc_protocol_generated.h
+service_ipc_header=${MONADO_BUILD_DIR}/src/xrt/ipc/ipc_protocol_generated.h
+if [[ ! -f ${client_ipc_header} || ! -f ${service_ipc_header} ]]; then
+	print -u2 "Could not find generated IPC headers for compatibility check."
+	print -u2 "  client:  ${client_ipc_header}"
+	print -u2 "  service: ${service_ipc_header}"
+	exit 1
+fi
+python3 "${repo_root}/tools/check_monado_wire_compat.py" \
+	--client-header "${client_ipc_header}" \
+	--service-header "${service_ipc_header}"
+
 # Shared token for the old Windows byte-stream client and the new proxy.
 if [[ -z ${IPC_WINE_TCP_TOKEN:-} ]]; then
 	export IPC_WINE_TCP_TOKEN=$(python3 - <<'PY'
