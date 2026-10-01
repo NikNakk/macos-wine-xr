@@ -39,7 +39,7 @@ def main():
     calls = load_calls(args.monado_source)
     if args.generated_header is not None:
         generated = args.generated_header.read_text()
-        actual = re.findall(r"^\\s*(IPC_[A-Z0-9_]+),\\s*$", generated, re.MULTILINE)
+        actual = re.findall(r"^\s*(IPC_[A-Z0-9_]+),\s*$", generated, re.MULTILINE)
         expected = ["IPC_" + name.upper() for name, _ in calls]
         if actual != expected:
             mismatch = next(
