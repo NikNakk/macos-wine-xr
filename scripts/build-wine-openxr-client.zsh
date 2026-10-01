@@ -46,11 +46,10 @@ if [[ ! -d ${source_dir}/.git ]]; then
 	print "Cloning private Monado Windows-client build framework..."
 	git clone --depth 1 --branch "${monado_ref}" "${monado_repo}" "${source_dir}"
 else
-	if [[ -n $(git -C "${source_dir}" status --porcelain --untracked-files=no) ]]; then
-		print -u2 "Private client checkout has tracked modifications; refusing to reset:"
-		git -C "${source_dir}" status --short >&2
-		exit 1
-	fi
+	# This checkout lives entirely under the bridge build root and is owned by
+	# this script. Discard the previous source overlay before refreshing it.
+	git -C "${source_dir}" reset --hard HEAD >/dev/null
+	git -C "${source_dir}" clean -fd >/dev/null
 	git -C "${source_dir}" fetch --quiet origin "${monado_ref}"
 	git -C "${source_dir}" checkout --quiet -B "${monado_ref}" "origin/${monado_ref}"
 fi
