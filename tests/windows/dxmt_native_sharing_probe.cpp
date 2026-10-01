@@ -93,6 +93,9 @@ main()
 
 	std::printf("texture=%s\n", texture_name.value);
 	std::printf("fence=%s\n", fence_name.value);
+	std::printf("resources are live; press Enter after the native macOS probe finishes\n");
+	std::fflush(stdout);
+	(void)std::getchar();
 
 	fence->Release();
 	device5->Release();
