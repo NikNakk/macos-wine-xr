@@ -45,19 +45,23 @@ if [[ ! ${IPC_WINE_TCP_TOKEN} =~ '^[0-9a-f]{64}$' ]]; then
 	exit 2
 fi
 
+if [[ -n ${MONADO_METAL_XPC_CLIENT:-} && ! -f ${MONADO_METAL_XPC_CLIENT} ]]; then
+	print -u2 "MONADO_METAL_XPC_CLIENT does not exist: ${MONADO_METAL_XPC_CLIENT}"
+	exit 1
+fi
+
 if [[ -z ${MONADO_METAL_XPC_CLIENT:-} ]]; then
-	if [[ -f ${MONADO_BUILD_DIR}/src/xrt/ipc/libmonado_metal_xpc_client.dylib ]]; then
-		export MONADO_METAL_XPC_CLIENT=${MONADO_BUILD_DIR}/src/xrt/ipc/libmonado_metal_xpc_client.dylib
-	else
+	candidate=$(find "${MONADO_BUILD_DIR}" -name libmonado_metal_xpc_client.dylib -type f -print -quit)
+	if [[ -z ${candidate} ]]; then
 		print "Building Monado external Metal XPC client..."
 		cmake --build "${MONADO_BUILD_DIR}" --target monado_metal_xpc_client --parallel
 		candidate=$(find "${MONADO_BUILD_DIR}" -name libmonado_metal_xpc_client.dylib -type f -print -quit)
-		if [[ -z ${candidate} ]]; then
-			print -u2 "Could not find libmonado_metal_xpc_client.dylib after build"
-			exit 1
-		fi
-		export MONADO_METAL_XPC_CLIENT=${candidate}
 	fi
+	if [[ -z ${candidate} ]]; then
+		print -u2 "Could not find libmonado_metal_xpc_client.dylib after build"
+		exit 1
+	fi
+	export MONADO_METAL_XPC_CLIENT=${candidate}
 fi
 
 cmake -S "${repo_root}" -B "${build_dir}" \
