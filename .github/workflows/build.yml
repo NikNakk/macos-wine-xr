@@ -28,7 +28,7 @@ jobs:
         run: >
           cmake --build build --target native_metal_sharing_probe tcp_auth_test
           native_capability_test native_openxr_backend_probe native_openxr_blit_probe
-          dxmt_reverse_import_probe --parallel
+          dxmt_reverse_import_probe macos_wine_xr_host rpc_serialization_test rpc_transport_test --parallel
       - name: Test authentication and native capability lifetime
         run: ctest --test-dir build --output-on-failure
 
@@ -57,7 +57,7 @@ jobs:
           -DDXMT_INCLUDE_DIR="$GITHUB_WORKSPACE/dxmt/include"
           -DOPENXR_INCLUDE_DIR="$GITHUB_WORKSPACE/OpenXR-SDK/include"
       - name: Build DXMT metadata and reverse-import probes
-        run: cmake --build build-win --target dxmt_native_sharing_probe dxmt_reverse_import_probe --parallel
+        run: cmake --build build-win --target dxmt_native_sharing_probe dxmt_reverse_import_probe macos_wine_xr_openxr openxr_rpc_smoke rpc_serialization_test --parallel
 
   macos-proxy:
     runs-on: macos-14

@@ -1,83 +1,66 @@
 # Architecture
 
-The project separates Windows/Wine compatibility from the native XR runtime.
-
-## Ownership boundary
-
-### DXMT
-
-DXMT owns translation from D3D11 to Metal and the native representation of
-shared D3D resources. The `macos-xr-native-sharing` branch publishes the
-existing Metal bootstrap registration names on shared textures and fences
-through consumer-neutral D3D11 private-data GUIDs.
-
-DXMT does not know about Monado, OpenXR runtimes, OpenVR, or individual games.
-
-### macOS Wine XR
-
-This repository owns:
-
-- querying DXMT native-sharing metadata;
-- the Wine-side transport;
-- the native bridge process;
-- Windows OpenXR/OpenVR compatibility glue;
-- OpenComposite/xrizer integration;
-- launch/provisioning/test tooling;
-- game-specific compatibility policy where unavoidable.
-
-The transport treats DXMT bootstrap names as opaque capabilities.
-
-### Monado
-
-Monado owns only generic macOS XR functionality:
-
-- Metal client/compositor support;
-- generic Metal shared-texture import;
-- generic Metal shared-event/semaphore import;
-- IOSurface/XPC/native-handle transport;
-- PS VR2 and other device support;
-- OpenXR state tracking and composition.
-
-Monado retains generic bootstrap-name import operations as native macOS
-capabilities, but the Wine bridge no longer requires `monado-service` itself
-to resolve DXMT names. The standalone proxy resolves the producer's opaque
-names in its own bootstrap namespace and republishes ordinary
-`MTLSharedTextureHandle` / `MTLSharedEventHandle` objects through Monado's
-PID-scoped XPC broker. The service then consumes generic tokens from an
-ordinary Unix-socket client.
-
-## Migration
-
-The previously working implementation embedded a Wine D3D11 compositor client,
-Wine-specific OpenXR helpers, DXMT patches, provisioning, and game launchers in
-the Monado tree. Those sources are retained under `legacy/` while the new
-bridge is made independently buildable.
-
-The current target path is:
-
-```
-Windows XR/OpenVR application
+```text
+Win64 OpenXR application
         |
-       D3D11
+thin Win64 Khronos runtime ABI
         |
-   current DXMT
+generic macos-wine-xr RPC (version + schema fingerprint)
         |
- opaque bootstrap names
+native macOS host
         |
- macos-wine-xr proxy
+native Khronos OpenXR loader
         |
- resolve native Metal objects
-        |
- Monado Metal XPC tokens
-        |
- normal Unix-socket Monado IPC
-        |
- native monado-service
+Monado / Meta XR Simulator / future Metal runtime
 ```
 
-Scalar Monado IPC is forwarded byte-for-byte by the proxy. The proxy rewrites
-only compatibility policy that genuinely belongs outside Monado: session
-minimum-period pacing, texture bootstrap imports, and shared-event bootstrap
-imports. Native-handle IPC commands fail closed rather than being guessed at.
+The native host owns OpenXR instance/session/spaces/actions, event and frame
+lifecycle, Metal queue, swapchains and graphics capability selection. Win64
+keeps lightweight remote-ID mappings and D3D11 resource wrappers. No Monado
+IPC structs or Objective-C pointers appear in the generic protocol. Serialization
+is generated from bounded, fixed-width records.
 
-No upstream pull requests are created automatically.
+```text
+runtime-owned Metal texture
+        |
+shareable and reopenable on the matching GPU?
+   yes -> DXMT D3D11 wrapper -> zero copy
+   no
+        |
+host-created shared application texture -> DXMT D3D11 wrapper
+        |
+producer shared-event completion
+        |
+one Metal GPU blit -> acquired runtime swapchain image -> release
+```
+
+DXMT owns graphics translation and its native import COM interface and Mach
+capability protocol. Neither has a Monado/Meta dependency. The host exports
+textures/events through revocable capability brokers; object lifetime is
+independent of a raw bootstrap-name registration. Array layout is preserved.
+
+The generic native backend requires `XR_KHR_metal_enable`. It selects graphics
+strategy by successful handle export/reopening, not runtime name or IOSurface
+presence. Simulated Monado supports direct sharing; Meta 207 currently selects
+blits. Monado-specific optimizations, if required in future, belong behind the
+native backend rather than in Win64. No such specialization is needed for the
+proven reverse-sharing route.
+
+See [the backend note](native-openxr-backend.md) for supported limits,
+authentication, build/run commands, timings and runtime caveats.
+
+## Transitional regression path
+
+The original bridge-owned Monado-based Windows frontend and standalone
+`macos_wine_xr_proxy` remain available. That proxy authenticates Wine TCP,
+resolves existing DXMT metadata, publishes native Metal objects using generic
+Monado XPC tokens and forwards the ordinary Unix IPC protocol. Its protocol
+compatibility checks remain intact. This path preserves the previous
+DXMT-owned-texture route until physical-headset comparisons are complete.
+
+Clean Monado owns native XR tracking/composition, generic Metal/XPC imports,
+shared events and Unix IPC. Wine resource resolution, transport and application
+policy live in this repository. Historical integrated sources remain under
+`legacy/`; they do not define the generic Win64 runtime.
+
+No upstream PRs are created automatically.

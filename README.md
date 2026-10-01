@@ -1,6 +1,6 @@
 # macOS Wine XR
 
-Bridge code and tooling for running Windows XR applications under Wine on macOS against a native Monado runtime.
+Bridge code and tooling for running Windows XR applications under Wine on macOS against native macOS OpenXR runtimes.
 
 The repository split is intentional:
 
@@ -11,30 +11,23 @@ The repository split is intentional:
 ## Current architecture
 
 ```text
-Windows XR/OpenVR application
-        |
-       D3D11
-        |
-   current DXMT
-        |
- opaque native-sharing names
-        |
- macos-wine-xr proxy
-   |           |
-resolve Metal  | authenticated byte-stream IPC
-   |           |
-   +----> Monado generic Metal XPC tokens
-                    |
-             normal Unix IPC
-                    |
-          native monado-service
+Windows OpenXR application / D3D11
+  -> thin Win64 OpenXR thunk
+  -> authenticated generic macos-wine-xr RPC
+  -> native OpenXR host
+  -> native Khronos loader
+  -> Monado / Meta XR Simulator / future Metal OpenXR runtime
 ```
 
-DXMT does not know about Monado. The native Monado service does not know about
-DXMT or Wine.
+DXMT wraps exported native textures as D3D11 resources. Shareable runtime-owned
+images use zero copy; unshareable images receive one Metal GPU blit per image.
+The same Win64 DLL has run Khronos `hello_xr` against simulated Monado and
+Meta XR Simulator (opaque composition). See
+[build/run instructions, evidence and limitations](docs/native-openxr-backend.md).
 
-The previously working MIT DXMT v0.80/Basalt/embedded-Monado implementation is
-retained under `legacy/` only for reproducibility and regression comparison.
+The original authenticated Monado byte-stream proxy and transitional frontend
+remain available as a regression path. DXMT has no Monado dependency; clean
+Monado has no Wine/DXMT transport code.
 
 ## Active development branches
 
@@ -43,7 +36,7 @@ retained under `legacy/` only for reproducibility and regression comparison.
 - DXMT native-sharing work: `NikNakk/dxmt:macos-xr-native-sharing`
 - Bridge: this repository, `main`
 
-## What is implemented
+## Transitional path (retained)
 
 The current path includes:
 
@@ -89,7 +82,7 @@ scripts/run-current-dxmt-sharing-probe.zsh
 No upstream pull requests are created automatically. Work remains on the
 user-owned forks until explicitly requested.
 
-## Current development path
+## Transitional build framework
 
 The target path no longer uses the pinned DXMT v0.80/Basalt patches embedded in
 Monado. Development now uses:
