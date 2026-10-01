@@ -72,6 +72,14 @@ if(APPLE)
 			"-framework Metal"
 	)
 
+	add_executable(tcp_auth_test
+		tests/macos/tcp_auth_test.c
+		src/proxy/tcp_auth.c
+	)
+	target_include_directories(tcp_auth_test PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/src/proxy
+	)
+
 	if(MONADO_SOURCE_DIR AND MONADO_BUILD_DIR)
 		find_package(Python3 REQUIRED COMPONENTS Interpreter)
 		file(GLOB MONADO_PROTO_JSON CONFIGURE_DEPENDS
