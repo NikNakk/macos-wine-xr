@@ -38,10 +38,13 @@ Monado owns only generic macOS XR functionality:
 - PS VR2 and other device support;
 - OpenXR state tracking and composition.
 
-The existing `swapchain_import_metal_bootstrap` and
-`compositor_semaphore_import_metal_bootstrap` operations are intentionally
-kept generic. They accept macOS native resource identifiers and do not know
-that DXMT may be their producer.
+Monado retains generic bootstrap-name import operations as native macOS
+capabilities, but the Wine bridge no longer requires `monado-service` itself
+to resolve DXMT names. The standalone proxy resolves the producer's opaque
+names in its own bootstrap namespace and republishes ordinary
+`MTLSharedTextureHandle` / `MTLSharedEventHandle` objects through Monado's
+PID-scoped XPC broker. The service then consumes generic tokens from an
+ordinary Unix-socket client.
 
 ## Migration
 
@@ -50,24 +53,31 @@ Wine-specific OpenXR helpers, DXMT patches, provisioning, and game launchers in
 the Monado tree. Those sources are retained under `legacy/` while the new
 bridge is made independently buildable.
 
-The target path is:
+The current target path is:
 
 ```
 Windows XR/OpenVR application
         |
        D3D11
         |
-       DXMT
+   current DXMT
         |
-  DXMT native metadata
+ opaque bootstrap names
         |
-  Wine-side bridge
+ macos-wine-xr proxy
         |
- native bridge process
+ resolve native Metal objects
         |
- generic macOS Metal handoff
+ Monado Metal XPC tokens
         |
-      Monado
+ normal Unix-socket Monado IPC
+        |
+ native monado-service
 ```
+
+Scalar Monado IPC is forwarded byte-for-byte by the proxy. The proxy rewrites
+only compatibility policy that genuinely belongs outside Monado: session
+minimum-period pacing, texture bootstrap imports, and shared-event bootstrap
+imports. Native-handle IPC commands fail closed rather than being guessed at.
 
 No upstream pull requests are created automatically.
