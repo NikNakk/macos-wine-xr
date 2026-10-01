@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 #include <stdlib.h>
 
+typedef int (*activate_service_fn)(void);
 typedef int (*publish_textures_fn)(void *const *, uint32_t, uint64_t *);
 typedef int (*publish_shared_event_fn)(void *, uint64_t *);
 typedef int (*activate_service_fn)(void);
@@ -13,6 +14,7 @@ typedef int (*activate_service_fn)(void);
 struct macos_wine_xr_monado_handoff
 {
 	void *dylib;
+	activate_service_fn activate_service;
 	publish_textures_fn publish_textures;
 	publish_shared_event_fn publish_shared_event;
 	activate_service_fn activate_service;
@@ -34,6 +36,8 @@ macos_wine_xr_monado_handoff_open(const char *dylib_path,
 		return -2;
 	}
 
+	activate_service_fn activate_service =
+	    (activate_service_fn)dlsym(dylib, "monado_metal_xpc_activate_service");
 	publish_textures_fn publish_textures =
 	    (publish_textures_fn)dlsym(dylib, "monado_metal_xpc_publish_textures");
 	publish_shared_event_fn publish_shared_event =
@@ -53,6 +57,7 @@ macos_wine_xr_monado_handoff_open(const char *dylib_path,
 	}
 
 	handoff->dylib = dylib;
+	handoff->activate_service = activate_service;
 	handoff->publish_textures = publish_textures;
 	handoff->publish_shared_event = publish_shared_event;
 	handoff->activate_service = activate_service;
