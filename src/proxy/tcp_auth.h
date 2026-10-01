@@ -11,3 +11,6 @@ mwxr_tcp_auth_token_valid(const char *token);
 
 bool
 mwxr_tcp_authenticate_server(int socket_fd, const char *token, int timeout_ms);
+
+bool
+mwxr_tcp_authenticate_client(int socket_fd, const char *token, int timeout_ms);
