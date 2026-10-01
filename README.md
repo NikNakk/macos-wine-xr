@@ -88,3 +88,67 @@ scripts/run-current-dxmt-sharing-probe.zsh
 
 No upstream pull requests are created automatically. Work remains on the
 user-owned forks until explicitly requested.
+
+## Current development path
+
+The target path no longer uses the pinned DXMT v0.80/Basalt patches embedded in
+Monado. Development now uses:
+
+- `NikNakk/dxmt:macos-xr-native-sharing` for current DXMT and generic native
+  texture/fence metadata;
+- `NikNakk/monado:macos-upstream-clean` for the native macOS runtime;
+- the standalone authenticated proxy in this repository for the Wine byte
+  stream, DXMT bootstrap resolution and Monado XPC token handoff.
+
+The old integrated branch remains useful as a reproducibility reference and as
+a temporary build framework for the Win64 OpenXR frontend, but it is not the
+native runtime used by the new path.
+
+### Native-sharing proof
+
+On an Apple Silicon Mac with Homebrew CMake, Ninja, Meson and MinGW installed:
+
+```zsh
+./scripts/build-current-dxmt.zsh
+./scripts/run-current-dxmt-sharing-probe.zsh
+```
+
+The probe creates a shared D3D11 `Texture2DArray` and fence under current
+DXMT, reads the generic DXMT metadata, and reopens the same objects as native
+Metal resources. Set `MONADO_METAL_XPC_CLIENT` to a
+`libmonado_metal_xpc_client.dylib` from `macos-upstream-clean` to extend the
+probe through Monado's generic XPC broker.
+
+### End-to-end OpenXR proof
+
+Configure a native `macos-upstream-clean` Monado build, then run:
+
+```zsh
+MONADO_SOURCE_DIR=/path/to/monado \
+MONADO_BUILD_DIR=/path/to/monado/build \
+MWXR_BOOTSTRAP_SERVICE=1 \
+./scripts/run-hello-xr-current-dxmt.zsh
+```
+
+`MWXR_BOOTSTRAP_SERVICE=1` is only needed when the currently loaded
+development LaunchAgent is not already the specified clean build.
+
+The script builds the clean native service, current DXMT, the bridge-owned
+Win64 D3D11/OpenXR frontend, the standalone proxy and Khronos `hello_xr`, then
+runs the D3D11 sample through:
+
+```text
+hello_xr (Win64)
+  -> D3D11 / current DXMT
+  -> macos-wine-xr authenticated proxy
+       -> resolve DXMT Metal bootstrap metadata
+       -> republish textures/shared event through Monado XPC
+  -> normal macos-upstream-clean Unix IPC client connection
+  -> native Monado compositor
+```
+
+The current Win64 frontend build is transitional: it uses a disposable checkout
+of the last integrated Monado branch only for the Windows state-tracker/build
+framework, while its D3D11 bridge sources live here. The native runtime and
+service come exclusively from `macos-upstream-clean`.
+
