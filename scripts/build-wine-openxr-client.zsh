@@ -25,10 +25,10 @@ source_dir=${root}/sources/monado-client
 build_dir=${MONADO_WINE_OPENXR_BUILD_DIR:-${root}/build-openxr}
 dxmt_source=${DXMT_SOURCE_DIR:-${repo_root}/build-current-dxmt/sources/dxmt}
 
-for tool in git cmake ninja x86_64-w64-mingw32-gcc x86_64-w64-mingw32-g++ x86_64-w64-mingw32-windres file; do
+for tool in git cmake ninja x86_64-w64-mingw32-gcc x86_64-w64-mingw32-g++ x86_64-w64-mingw32-windres glslangValidator file; do
 	if ! command -v "${tool}" >/dev/null 2>&1; then
 		print -u2 "Missing required tool: ${tool}"
-		print -u2 "Homebrew packages typically needed: cmake ninja mingw-w64"
+		print -u2 "Homebrew packages typically needed: cmake ninja mingw-w64 glslang eigen"
 		exit 1
 	fi
 done
@@ -67,10 +67,24 @@ cc=${CC_MINGW:-$(command -v x86_64-w64-mingw32-gcc)}
 cxx=${CXX_MINGW:-$(command -v x86_64-w64-mingw32-g++)}
 windres=${WINDRES_MINGW:-$(command -v x86_64-w64-mingw32-windres)}
 
+# Keep native macOS libraries out of the Windows build. Eigen is header-only
+# and can be supplied explicitly; all binary dependencies must be MinGW ones.
+mingw_sysroot=$("${cc}" -print-sysroot)
+[[ -n ${mingw_sysroot} ]] || { print -u2 "MinGW compiler did not report its sysroot"; exit 1; }
+eigen_cmake=${EIGEN3_DIR:-$(brew --prefix eigen)/share/eigen3/cmake}
+[[ -f ${eigen_cmake}/Eigen3Config.cmake ]] || { print -u2 "Set EIGEN3_DIR to the Eigen CMake directory"; exit 1; }
+
+PKG_CONFIG_LIBDIR="${mingw_sysroot}/lib/pkgconfig:${mingw_sysroot}/x86_64-w64-mingw32/lib/pkgconfig" \
 cmake -S "${source_dir}" -B "${build_dir}" -G Ninja \
 	-UXRT_HAVE_DXGI \
 	-UXRT_HAVE_D3D11 \
 	-UXRT_HAVE_D3D12 \
+	-DCMAKE_FIND_ROOT_PATH="${mingw_sysroot};${mingw_sysroot}/x86_64-w64-mingw32" \
+	-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+	-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+	-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+	-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+	-DEigen3_DIR="${eigen_cmake}" \
 	-DCMAKE_SYSTEM_NAME=Windows \
 	-DCMAKE_SYSTEM_PROCESSOR=x86_64 \
 	-DCMAKE_C_COMPILER="${cc}" \
