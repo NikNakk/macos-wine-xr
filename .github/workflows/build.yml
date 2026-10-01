@@ -34,3 +34,32 @@ jobs:
           -DDXMT_INCLUDE_DIR="$GITHUB_WORKSPACE/dxmt/include"
       - name: Build DXMT metadata probe
         run: cmake --build build-win --target dxmt_native_sharing_probe --parallel
+
+  macos-proxy:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: macos-wine-xr
+      - uses: actions/checkout@v4
+        with:
+          repository: NikNakk/monado
+          ref: macos-upstream-clean
+          path: monado
+      - name: Install Monado dependencies
+        run: >-
+          brew install ceres-solver cmake eigen glslang jpeg-turbo libusb molten-vk ninja
+          pkgconf sdl2-compat vulkan-headers vulkan-loader
+      - name: Configure Monado
+        run: cmake -S monado -B monado/build -G Ninja -DCMAKE_FIND_FRAMEWORK=LAST
+      - name: Build Monado IPC ABI
+        run: cmake --build monado/build --target ipc_shared monado_metal_xpc_client --parallel
+      - name: Configure bridge proxy
+        run: >
+          cmake -S macos-wine-xr -B macos-wine-xr/build-proxy -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DMONADO_SOURCE_DIR="$GITHUB_WORKSPACE/monado"
+          -DMONADO_BUILD_DIR="$GITHUB_WORKSPACE/monado/build"
+      - name: Build proxy
+        run: cmake --build macos-wine-xr/build-proxy --target macos_wine_xr_proxy --parallel
+
