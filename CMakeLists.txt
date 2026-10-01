@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 project(macos_wine_xr LANGUAGES C CXX)
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(DXMT_INCLUDE_DIR "" CACHE PATH "Path to the DXMT include directory containing dxmt_native_interop.h")
 set(MONADO_SOURCE_DIR "" CACHE PATH "Path to NikNakk/monado source (macos-upstream-clean)")
 set(MONADO_BUILD_DIR "" CACHE PATH "Matching configured Monado build directory")
+set(OPENXR_INCLUDE_DIR "" CACHE PATH "Khronos OpenXR include directory")
 
 if(WIN32)
 	if(NOT DXMT_INCLUDE_DIR)
@@ -32,10 +34,35 @@ if(WIN32)
 	target_link_libraries(dxmt_native_sharing_probe
 		PRIVATE macos_wine_xr_dxmt d3d11 dxgi dxguid
 	)
+	add_executable(dxmt_reverse_import_probe tests/windows/dxmt_reverse_import_probe.cpp)
+	target_include_directories(dxmt_reverse_import_probe PRIVATE "${DXMT_INCLUDE_DIR}")
+	target_link_libraries(dxmt_reverse_import_probe PRIVATE macos_wine_xr_dxmt d3d11 dxgi dxguid)
+	if(MINGW)
+		target_link_options(dxmt_reverse_import_probe PRIVATE -static -static-libgcc -static-libstdc++)
+	endif()
 endif()
 
 if(APPLE)
 	enable_language(OBJC)
+	if(NOT OPENXR_INCLUDE_DIR)
+		find_path(MWXR_DISCOVERED_OPENXR_INCLUDE_DIR openxr/openxr.h)
+		if(MWXR_DISCOVERED_OPENXR_INCLUDE_DIR)
+			set(OPENXR_INCLUDE_DIR "${MWXR_DISCOVERED_OPENXR_INCLUDE_DIR}")
+		endif()
+	endif()
+	if(OPENXR_INCLUDE_DIR)
+		add_library(macos_wine_xr_native_openxr STATIC
+			src/native/native_openxr_backend.m src/native/openxr_swapchain.m)
+		target_include_directories(macos_wine_xr_native_openxr PUBLIC include "${OPENXR_INCLUDE_DIR}")
+		target_link_libraries(macos_wine_xr_native_openxr PRIVATE
+			"-framework Foundation" "-framework Metal" ${CMAKE_DL_LIBS})
+		add_executable(native_openxr_backend_probe tests/macos/native_openxr_backend_probe.c)
+		target_link_libraries(native_openxr_backend_probe PRIVATE macos_wine_xr_native_openxr)
+		add_executable(native_openxr_blit_probe tests/macos/native_openxr_blit_probe.m)
+		target_link_libraries(native_openxr_blit_probe PRIVATE macos_wine_xr_native_openxr)
+	else()
+		message(STATUS "OpenXR headers not found; native OpenXR backend disabled")
+	endif()
 
 	add_library(macos_wine_xr_native_metal STATIC
 		src/macos/native_metal_sharing.m
@@ -55,6 +82,22 @@ if(APPLE)
 	add_executable(native_metal_sharing_probe
 		tests/macos/native_metal_sharing_probe.m
 	)
+	if(DXMT_INCLUDE_DIR)
+		add_library(macos_wine_xr_native_capability STATIC src/macos/native_capability.m)
+		target_include_directories(macos_wine_xr_native_capability PUBLIC include PRIVATE "${DXMT_INCLUDE_DIR}")
+		target_link_libraries(macos_wine_xr_native_capability PRIVATE "-framework Foundation" bsm)
+		add_executable(dxmt_reverse_import_probe tests/macos/dxmt_reverse_import_probe.m)
+		target_link_libraries(dxmt_reverse_import_probe PRIVATE macos_wine_xr_native_metal macos_wine_xr_native_capability
+			"-framework Foundation" "-framework Metal")
+		if(TARGET macos_wine_xr_native_openxr)
+			target_compile_definitions(dxmt_reverse_import_probe PRIVATE MWXR_HAVE_NATIVE_OPENXR=1)
+			target_link_libraries(dxmt_reverse_import_probe PRIVATE macos_wine_xr_native_openxr)
+		endif()
+		add_executable(native_capability_test tests/macos/native_capability_test.c)
+		target_include_directories(native_capability_test PRIVATE "${DXMT_INCLUDE_DIR}")
+		target_link_libraries(native_capability_test PRIVATE macos_wine_xr_native_capability)
+		add_test(NAME native_capability COMMAND native_capability_test)
+	endif()
 	target_link_libraries(native_metal_sharing_probe
 		PRIVATE
 			macos_wine_xr_native_metal
@@ -79,6 +122,7 @@ if(APPLE)
 	target_include_directories(tcp_auth_test PRIVATE
 		${CMAKE_CURRENT_SOURCE_DIR}/src/proxy
 	)
+	add_test(NAME tcp_auth COMMAND tcp_auth_test)
 
 	if(MONADO_SOURCE_DIR AND MONADO_BUILD_DIR)
 		find_package(Python3 REQUIRED COMPONENTS Interpreter)
