@@ -309,6 +309,14 @@ proxy_one_client(int wine_fd,
 				return false;
 			}
 			native_request = translated;
+		} else if (cmd == IPC_SESSION_CREATE) {
+			/*
+			 * This was previously server policy for stream_socket clients.
+			 * The compatibility proxy owns that policy now: the native Monado
+			 * service sees an ordinary Unix-socket client.
+			 */
+			struct ipc_session_create_msg *msg = (struct ipc_session_create_msg *)request;
+			msg->xsi.pacing_flags |= XRT_SESSION_PACING_USE_MIN_FRAME_PERIOD_BIT;
 		}
 
 		if (!send_exact(native_fd, native_request, native_request_size)) {
