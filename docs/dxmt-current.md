@@ -20,6 +20,11 @@ ownership are now DXMT-generic.
 The bridge must not interpret the bootstrap string. It only transfers it to
 the native side, where the existing macOS Metal sharing mechanism resolves it.
 
-The old Basalt IOSurface path remains a legacy fallback only; the current-DXMT
-path should first be validated for both ordinary Texture2D and Texture2DArray
-swapchains using the native shared-texture mechanism.
+The live D3D11 bridge now uses this same shared-texture mechanism for both
+ordinary Texture2D and Texture2DArray swapchains. The old Basalt IOSurface path
+is retained only under `legacy/`; it is not part of the current-DXMT path.
+
+The standalone proxy resolves these names while the DXMT objects are alive,
+then republishes the resulting native Metal objects into Monado's generic XPC
+broker. DXMT therefore has no Monado dependency and Monado has no DXMT
+dependency.
