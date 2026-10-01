@@ -31,3 +31,30 @@ if(WIN32)
 		PRIVATE macos_wine_xr_dxmt d3d11 dxgi dxguid
 	)
 endif()
+
+if(APPLE)
+	enable_language(OBJC)
+
+	add_library(macos_wine_xr_native_metal STATIC
+		src/macos/native_metal_sharing.m
+	)
+	target_include_directories(macos_wine_xr_native_metal
+		PUBLIC
+			${CMAKE_CURRENT_SOURCE_DIR}/include
+	)
+	target_link_libraries(macos_wine_xr_native_metal
+		PRIVATE
+			"-framework Foundation"
+			"-framework Metal"
+	)
+
+	add_executable(native_metal_sharing_probe
+		tests/macos/native_metal_sharing_probe.m
+	)
+	target_link_libraries(native_metal_sharing_probe
+		PRIVATE
+			macos_wine_xr_native_metal
+			"-framework Foundation"
+			"-framework Metal"
+	)
+endif()
