@@ -23,4 +23,11 @@ if(WIN32)
 	)
 
 	target_link_libraries(macos_wine_xr_dxmt PRIVATE d3d11 dxguid)
+
+	add_executable(dxmt_native_sharing_probe
+		tests/windows/dxmt_native_sharing_probe.cpp
+	)
+	target_link_libraries(dxmt_native_sharing_probe
+		PRIVATE macos_wine_xr_dxmt d3d11 dxgi dxguid
+	)
 endif()
