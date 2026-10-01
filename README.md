@@ -1,28 +1,90 @@
 # macOS Wine XR
 
-Bridge code and tooling for running Windows XR applications under Wine on macOS against a native XR runtime.
+Bridge code and tooling for running Windows XR applications under Wine on macOS against a native Monado runtime.
 
-This repository is being split out of the macOS Monado port so that:
+The repository split is intentional:
 
-- **Monado** contains only generic macOS/Metal runtime support.
-- **DXMT** exposes generic native macOS sharing metadata for D3D shared textures and fences.
-- **macOS Wine XR** owns Wine-specific OpenXR/OpenVR glue, transport, launch tooling, tests, and compatibility policy.
+- **Monado** contains generic macOS/Metal runtime, compositor and IPC support.
+- **DXMT** owns D3D-to-Metal translation and exposes generic native-sharing metadata.
+- **macOS Wine XR** owns Wine transport, DXMT consumption, Windows OpenXR/OpenVR glue, launch tooling and compatibility policy.
 
-## Repository split
+## Current architecture
 
-| Repository | Responsibility |
-|---|---|
-| `NikNakk/monado` | Generic macOS/Metal OpenXR runtime, device support, compositor and native IPC |
-| `NikNakk/dxmt` | D3D-to-Metal implementation and generic native-sharing metadata |
-| this repository | Wine ↔ native XR bridge, DXMT consumer, OpenVR/OpenComposite integration and game launch tooling |
+```text
+Windows XR/OpenVR application
+        |
+       D3D11
+        |
+   current DXMT
+        |
+ opaque native-sharing names
+        |
+ macos-wine-xr proxy
+   |           |
+resolve Metal  | authenticated byte-stream IPC
+   |           |
+   +----> Monado generic Metal XPC tokens
+                    |
+             normal Unix IPC
+                    |
+          native monado-service
+```
 
-The previously working DXMT v0.80/Basalt/Monado path is retained under `legacy/` for reproducibility while the bridge is moved to current DXMT.
+DXMT does not know about Monado. The native Monado service does not know about
+DXMT or Wine.
 
-## Status
+The previously working MIT DXMT v0.80/Basalt/embedded-Monado implementation is
+retained under `legacy/` only for reproducibility and regression comparison.
 
-Migration is in progress. The working Monado integration remains available on
-`NikNakk/monado:macos-game-mode-upstream-sync-2026-10`; the upstream-oriented
-Monado cleanup is being developed separately on
-`NikNakk/monado:macos-upstream-clean`.
+## Active development branches
 
-No upstream pull requests are created automatically from this repository.
+- Monado integration/reference: `NikNakk/monado:macos-game-mode-upstream-sync-2026-10`
+- Monado upstream-oriented cleanup: `NikNakk/monado:macos-upstream-clean`
+- DXMT native-sharing work: `NikNakk/dxmt:macos-xr-native-sharing`
+- Bridge: this repository, `main`
+
+## What is implemented
+
+The current path includes:
+
+- consumer-neutral DXMT texture/fence private-data GUIDs;
+- shared-Metal transport for both ordinary 2D and Texture2DArray D3D11 swapchains;
+- DXMT shared-fence / MTLSharedEvent synchronization;
+- a native bootstrap-name resolver;
+- publication into Monado's PID-scoped Metal XPC broker;
+- a standalone authenticated Wine TCP -> native Monado Unix-IPC proxy;
+- proxy-owned minimum-frame-period pacing policy;
+- a bridge-owned D3D11 client compositor and OpenXR D3D requirements helper;
+- current-DXMT provisioning/build scripts;
+- native-sharing probes; and
+- an end-to-end Khronos hello_xr runner.
+
+The Windows OpenXR frontend is currently transitional: it is built in a
+disposable private checkout of the last integrated Wine-client Monado branch,
+with the live bridge sources overlaid at build time. The native runtime is
+`macos-upstream-clean`.
+
+## First end-to-end test
+
+Configure/build `macos-upstream-clean`, then from this repository:
+
+```sh
+export MONADO_SOURCE_DIR=/path/to/monado
+export MONADO_BUILD_DIR=/path/to/monado/build
+MWXR_BOOTSTRAP_SERVICE=1 scripts/run-hello-xr-current-dxmt.zsh
+```
+
+`MWXR_BOOTSTRAP_SERVICE=1` deliberately replaces the currently loaded
+development Monado LaunchAgent with the clean build. Omit it if the correct
+service is already registered.
+
+For the lower-level current-DXMT resource test:
+
+```sh
+scripts/run-current-dxmt-sharing-probe.zsh
+```
+
+## Upstreaming rule
+
+No upstream pull requests are created automatically. Work remains on the
+user-owned forks until explicitly requested.
