@@ -63,7 +63,7 @@ main()
 	}
 
 	ID3D11Device5 *device5 = nullptr;
-	hr = device->QueryInterface(IID_ID3D11Device5, reinterpret_cast<void **>(&device5));
+	hr = device->QueryInterface(__uuidof(ID3D11Device5), reinterpret_cast<void **>(&device5));
 	if (FAILED(hr)) {
 		texture->Release();
 		context->Release();
@@ -72,7 +72,10 @@ main()
 	}
 
 	ID3D11Fence *fence = nullptr;
-	hr = device5->CreateFence(0, D3D11_FENCE_FLAG_SHARED, IID_ID3D11Fence, reinterpret_cast<void **>(&fence));
+	hr = device5->CreateFence(0,
+	                         D3D11_FENCE_FLAG_SHARED,
+	                         __uuidof(ID3D11Fence),
+	                         reinterpret_cast<void **>(&fence));
 	if (FAILED(hr)) {
 		device5->Release();
 		texture->Release();
