@@ -73,7 +73,7 @@ macos_wine_xr_resolve_shared_texture(const char *bootstrap_name,
 			return -5;
 		}
 
-		*out_texture = (__bridge_retained void *)texture;
+		*out_texture = (__bridge void *)texture;
 		return 0;
 	}
 }
@@ -103,7 +103,7 @@ macos_wine_xr_resolve_shared_event(const char *bootstrap_name,
 			return -4;
 		}
 
-		*out_event = (__bridge_retained void *)event;
+		*out_event = (__bridge void *)event;
 		return 0;
 	}
 }
@@ -114,5 +114,5 @@ macos_wine_xr_release_metal_object(void *object)
 	if (object == NULL) {
 		return;
 	}
-	CFRelease(object);
+	[(__bridge id)object release];
 }
