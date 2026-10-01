@@ -8,12 +8,14 @@
 
 typedef int (*publish_textures_fn)(void *const *, uint32_t, uint64_t *);
 typedef int (*publish_shared_event_fn)(void *, uint64_t *);
+typedef int (*activate_service_fn)(void);
 
 struct macos_wine_xr_monado_handoff
 {
 	void *dylib;
 	publish_textures_fn publish_textures;
 	publish_shared_event_fn publish_shared_event;
+	activate_service_fn activate_service;
 };
 
 int
@@ -36,7 +38,9 @@ macos_wine_xr_monado_handoff_open(const char *dylib_path,
 	    (publish_textures_fn)dlsym(dylib, "monado_metal_xpc_publish_textures");
 	publish_shared_event_fn publish_shared_event =
 	    (publish_shared_event_fn)dlsym(dylib, "monado_metal_xpc_publish_shared_event");
-	if (publish_textures == NULL || publish_shared_event == NULL) {
+	activate_service_fn activate_service =
+	    (activate_service_fn)dlsym(dylib, "monado_metal_xpc_activate_service");
+	if (publish_textures == NULL || publish_shared_event == NULL || activate_service == NULL) {
 		dlclose(dylib);
 		return -3;
 	}
@@ -51,8 +55,18 @@ macos_wine_xr_monado_handoff_open(const char *dylib_path,
 	handoff->dylib = dylib;
 	handoff->publish_textures = publish_textures;
 	handoff->publish_shared_event = publish_shared_event;
+	handoff->activate_service = activate_service;
 	*out_handoff = handoff;
 	return 0;
+}
+
+int
+macos_wine_xr_monado_activate_service(struct macos_wine_xr_monado_handoff *handoff)
+{
+	if (handoff == NULL || handoff->activate_service == NULL) {
+		return -1;
+	}
+	return handoff->activate_service();
 }
 
 void
