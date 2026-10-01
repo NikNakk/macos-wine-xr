@@ -99,7 +99,7 @@ jobs:
           ref: macos-xr-native-sharing
           path: dxmt
       - name: Install cross-build dependencies
-        run: brew install cmake ninja mingw-w64
+        run: brew install cmake ninja mingw-w64 glslang
       - name: Build bridge-owned Win64 OpenXR client
         working-directory: macos-wine-xr
         env:
