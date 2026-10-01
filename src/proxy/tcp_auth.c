@@ -138,3 +138,33 @@ mwxr_tcp_authenticate_server(int socket_fd, const char *token, int timeout_ms)
 	char accepted = 1;
 	return transfer(socket_fd, &accepted, 1, true, deadline);
 }
+
+bool
+mwxr_tcp_authenticate_client(int socket_fd, const char *token, int timeout_ms)
+{
+	if (!mwxr_tcp_auth_token_valid(token) || timeout_ms <= 0) {
+		return false;
+	}
+	uint64_t now = monotonic_ns();
+	if (now == 0) {
+		return false;
+	}
+	uint64_t deadline = now + (uint64_t)timeout_ms * 1000000ull;
+	unsigned char client[32] = {0};
+	unsigned char response[64] = {0};
+	unsigned char expected[32] = {0};
+	unsigned char proof[32] = {0};
+
+	if (!random_nonce(client) ||
+	    !transfer(socket_fd, (char *)client, sizeof(client), true, deadline) ||
+	    !transfer(socket_fd, (char *)response, sizeof(response), false, deadline) ||
+	    !make_proof(token, "server", client, response, expected) ||
+	    !proof_matches(response + 32, expected) ||
+	    !make_proof(token, "client", client, response, proof) ||
+	    !transfer(socket_fd, (char *)proof, sizeof(proof), true, deadline)) {
+		return false;
+	}
+
+	char accepted = 0;
+	return transfer(socket_fd, &accepted, 1, false, deadline) && accepted == 1;
+}
