@@ -83,7 +83,8 @@ destroys its receive right and prevents future imports; existing imports retain
 their own resources. This avoids trying to revoke raw Metal ports registered
 with `bootstrap_register2`, which did not revoke successfully in our test.
 The host retains brokers until swapchain/session destruction and releases
-staging textures, native swapchains and event rights on disconnect.
+staging textures, native swapchains and event rights on disconnect. Per-request
+autorelease pools bound transient Foundation/Metal objects during long sessions.
 The original DXMT-to-Monado proxy path remains available.
 
 ## Protocol and supported subset

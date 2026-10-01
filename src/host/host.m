@@ -782,7 +782,10 @@ int main(int argc, char **argv) {
 					// Fixed strings are validated before any native API sees them.
 					if (!memchr(q.name, 0, sizeof(q.name)) || !memchr(q.label, 0, sizeof(q.label)))
 						break;
-					XrResult result = dispatch(&h, op, &q, &r);
+					XrResult result;
+					@autoreleasepool {
+						result = dispatch(&h, op, &q, &r);
+					}
 					if (XR_FAILED(result))
 						fprintf(stderr, "host: op=%u result=%d\n", op, result);
 					if (mwxr_rpc_respond(client, op, seq, result, &r))
