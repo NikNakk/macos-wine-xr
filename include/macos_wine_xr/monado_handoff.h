@@ -23,6 +23,9 @@ void
 macos_wine_xr_monado_handoff_close(struct macos_wine_xr_monado_handoff *handoff);
 
 int
+macos_wine_xr_monado_activate_service(struct macos_wine_xr_monado_handoff *handoff);
+
+int
 macos_wine_xr_monado_publish_textures(struct macos_wine_xr_monado_handoff *handoff,
                                       void *const *metal_textures,
                                       uint32_t image_count,
