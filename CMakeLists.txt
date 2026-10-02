@@ -11,6 +11,7 @@ set(MONADO_BUILD_DIR "" CACHE PATH "Matching configured Monado build directory")
 set(OPENXR_INCLUDE_DIR "" CACHE PATH "Khronos OpenXR include directory")
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME sharing_path COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/proxy/sharing_path_test.py")
 set(MWXR_RPC_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated/openxr_rpc_generated.h")
 add_custom_command(OUTPUT "${MWXR_RPC_GENERATED}"
  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_openxr_rpc.py"

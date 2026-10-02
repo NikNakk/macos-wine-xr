@@ -6,6 +6,7 @@
 #include <wrl/client.h>
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 #define CHECK(call)                                                                                                    \
@@ -19,7 +20,8 @@ using Microsoft::WRL::ComPtr;
 
 int main(int argc, char **argv)
 {
-	if (argc != 7) return 2;
+	if (argc < 5 || argc > 20) return 2;
+	unsigned image_count = (unsigned)argc - 4;
 	unsigned array_size = (unsigned)std::strtoul(argv[1], nullptr, 10);
 	if (array_size != 1 && array_size != 2) return 2;
 	ComPtr<ID3D11Device> device;
@@ -29,7 +31,7 @@ int main(int argc, char **argv)
 	                        D3D11_SDK_VERSION, &device, nullptr, &context));
 	ComPtr<IDXMTNativeDevice> native;
 	CHECK(device->QueryInterface(DXMT_IID_NATIVE_DEVICE, reinterpret_cast<void **>(native.GetAddressOf())));
-	ComPtr<ID3D11Texture2D> images[3];
+	std::vector<ComPtr<ID3D11Texture2D>> images(image_count);
 	D3D11_TEXTURE2D_DESC desc = {};
 	desc.Width = 64; desc.Height = 32; desc.MipLevels = 1; desc.ArraySize = array_size;
 	desc.Format = (DXGI_FORMAT)std::strtoul(argv[2], nullptr, 10);
@@ -43,7 +45,7 @@ int main(int argc, char **argv)
 		HRESULT hr = native->ImportSharedTexture(argv[3], &bad, &rejected);
 		if (hr != E_INVALIDARG || rejected) return 1;
 	}
-	for (unsigned i = 0; i < 3; ++i) {
+	for (unsigned i = 0; i < image_count; ++i) {
 		CHECK(native->ImportSharedTexture(argv[3 + i], &desc, &images[i]));
 		D3D11_TEXTURE2D_DESC actual = {};
 		images[i]->GetDesc(&actual);
@@ -53,19 +55,19 @@ int main(int argc, char **argv)
 	ComPtr<ID3D11DeviceContext4> context4;
 	ComPtr<ID3D11Fence> fence;
 	CHECK(context.As(&context4));
-	CHECK(native->ImportSharedEvent(argv[6], &fence));
+	CHECK(native->ImportSharedEvent(argv[argc - 1], &fence));
 	std::printf("imported\n"); std::fflush(stdout);
 	// Native side revokes registrations before these resources are used.
 	unsigned image_index = 0;
-	if (std::scanf("%u",&image_index) != 1 || image_index >= 3) return 1;
+	if (std::scanf("%u",&image_index) != 1 || image_index >= image_count) return 1;
 	(void)std::getchar();
 	ComPtr<ID3D11Texture2D> expired_image;
 	ComPtr<ID3D11Fence> expired_event;
 	if (native->ImportSharedTexture(argv[3],&desc,&expired_image) != E_INVALIDARG || expired_image ||
-	    native->ImportSharedEvent(argv[6],&expired_event) != E_INVALIDARG || expired_event) return 1;
-	for (unsigned frame = 0; frame < 3; ++frame) {
+	    native->ImportSharedEvent(argv[argc - 1],&expired_event) != E_INVALIDARG || expired_event) return 1;
+	for (unsigned frame = 0; frame < image_count; ++frame) {
 		if (frame) {
-			if (std::scanf("%u",&image_index) != 1 || image_index >= 3) return 1;
+			if (std::scanf("%u",&image_index) != 1 || image_index >= image_count) return 1;
 			(void)std::getchar();
 		}
 		unsigned i = image_index;

@@ -7,6 +7,10 @@ set -euo pipefail
 repo=${0:A:h:h}
 : ${XR_RUNTIME_JSON:?Set XR_RUNTIME_JSON to the native macOS runtime manifest}
 : ${MWXR_OPENXR_LOADER:?Set MWXR_OPENXR_LOADER to the native Khronos loader dylib}
+case ${MWXR_EXPECT_SHARING_PATH:-} in
+ ''|shared-metal-zero-copy|gpu-blit) ;;
+ *) print -u2 'MWXR_EXPECT_SHARING_PATH must be shared-metal-zero-copy or gpu-blit'; exit 2 ;;
+esac
 stack=${MACOS_WINE_XR_CURRENT_DXMT_ROOT:-${repo}/build-current-dxmt}
 : ${MWXR_WINE:=${stack}/bin/wine-current-dxmt}
 : ${MWXR_PRIVATE_WINEPREFIX:=${stack}/prefix}
@@ -49,3 +53,7 @@ application=${1:A}
 shift
 cd "${application:h}"
 XR_RUNTIME_JSON="${windows_manifest}" "${MWXR_WINE}" "${application}" "$@"
+
+if [[ -n ${MWXR_EXPECT_SHARING_PATH:-} ]]; then
+ python3 "${repo}/tools/check_sharing_path.py" --log "${log}" --expected "${MWXR_EXPECT_SHARING_PATH}"
+fi

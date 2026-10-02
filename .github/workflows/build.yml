@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NikNakk/monado
-          ref: macos-upstream-clean
+          ref: 6171ca5b46cbb9d154731586ab797880f969e9fc
           path: monado
       - name: Install Monado dependencies
         run: >-
@@ -85,7 +85,11 @@ jobs:
           -DMONADO_SOURCE_DIR="$GITHUB_WORKSPACE/monado"
           -DMONADO_BUILD_DIR="$GITHUB_WORKSPACE/monado/build"
       - name: Build proxy
-        run: cmake --build macos-wine-xr/build-proxy --target macos_wine_xr_proxy --parallel
+        run: >
+          cmake --build macos-wine-xr/build-proxy --target macos_wine_xr_proxy
+          proxy_protocol_test tcp_auth_test rpc_transport_test rpc_serialization_test --parallel
+      - name: Test native boundary and command-ID regeneration
+        run: ctest --test-dir macos-wine-xr/build-proxy --output-on-failure
 
   macos-windows-client:
     runs-on: macos-14
