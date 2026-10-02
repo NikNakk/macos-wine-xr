@@ -174,6 +174,12 @@ add_executable(native_openxr_backend_probe tests/macos/native_openxr_backend_pro
 
 	if(MONADO_SOURCE_DIR AND MONADO_BUILD_DIR)
 		find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        execute_process(COMMAND git -C "${MONADO_SOURCE_DIR}" rev-parse HEAD
+            OUTPUT_VARIABLE MONADO_CURRENT_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+        set(MONADO_HEADER_REVISION "${MONADO_CURRENT_REVISION}" CACHE STRING "Pinned Monado source revision for proxy headers")
+        if(NOT MONADO_HEADER_REVISION STREQUAL MONADO_CURRENT_REVISION)
+            message(FATAL_ERROR "Monado revision changed; set MONADO_HEADER_REVISION to ${MONADO_CURRENT_REVISION} after rebuilding Monado")
+        endif()
 		file(GLOB MONADO_PROTO_JSON CONFIGURE_DEPENDS
 			"${MONADO_SOURCE_DIR}/src/xrt/ipc/shared/proto/*.json"
 		)
@@ -186,12 +192,16 @@ add_executable(native_openxr_backend_probe tests/macos/native_openxr_backend_pro
 			COMMAND "${Python3_EXECUTABLE}"
 				"${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_monado_wire.py"
 				--monado-source "${MONADO_SOURCE_DIR}"
+                --expected-revision "${MONADO_HEADER_REVISION}"
 				--generated-header "${MONADO_BUILD_DIR}/src/xrt/ipc/ipc_protocol_generated.h"
 				--output "${MONADO_WIRE_GENERATED_HEADER}"
 			DEPENDS
 				"${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_monado_wire.py"
 				"${MONADO_BUILD_DIR}/src/xrt/ipc/ipc_protocol_generated.h"
 				${MONADO_PROTO_JSON}
+                "${MONADO_SOURCE_DIR}/src/xrt/ipc/shared/ipc_protocol.h"
+                "${CMAKE_CURRENT_SOURCE_DIR}/protocol/monado-wine.json"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/proxy/monado_wine_types.h"
 			VERBATIM
 			COMMENT "Generating Monado IPC wire description for Wine proxy"
 		)
@@ -218,6 +228,27 @@ add_executable(native_openxr_backend_probe tests/macos/native_openxr_backend_pro
 				"-framework Foundation"
 				"-framework Metal"
 		)
+        add_executable(proxy_protocol_test tests/macos/proxy_protocol_test.m src/proxy/tcp_auth.c "${MONADO_WIRE_GENERATED_HEADER}")
+		target_include_directories(proxy_protocol_test
+			PRIVATE
+				"${CMAKE_CURRENT_SOURCE_DIR}/include"
+				"${CMAKE_CURRENT_SOURCE_DIR}/src/proxy"
+				"${MONADO_WIRE_GENERATED_DIR}"
+				"${MONADO_SOURCE_DIR}/src/xrt/include"
+				"${MONADO_BUILD_DIR}/src/xrt/include"
+				"${MONADO_SOURCE_DIR}/src/xrt/ipc"
+				"${MONADO_BUILD_DIR}/src/xrt/ipc"
+		)
+		target_link_libraries(proxy_protocol_test
+			PRIVATE
+				macos_wine_xr_native_metal
+				"-framework Foundation"
+				"-framework Metal"
+		)
+        add_test(NAME proxy_wire_generation COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/proxy/wire_generation_test.py" --monado-source "${MONADO_SOURCE_DIR}")
+        add_test(NAME proxy_protocol COMMAND proxy_protocol_test)
+        set_tests_properties(proxy_protocol PROPERTIES TIMEOUT 20)
+
 	else()
 		message(STATUS "MONADO_SOURCE_DIR/MONADO_BUILD_DIR not set; standalone Wine proxy will not be built")
 	endif()

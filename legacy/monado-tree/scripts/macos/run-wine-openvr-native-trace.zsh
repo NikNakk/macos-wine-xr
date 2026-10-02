@@ -156,7 +156,7 @@ wait "${service_pid}" 2>/dev/null || true
 service_pid=
 sleep 0.25
 
-submit_files=("${trace_dir}"/monado_psvr2_*_wine_submit.csv(N))
+submit_files=("${trace_dir}"/monado_psvr2_*_ipc_submit.csv(N))
 if (( ${#submit_files[@]} == 0 )); then
 	print -u2 "Native Wine submit trace was not created."
 	print -u2 "Trace directory contents:"

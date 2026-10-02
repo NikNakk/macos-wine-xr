@@ -19,7 +19,7 @@
 		}                                                                                                      \
 	} while (0)
 int main(int argc, char **argv) {
-	if ((argc != 2 && argc != 3) || (argc == 3 && strcmp(argv[2], "--space-velocity")))
+	if ((argc != 2 && argc != 3) || (argc == 3 && strcmp(argv[2], "--space-velocity") && strcmp(argv[2], "--swapchains")))
 		return 2;
 	HMODULE dll = LoadLibraryA(argv[1]);
 	if (!dll) {
@@ -99,6 +99,49 @@ int main(int argc, char **argv) {
 		XrSessionCreateInfo session_info = {XR_TYPE_SESSION_CREATE_INFO, &binding, 0, system};
 		XrSession session;
 		CHECK(CreateSession(instance, &session_info, &session));
+		if (!strcmp(argv[2], "--swapchains")) {
+			LOAD(CreateSwapchain);
+			LOAD(EnumerateSwapchainImages);
+			LOAD(DestroySwapchain);
+			LOAD(AcquireSwapchainImage);
+			LOAD(WaitSwapchainImage);
+			LOAD(ReleaseSwapchainImage);
+			for (uint32_t array = 1; array <= 2; array++) {
+				XrSwapchainCreateInfo sc = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
+				sc.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+				sc.format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+				sc.sampleCount = 1; sc.width = 64; sc.height = 64;
+				sc.faceCount = 1; sc.arraySize = array; sc.mipCount = 1;
+				XrSwapchain chain;
+				CHECK(CreateSwapchain(session, &sc, &chain));
+				uint32_t count = 0;
+				CHECK(EnumerateSwapchainImages(chain, 0, &count, nullptr));
+				if (count == 0 || count > 16) return 1;
+				XrSwapchainImageD3D11KHR images[16] = {};
+				for (uint32_t i = 0; i < count; i++) images[i].type = XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR;
+				CHECK(EnumerateSwapchainImages(chain, count, &count, (XrSwapchainImageBaseHeader *)images));
+				for (uint32_t i = 0; i < count; i++) {
+					D3D11_TEXTURE2D_DESC desc;
+					images[i].texture->GetDesc(&desc);
+					if (desc.ArraySize != array || desc.Width != 64 || desc.Height != 64) return 1;
+				}
+				XrSwapchainImageAcquireInfo acquire = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+				XrSwapchainImageWaitInfo wait = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, nullptr, XR_INFINITE_DURATION};
+				XrSwapchainImageReleaseInfo release = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+				uint32_t index;
+				CHECK(AcquireSwapchainImage(chain, &acquire, &index));
+				CHECK(WaitSwapchainImage(chain, &wait));
+				CHECK(ReleaseSwapchainImage(chain, &release));
+				CHECK(DestroySwapchain(chain));
+				printf("OpenXR swapchain array=%u images=%u import/acquire/wait/release passed\n", array, count);
+			}
+			CHECK(DestroySession(session));
+			device->Release();
+			CHECK(DestroyInstance(instance));
+			FreeLibrary(dll);
+			return 0;
+		}
+
 		bool ready = false;
 		for (unsigned i = 0; i < 2000 && !ready; i++) {
 			XrEventDataBuffer event = {XR_TYPE_EVENT_DATA_BUFFER};
