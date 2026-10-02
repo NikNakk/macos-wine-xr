@@ -484,9 +484,15 @@ static XrResult dispatch(struct host *h, uint32_t op, const struct mwxr_wire_req
 	case MWXR_OP_LOCATE_SPACE: {
 		if (!space(h, q->object) || !space(h, q->aux))
 			return XR_ERROR_HANDLE_INVALID;
-		XrSpaceLocation loc = {.type = XR_TYPE_SPACE_LOCATION};
+		if (q->a > 1)
+			return XR_ERROR_VALIDATION_FAILURE;
+		XrSpaceVelocity velocity = {.type = XR_TYPE_SPACE_VELOCITY};
+		XrSpaceLocation loc = {.type = XR_TYPE_SPACE_LOCATION, .next = q->a ? &velocity : NULL};
 		XrResult x = b->LocateSpace(space(h, q->object), space(h, q->aux), q->time, &loc);
 		r->flags = loc.locationFlags;
+		r->velocity_flags = velocity.velocityFlags;
+		memcpy(r->linear_velocity, &velocity.linearVelocity, sizeof(r->linear_velocity));
+		memcpy(r->angular_velocity, &velocity.angularVelocity, sizeof(r->angular_velocity));
 		wire_pose(&r->pose, loc.pose);
 		return x;
 	}

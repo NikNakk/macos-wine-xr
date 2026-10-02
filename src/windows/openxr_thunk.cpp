@@ -528,7 +528,15 @@ static XrResult XRAPI_CALL xrCreateActionSpace(XrSession h, const XrActionSpaceC
 }
 static XrResult XRAPI_CALL xrLocateSpace(XrSpace h, XrSpace base, XrTime time, XrSpaceLocation *out) {
 	LOCK;
-	OUTPUT(out, XR_TYPE_SPACE_LOCATION);
+	if (!out || out->type != XR_TYPE_SPACE_LOCATION)
+		return XR_ERROR_VALIDATION_FAILURE;
+	XrSpaceVelocity *velocity = nullptr;
+	if (out->next) {
+		auto next = static_cast<XrBaseOutStructure *>(out->next);
+		if (next->type != XR_TYPE_SPACE_VELOCITY || next->next)
+			return XR_ERROR_FEATURE_UNSUPPORTED;
+		velocity = reinterpret_cast<XrSpaceVelocity *>(next);
+	}
 	auto p = lookup(h, SPACE), b = lookup(base, SPACE);
 	if (!p || !b)
 		return XR_ERROR_HANDLE_INVALID;
@@ -537,10 +545,16 @@ static XrResult XRAPI_CALL xrLocateSpace(XrSpace h, XrSpace base, XrTime time, X
 	q.object = p->id;
 	q.aux = b->id;
 	q.time = time;
+	q.a = velocity ? 1 : 0;
 	XrResult x = rpc(MWXR_OP_LOCATE_SPACE, q, r);
 	if (XR_SUCCEEDED(x)) {
 		out->locationFlags = r.flags;
 		out->pose = pose(r.pose);
+		if (velocity) {
+			velocity->velocityFlags = r.velocity_flags;
+			memcpy(&velocity->linearVelocity, r.linear_velocity, sizeof(r.linear_velocity));
+			memcpy(&velocity->angularVelocity, r.angular_velocity, sizeof(r.angular_velocity));
+		}
 	}
 	return x;
 }

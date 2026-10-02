@@ -272,8 +272,9 @@ Evidence is local in `.build/reverse-sharing/`: `wine11-window-probe.log`,
 and terminated by the harness. Accepted frame submission does not establish
 physical headset output, controller/gameplay compatibility or pacing. PS VR2
 audio routing from the older launcher has not been ported or validated; Unity
-still logs audio/codec warnings. The user should check visible rendering and
-audio with the new private game copy.
+still logs audio/codec warnings. The user confirmed visible cubes from `hello_xr` in Meta, but Underture shows
+its normal desktop menu/game view while Meta remains blank. Accepted frame
+counts therefore do not establish working VR rendering for Underture.
 
 Native capability/auth/serialization/framing tests pass. Native and MinGW
 builds pass, including the legacy metadata probe and transitional proxy.
@@ -286,6 +287,79 @@ The old shared-fence metadata runtime probe cannot complete on this Wine
 8.16 build (`D3D11Fence: Invalid device handle`); the new imported native event
 route passes. No claim is made that the transitional headset runner or physical
 controller/pacing regressions passed in this session.
+
+### Underture black-eye investigation, 2026-10-02
+
+A missing core output chain was found in the generic Win64 runtime:
+OpenComposite requests `XrSpaceVelocity` through `xrLocateSpace`, which the
+thunk incorrectly rejected with `XR_ERROR_FEATURE_UNSUPPORTED`. The thunk and
+native host now forward the velocity flags and both vectors. RPC protocol
+version 2 requires rebuilding the host and DLL together; the handshake rejects
+older layouts. Other unsupported output chains remain explicit errors.
+
+The optional `openxr_rpc_smoke.exe <runtime.dll> --space-velocity` regression
+passed with Meta (location flags 15, velocity flags 3) and simulated Monado
+(location flags 7, velocity flags 0). It checks valid pose output, finite valid
+velocities, preserved chain pointers, rejection of an additional unsupported
+chain, and the unchanged unchained call. Zero velocity-valid flags from Monado
+are accepted. The Monado probe itself exited successfully, but its native
+Metal-validation teardown asserted while a command buffer retained a Metal
+object; this is not recorded as a clean validation shutdown.
+
+The pose fix removes OpenComposite's unsupported head-pose error, but does
+**not** fix Underture's black VR output. Temporary diagnostics sampled a 4x4
+grid in Unity's original D3D11 eye textures before OpenComposite, as well as
+native staging images after producer completion: all sampled RGBA values were
+zero. The source textures are 1680x1760, single-sample,
+`DXGI_FORMAT_R8G8B8A8_TYPELESS`. The same source result occurs against simulated
+Monado, so the remaining issue is not isolated to Meta's Metal blit path.
+OpenVR reports a valid connected headset, `TrackingResult_Running_OK`, and
+`CanRenderScene=true`; raw FOVs, projection matrices and eye-to-head transforms
+are finite and consistent with the runtime's stereo views.
+
+The shared-image GPU regression now clears a typeless local D3D11 source and
+copies it into each imported image/slice. Destinations start white so a missing
+copy cannot pass. Native GPU verification found zero mismatches for all three
+images in both 2D and two-slice array cases. This proves this copy path for a
+known pattern, not Unity's full rendering path.
+
+Changing shader inversion, forcing OpenVR, disabling MSAA, and requesting
+Unity's direct graphics mode did not change the sampled black source images.
+Temporary sampling DLLs and altered game assets/configuration were restored;
+no CPU readback was added to the production transport. Logs are local under
+`.build/reverse-sharing/`, including `underture-source-after-velocity-fix.log`,
+`underture-monado-source.log`, `underture-projection-msvc-source.log`,
+`velocity-{meta,monado}-smoke-{run,host,wine}.log`, and
+`wine11-typeless-copy-probe.log`.
+
+The comparison recovered the original Win64 client build tag
+`e5358184e0afc2b9a2ce089ba442cf896d3b12c3`. A native service rebuilt from that
+exact commit, with PS VR2 disabled, matches all 110 original IPC command IDs
+and the shared-memory layout. The installed clean service cannot be paired
+with that original DLL: its command IDs differ. The private comparison uses
+its own socket directory, TCP port, copied Wine prefix and the preserved Wine
+11.10/DXMT v0.80 stack; it does not replace the installed LaunchAgent.
+
+Against simulated Monado, that original stack initialized OpenVR and imported
+both IOSurface eye swapchains, but the source eye samples remained black.
+Those diagnostic runs disabled GPU-only semaphore synchronization, and one
+terminated stream logged an invalid command at shutdown. They do not establish
+a working old-stack baseline, or contradict the user's earlier PS VR2 result.
+The typeless sampler positive control read the expected `255,128,0,255` from
+a GPU-cleared source, and the new bridge's actual startup FOV/eye-transform
+queries were valid. Meta eventually reached `XR_SESSION_STATE_FOCUSED` and
+OpenVR released input focus; eye samples stayed black. Meta also intermittently
+crashed during OpenComposite's bootstrap-session replacement, a separate
+remaining stability issue.
+
+A local headset comparison build and launcher are prepared at
+`.build/legacy-underture-compare/run-underture.zsh` in the Monado workspace.
+It uses a separate game/prefix copy and the matching old client/service, with
+camera streams disabled. The build is checked, but physical PS VR2 execution
+is left to the user. Evidence includes
+`underture-original-full-submit-{run,source}.log`,
+`underture-sampler-control-source.log`, `underture-focus-{source,host}.log`, and
+`underture-startup-source.log` under `.build/reverse-sharing/`.
 
 ## Timing trace
 

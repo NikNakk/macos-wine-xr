@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "operations": [
     "HELLO",
     "PROPERTIES",
@@ -269,6 +269,20 @@
         "image",
         "images",
         16
+      ],
+      [
+        "u64",
+        "velocity_flags"
+      ],
+      [
+        "f32",
+        "linear_velocity",
+        3
+      ],
+      [
+        "f32",
+        "angular_velocity",
+        3
       ]
     ]
   }

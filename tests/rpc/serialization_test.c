@@ -33,12 +33,16 @@ int main(void) {
 	r.images[15].strategy = 2;
 	strcpy(r.images[15].name, "dxmt-native-boundary");
 	r.views[3].fov[0] = -0.75f;
+    r.velocity_flags = 3;
+    r.linear_velocity[1] = -1.25f;
+    r.angular_velocity[2] = 2.5f;
 	mwxr_encode_response(data, &r);
 	mwxr_decode_response(data, &decoded);
 	mwxr_encode_response(reencoded, &decoded);
 	REQUIRE(!memcmp(data, reencoded, sizeof(data)));
 	REQUIRE(decoded.formats[63] == -7 && decoded.images[15].id == UINT64_MAX && decoded.views[3].fov[0] == -0.75f);
-	REQUIRE(!mwxr_rpc_operation_valid(0) && !mwxr_rpc_operation_valid(UINT32_MAX));
+	REQUIRE(decoded.velocity_flags == 3 && decoded.linear_velocity[1] == -1.25f && decoded.angular_velocity[2] == 2.5f);
+    REQUIRE(!mwxr_rpc_operation_valid(0) && !mwxr_rpc_operation_valid(UINT32_MAX));
 	puts("fixed-width RPC boundary codecs passed");
 	return 0;
 }

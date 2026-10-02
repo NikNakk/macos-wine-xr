@@ -8,8 +8,14 @@
 #include <cstdlib>
 
 using Microsoft::WRL::ComPtr;
-#define CHECK(call) do { HRESULT hr = (call); if (FAILED(hr)) { \
-    std::fprintf(stderr, "%s: HRESULT=0x%08lx\n", #call, (unsigned long)hr); return 1; } } while (0)
+#define CHECK(call)                                                                                                    \
+	do {                                                                                                           \
+		HRESULT hr = (call);                                                                                   \
+		if (FAILED(hr)) {                                                                                      \
+			std::fprintf(stderr, "%s: HRESULT=0x%08lx\n", #call, (unsigned long)hr);                       \
+			return 1;                                                                                      \
+		}                                                                                                      \
+	} while (0)
 
 int main(int argc, char **argv)
 {
@@ -70,9 +76,30 @@ int main(int argc, char **argv)
 			if (array_size > 1) { view.Texture2DArray.FirstArraySlice = slice; view.Texture2DArray.ArraySize = 1; }
 			ComPtr<ID3D11RenderTargetView> rtv;
 			CHECK(device->CreateRenderTargetView(images[i].Get(), &view, &rtv));
-			float color[4] = {0, 0, 0, 1}; color[(i + slice) % 3] = 1;
+			// A no-op copy must fail verification: initialize destination to white.
+			float color[4] = {1, 1, 1, 1};
 			context->ClearRenderTargetView(rtv.Get(), color);
 		}
+		ComPtr<ID3D11Texture2D> source;
+		D3D11_TEXTURE2D_DESC source_desc = desc;
+		source_desc.Format = DXGI_FORMAT_R8G8B8A8_TYPELESS;
+		CHECK(device->CreateTexture2D(&source_desc, nullptr, &source));
+		for (unsigned slice = 0; slice < array_size; ++slice) {
+			D3D11_RENDER_TARGET_VIEW_DESC view = {};
+			view.Format = desc.Format;
+			view.ViewDimension =
+			    array_size == 1 ? D3D11_RTV_DIMENSION_TEXTURE2D : D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+			if (array_size > 1) {
+				view.Texture2DArray.FirstArraySlice = slice;
+				view.Texture2DArray.ArraySize = 1;
+			}
+			ComPtr<ID3D11RenderTargetView> rtv;
+			CHECK(device->CreateRenderTargetView(source.Get(), &view, &rtv));
+			float color[4] = {0, 0, 0, 1};
+			color[(i + slice) % 3] = 1;
+			context->ClearRenderTargetView(rtv.Get(), color);
+		}
+		context->CopyResource(images[i].Get(), source.Get());
 		CHECK(context4->Signal(fence.Get(), frame+1));
 		context->Flush();
 		std::printf("rendered=%u\n",image_index); std::fflush(stdout);

@@ -6,6 +6,10 @@
 #include <openxr/openxr.h>
 #include <openxr/openxr_loader_negotiation.h>
 #include <windows.h>
+#include <d3d11.h>
+#define XR_USE_GRAPHICS_API_D3D11
+#include <openxr/openxr_platform.h>
+#include <cmath>
 #define CHECK(call)                                                                                                    \
 	do {                                                                                                           \
 		XrResult x = (call);                                                                                   \
@@ -15,7 +19,7 @@
 		}                                                                                                      \
 	} while (0)
 int main(int argc, char **argv) {
-	if (argc != 2)
+	if ((argc != 2 && argc != 3) || (argc == 3 && strcmp(argv[2], "--space-velocity")))
 		return 2;
 	HMODULE dll = LoadLibraryA(argv[1]);
 	if (!dll) {
@@ -40,6 +44,11 @@ int main(int argc, char **argv) {
 	XrInstanceCreateInfo ci = {XR_TYPE_INSTANCE_CREATE_INFO};
 	strcpy(ci.applicationInfo.applicationName, "generic RPC smoke");
 	ci.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
+	const char *extension = XR_KHR_D3D11_ENABLE_EXTENSION_NAME;
+	if (argc == 3) {
+		ci.enabledExtensionCount = 1;
+		ci.enabledExtensionNames = &extension;
+	}
 	XrInstance instance;
 	CHECK(create(&ci, &instance));
 #define LOAD(name)                                                                                                     \
@@ -67,6 +76,89 @@ int main(int argc, char **argv) {
 					      views));
 	printf("RPC runtime=%s system=%s views=%u recommended=%ux%u\n", ip.runtimeName, sp.systemName, count,
 	       views[0].recommendedImageRectWidth, views[0].recommendedImageRectHeight);
+	if (argc == 3) {
+		LOAD(GetD3D11GraphicsRequirementsKHR);
+		LOAD(CreateSession);
+		LOAD(DestroySession);
+		LOAD(BeginSession);
+		LOAD(PollEvent);
+		LOAD(CreateReferenceSpace);
+		LOAD(DestroySpace);
+		LOAD(LocateSpace);
+		LOAD(WaitFrame);
+		LOAD(BeginFrame);
+		LOAD(EndFrame);
+		XrGraphicsRequirementsD3D11KHR requirements = {XR_TYPE_GRAPHICS_REQUIREMENTS_D3D11_KHR};
+		CHECK(GetD3D11GraphicsRequirementsKHR(instance, system, &requirements));
+		ID3D11Device *device = nullptr;
+		HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0,
+		                               D3D11_SDK_VERSION, &device, nullptr, nullptr);
+		if (FAILED(hr))
+			return 1;
+		XrGraphicsBindingD3D11KHR binding = {XR_TYPE_GRAPHICS_BINDING_D3D11_KHR, nullptr, device};
+		XrSessionCreateInfo session_info = {XR_TYPE_SESSION_CREATE_INFO, &binding, 0, system};
+		XrSession session;
+		CHECK(CreateSession(instance, &session_info, &session));
+		bool ready = false;
+		for (unsigned i = 0; i < 2000 && !ready; i++) {
+			XrEventDataBuffer event = {XR_TYPE_EVENT_DATA_BUFFER};
+			XrResult result = PollEvent(instance, &event);
+			if (result == XR_SUCCESS && event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED)
+				ready = ((XrEventDataSessionStateChanged *)&event)->state == XR_SESSION_STATE_READY;
+			else if (XR_FAILED(result))
+				return 1;
+			if (!ready)
+				Sleep(5);
+		}
+		if (!ready)
+			return 1;
+		XrSessionBeginInfo begin = {XR_TYPE_SESSION_BEGIN_INFO, nullptr,
+		                            XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO};
+		CHECK(BeginSession(session, &begin));
+		XrReferenceSpaceCreateInfo space_info = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+		space_info.poseInReferenceSpace.orientation.w = 1;
+		space_info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+		XrSpace view, local;
+		CHECK(CreateReferenceSpace(session, &space_info, &view));
+		space_info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
+		CHECK(CreateReferenceSpace(session, &space_info, &local));
+		XrFrameWaitInfo wait = {XR_TYPE_FRAME_WAIT_INFO};
+		XrFrameState state = {XR_TYPE_FRAME_STATE};
+		CHECK(WaitFrame(session, &wait, &state));
+		XrFrameBeginInfo frame_begin = {XR_TYPE_FRAME_BEGIN_INFO};
+		CHECK(BeginFrame(session, &frame_begin));
+		XrSpaceVelocity velocity = {XR_TYPE_SPACE_VELOCITY};
+		XrSpaceLocation location = {XR_TYPE_SPACE_LOCATION, &velocity};
+		CHECK(LocateSpace(view, local, state.predictedDisplayTime, &location));
+		if (!(location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT))
+			return 1;
+		if (velocity.next || location.next != &velocity)
+			return 1;
+		if ((velocity.velocityFlags & XR_SPACE_VELOCITY_LINEAR_VALID_BIT) &&
+		    (!std::isfinite(velocity.linearVelocity.x) || !std::isfinite(velocity.linearVelocity.y) ||
+		     !std::isfinite(velocity.linearVelocity.z)))
+			return 1;
+		if ((velocity.velocityFlags & XR_SPACE_VELOCITY_ANGULAR_VALID_BIT) &&
+		    (!std::isfinite(velocity.angularVelocity.x) || !std::isfinite(velocity.angularVelocity.y) ||
+		     !std::isfinite(velocity.angularVelocity.z)))
+			return 1;
+		printf("space velocity: location_flags=%llu velocity_flags=%llu\n",
+		       (unsigned long long)location.locationFlags, (unsigned long long)velocity.velocityFlags);
+		XrBaseOutStructure unknown = {XR_TYPE_UNKNOWN, nullptr};
+		velocity.next = &unknown;
+		if (LocateSpace(view, local, state.predictedDisplayTime, &location) != XR_ERROR_FEATURE_UNSUPPORTED)
+			return 1;
+		velocity.next = nullptr;
+		location.next = nullptr;
+		CHECK(LocateSpace(view, local, state.predictedDisplayTime, &location));
+		XrFrameEndInfo end = {XR_TYPE_FRAME_END_INFO,           nullptr, state.predictedDisplayTime,
+		                      XR_ENVIRONMENT_BLEND_MODE_OPAQUE, 0,       nullptr};
+		CHECK(EndFrame(session, &end));
+		CHECK(DestroySpace(view));
+		CHECK(DestroySpace(local));
+		CHECK(DestroySession(session));
+		device->Release();
+	}
 	CHECK(DestroyInstance(instance));
 	FreeLibrary(dll);
 	return 0;
