@@ -29,11 +29,12 @@ The original authenticated Monado byte-stream proxy and transitional frontend
 remain available as a regression path. DXMT has no Monado dependency; clean
 Monado has no Wine/DXMT transport code.
 
-An experimental third path is proposed: a Proton-style builtin Wine OpenXR
-runtime with PE and native macOS halves in the application's process. It would
-call the native Khronos loader directly and wrap runtime-owned Metal images
-through DXMT, removing the bridge RPC and native host. This is currently a
-Phase 0 study, not an implemented runtime; see
+An experimental third path is in development: a Proton-style builtin Wine OpenXR
+runtime with PE and native macOS halves in the application's process. Its initial core module
+calls the native Khronos loader directly; instance/system queries from x86_64
+Wine to an ARM64 simulated Monado service have passed. D3D11/Metal sharing is
+not implemented yet. The intended graphics path wraps runtime-owned images
+through DXMT and removes bridge RPC and the native host; see
 [the design, prerequisites and risks](docs/in-process-openxr.md).
 
 ## Active development branches
@@ -41,7 +42,8 @@ Phase 0 study, not an implemented runtime; see
 - Monado integration/reference: `NikNakk/monado:macos-game-mode-upstream-sync-2026-10`
 - Monado upstream-oriented cleanup: `NikNakk/monado:macos-upstream-clean`
 - DXMT native-sharing work: `NikNakk/dxmt:macos-xr-native-sharing`
-- Bridge: this repository, `main`
+- Bridge fallbacks: this repository, `main`
+- Experimental in-process bridge: `codex/in-process-wine-openxr`
 
 ## Transitional path (retained)
 

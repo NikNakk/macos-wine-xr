@@ -1,8 +1,8 @@
-# In-process Wine OpenXR: Phase 0 study
+# In-process Wine OpenXR
 
-Date: 2026-10-02. **Design proposal only; implementation and execution have not
-started.** Phase 0 stops here. The proxy and native-host implementations remain
-available and unchanged.
+Date: 2026-10-02. Phase 0 study followed by the authorized x86_64 prototype.
+**Core loading/instance/system gate passed; graphics and Phase 2 remain pending.**
+The proxy and native-host implementations remain available and unchanged.
 
 ## Finding
 
@@ -356,3 +356,75 @@ Exact commands for the new runner and hardware comparison will be provided
 after it exists and has been tested in Phase 2. No hypothetical command is
 presented here as executable. PS VR2 hardware runs remain user-owned; no hardware
 or performance results are claimed by this study.
+
+
+## Implementation evidence: first core gate
+
+The standalone prototype uses Proton's unchanged generator plus a small
+configuration wrapper; it emits OpenXR 1.0 core PE/native thunks, excludes loader
+API-layer entry points, and advertises no extensions while graphics is absent.
+The PE DLL is marked builtin with winebuild; the native Mach-O unixlib links the
+Khronos loader and initializes through __wine_init_unix_call. This is not a
+usable D3D11 runtime yet: session/swapchain creation returns unsupported, and
+requesting D3D11_enable returns XR_ERROR_EXTENSION_NOT_PRESENT.
+
+2026-10-02 results on this machine:
+
+- Wine 11.10 x86_64, its existing Wine 8.16 link-time SDK, current Proton Wine
+  unixlib/list/debug headers: both PE and native modules built.
+- Khronos OpenXR-SDK f2448a8797c85814aa892efc1ab8707900fbcc78 (1.1.63): loader
+  built x86_64 with bundled jsoncpp, avoiding arm64 system jsoncpp linkage.
+- Monado 0f919ce71f7b71c997d7ef22abffbbaadb9cce5f: x86_64 runtime client built
+  with universal MoltenVK 1.4.2; no Monado source changes. The supplied workspace
+  has unrelated local edits, preserved; this identifies the source revision,
+  not a claim of a pristine whole tree.
+- ARM64 simulated service using its existing main compositor: Windows probe
+  xrCreateInstance=0, xrGetSystem=0 (system=1), xrGetInstanceProperties=0,
+  xrDestroyInstance=0. Native module PID=68829 matches Monado's client PID=68829.
+- Null-compositor test configuration failed vkCreateInstance with
+  VK_ERROR_INCOMPATIBLE_DRIVER: its extension list lacks portability enumeration.
+  Switching to the existing main compositor resolved it, without a source patch.
+
+These results establish ordinary cross-architecture Monado control IPC only.
+They do not establish Metal image transfer, zero copy, XPC cold activation,
+Game Mode, app pacing, visible output or performance. Test registration uses
+HKLM\Software\Khronos\OpenXR\1 ActiveRuntime and C:\openxr\wineopenxr64.json
+only in build-in-process/prefix-core. The smoke probe directly loads the runtime
+DLL; loader negotiation through the Windows Khronos loader still needs a test.
+
+### Reproduce the core gate
+
+Provide explicit checkouts and dependency paths; the scripts never replace the
+existing Wine prefix/runtime or build the hardware service. The native build
+requires a universal/x86_64 MoltenVK dylib; the tested Khronos v1.4.2 macOS tar
+has SHA256 f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e.
+
+```sh
+export OPENXR_SOURCE_DIR=/path/to/OpenXR-SDK
+export MONADO_SOURCE_DIR=/path/to/macos-monado
+export MWXR_MOLTENVK=/path/to/universal/libMoltenVK.dylib
+scripts/build-in-process-native.zsh
+export MWXR_NATIVE_LOADER="$PWD/build-in-process/native/loader-x64/src/loader/libopenxr_loader.dylib"
+export MWXR_NATIVE_RUNTIME_JSON="$PWD/build-in-process/native/monado-x64/openxr_monado-dev.json"
+export MWXR_WINE_SDK=/path/to/wine-link-time-sdk
+export MWXR_WINE_SOURCE=/path/to/pinned-proton-wine
+export MWXR_WINE_RUNTIME=/path/to/wine-11.10
+scripts/build-in-process-gate.zsh
+# Start a separate ARM64 service with PSVR2/PSSENSE compiled out, SIMULATED_ENABLE=1,
+# XRT_COMPOSITOR_NULL=0, and a unique existing XDG_RUNTIME_DIR, then:
+export XDG_RUNTIME_DIR=/path/to/isolated-service-directory
+scripts/run-in-process-gate.zsh
+```
+
+The build gate's Proton Wine headers were dc26e61847081a1b5cb0733dc30feba6ee575482.
+The stand-alone Makefile.in is an integration sketch for a Wine-tree build;
+only the external build script has been executed here. Build products and raw
+logs live under ignored build-in-process/; they are not source artifacts.
+
+### Licence decision
+
+The new bridge distribution adopts LGPL-2.1-or-later. The original BSL licence
+and source-level notices remain preserved under LICENSES/ and in legacy files;
+third-party source retains its own notices. See LICENSES/README.md for pinned
+Proton provenance. The earlier BSL-only assessment above describes the baseline
+before this decision. Commercial intent does not determine compatibility.
