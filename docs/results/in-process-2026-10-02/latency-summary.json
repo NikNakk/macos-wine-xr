@@ -1,0 +1,38 @@
+{
+  "xrWaitFrame": {
+    "samples": 190,
+    "median_us": 15653.6,
+    "p95_us": 21858.3
+  },
+  "xrLocateSpace": {
+    "samples": 3800,
+    "median_us": 20.2,
+    "p95_us": 58.8
+  },
+  "xrGetActionStateBoolean": {
+    "samples": 3800,
+    "median_us": 2.0,
+    "p95_us": 5.9
+  },
+  "xrGetActionStateFloat": {
+    "samples": 3800,
+    "median_us": 1.7,
+    "p95_us": 4.5
+  },
+  "xrGetActionStateVector2f": {
+    "samples": 3800,
+    "median_us": 1.7,
+    "p95_us": 4.5
+  },
+  "xrGetActionStatePose": {
+    "samples": 3800,
+    "median_us": 1.6,
+    "p95_us": 4.4
+  },
+  "xrEndFrame": {
+    "samples": 190,
+    "median_us": 26.95,
+    "p95_us": 67.7
+  },
+  "method": "Apple M5; Metal validation; 200 empty frames, first 10 excluded; 20 reads/type/frame; inactive unbound actions; QPC duration; p95 nearest rank. No rendered-workload or other-path comparison."
+}
