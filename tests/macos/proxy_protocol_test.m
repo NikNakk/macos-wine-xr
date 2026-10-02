@@ -60,6 +60,30 @@ native_service(void *arg)
 	memcpy(CMSG_DATA(c), &memory_fd, sizeof(int));
 	CHECK(sendmsg(ctx->fd, &msg, 0) == 1);
 	CHECK(send_exact(ctx->fd, (uint8_t *)&result + 1, sizeof(result) - 1));
+	CHECK(recv_exact(ctx->fd, &cmd, sizeof(cmd)) && cmd == NATIVE_IPC_INSTANCE_DESCRIBE_CLIENT);
+	struct ipc_client_description description;
+	CHECK(recv_exact(ctx->fd, &description, sizeof(description)));
+	CHECK(description.pid == 12345);
+	CHECK(strcmp(description.info.application_name, "Wine ABI test") == 0);
+	CHECK(send_exact(ctx->fd, &result, sizeof(result)));
+	for (unsigned i = 0; i < 2; i++) {
+		CHECK(recv_exact(ctx->fd, &cmd, sizeof(cmd)) && cmd == NATIVE_IPC_SYSTEM_GET_CLIENT_INFO);
+		uint32_t client_id;
+		CHECK(recv_exact(ctx->fd, &client_id, sizeof(client_id)) && client_id == 42);
+		struct __attribute__((packed))
+		{
+			xrt_result_t result;
+			struct ipc_app_state ias;
+		} state = {0};
+		state.result = i == 0 ? XRT_SUCCESS : XRT_ERROR_INVALID_ARGUMENT;
+		state.ias.id = 42;
+		state.ias.pid = 12345;
+		state.ias.primary_application = state.ias.session_focused = true;
+		state.ias.io_blocks.block_inputs = true;
+		state.ias.z_order = 19;
+		state.ias.info = description.info;
+		CHECK(send_exact(ctx->fd, &state, sizeof(state)));
+	}
 	// Four metadata submissions: chunk/no fence, chunk/semaphore, single, async/single.
 	for (unsigned i = 0; i < 4; i++) {
 		CHECK(recv_exact(ctx->fd, &cmd, sizeof(cmd)));
@@ -142,6 +166,34 @@ main(void)
 	struct test_context ctx = {wine[1], ism};
 	pthread_t thread;
 	CHECK(pthread_create(&thread, NULL, serve, &ctx) == 0);
+	struct ipc_instance_describe_client_msg description = {0};
+	description.cmd = IPC_INSTANCE_DESCRIBE_CLIENT;
+	description.desc.pid = 12345;
+	strcpy(description.desc.info.application_name, "Wine ABI test");
+	fragmented(wine[0], &description, sizeof(description));
+	struct mwxr_ipc_result_reply described;
+	get_reply(wine[0], &described, sizeof(described));
+	CHECK(described.result == XRT_SUCCESS);
+	if (sizeof(pid_t) < sizeof(int64_t)) {
+		description.desc.pid = INT64_MAX;
+		fragmented(wine[0], &description, sizeof(description));
+		get_reply(wine[0], &described, sizeof(described));
+		CHECK(described.result == XRT_ERROR_INVALID_ARGUMENT);
+	}
+	struct ipc_system_get_client_info_msg get_state = {IPC_SYSTEM_GET_CLIENT_INFO, 42};
+	for (unsigned i = 0; i < 2; i++) {
+		fragmented(wine[0], &get_state, sizeof(get_state));
+		struct ipc_system_get_client_info_reply state;
+		get_reply(wine[0], &state, sizeof(state));
+		if (i == 0) {
+			CHECK(state.result == XRT_SUCCESS && state.ias.pid == 12345 && state.ias.id == 42);
+			CHECK(state.ias.primary_application && state.ias.session_focused);
+			CHECK(state.ias.io_blocks.block_inputs && state.ias.z_order == 19);
+			CHECK(strcmp(state.ias.info.application_name, "Wine ABI test") == 0);
+		} else {
+			CHECK(state.result == XRT_ERROR_INVALID_ARGUMENT && state.ias.pid == 0);
+		}
+	}
 	struct ipc_instance_get_shm_chunk_msg shm = {IPC_INSTANCE_GET_SHM_CHUNK, sizeof(*ism) - 3};
 	fragmented(wine[0], &shm, sizeof(shm));
 	struct ipc_instance_get_shm_chunk_reply shm_reply;

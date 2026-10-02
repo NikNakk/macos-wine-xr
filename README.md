@@ -231,3 +231,9 @@ ctest --test-dir build-proxy --output-on-failure
 Record the selected Monado commit, hello_xr result, 2D/array results and import
 logs. Optional `MWXR_PROXY_TRACE=1` logs Wine command IDs and sizes; leave it unset
 for timing runs. Timing analysis reads `ipc_submit` and `ipc_swapchain` filenames.
+
+The Wine PID aggregates are frozen separately from native Monado:
+`instance_describe_client` converts Wine's `int64_t` PID into native `pid_t`
+(and rejects values outside its range), while `system_get_client_info` converts
+native app state back to the Wine layout. Shared memory contains neither
+aggregate. The native service no longer needs a cross-ABI PID type.

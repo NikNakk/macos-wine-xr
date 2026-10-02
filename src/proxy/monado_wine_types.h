@@ -55,3 +55,27 @@ struct mwxr_ipc_layer_single_payload
 	uint32_t size;
 	uint8_t data[mwxr_IPC_LAYER_SINGLE_PAYLOAD_SIZE];
 };
+
+// Frozen Wine aggregates: native Monado is free to use platform pid_t.
+struct mwxr_ipc_client_description
+{
+	int64_t pid;
+	struct xrt_application_info info;
+};
+struct mwxr_ipc_app_state
+{
+	uint32_t id;
+	bool primary_application;
+	bool session_active;
+	bool session_visible;
+	bool session_focused;
+	bool session_overlay;
+	struct ipc_client_io_blocks io_blocks;
+	uint32_t z_order;
+	int64_t pid;
+	struct xrt_application_info info;
+};
+
+_Static_assert(offsetof(struct mwxr_ipc_client_description, info) == 8, "Frozen Wine description layout");
+_Static_assert(offsetof(struct mwxr_ipc_app_state, pid) == 24, "Frozen Wine app-state PID layout");
+_Static_assert(offsetof(struct mwxr_ipc_app_state, info) == 32, "Frozen Wine app-state info layout");

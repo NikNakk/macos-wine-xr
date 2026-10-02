@@ -718,6 +718,26 @@ proxy_client_messages(int wine_fd,
 				return false;
 			}
 			native_request = translated;
+		} else if (cmd == IPC_INSTANCE_DESCRIBE_CLIENT) {
+			const struct ipc_instance_describe_client_msg *wine_msg = (const void *)request;
+			struct __attribute__((packed))
+			{
+				uint32_t cmd;
+				struct ipc_client_description desc;
+			} native_msg = {0};
+			native_msg.cmd = NATIVE_IPC_INSTANCE_DESCRIBE_CLIENT;
+			native_msg.desc.pid = (pid_t)wine_msg->desc.pid;
+			if ((int64_t)native_msg.desc.pid != wine_msg->desc.pid) {
+				struct mwxr_ipc_result_reply invalid = {XRT_ERROR_INVALID_ARGUMENT};
+				if (!send_framed_reply(wine_fd, &invalid, sizeof(invalid))) {
+					return false;
+				}
+				continue;
+			}
+			native_msg.desc.info = wine_msg->desc.info;
+			memcpy(translated, &native_msg, sizeof(native_msg));
+			native_request = translated;
+			native_request_size = sizeof(native_msg);
 		} else if (cmd == IPC_SESSION_CREATE) {
 			/*
 			 * This was previously server policy for stream_socket clients.
@@ -747,6 +767,37 @@ proxy_client_messages(int wine_fd,
 		}
 
 		if (info.one_way) {
+			continue;
+		}
+		if (cmd == IPC_SYSTEM_GET_CLIENT_INFO) {
+			struct __attribute__((packed))
+			{
+				xrt_result_t result;
+				struct ipc_app_state ias;
+			} native_reply = {0};
+			if (!recv_exact(native_fd, &native_reply, sizeof(native_reply))) {
+				return false;
+			}
+			struct ipc_system_get_client_info_reply wine_reply = {0};
+			wine_reply.result = native_reply.result;
+			if (native_reply.result == XRT_SUCCESS) {
+				struct ipc_app_state aligned_state;
+				memcpy(&aligned_state, &native_reply.ias, sizeof(aligned_state));
+				const struct ipc_app_state *state = &aligned_state;
+				wine_reply.ias.id = state->id;
+				wine_reply.ias.primary_application = state->primary_application;
+				wine_reply.ias.session_active = state->session_active;
+				wine_reply.ias.session_visible = state->session_visible;
+				wine_reply.ias.session_focused = state->session_focused;
+				wine_reply.ias.session_overlay = state->session_overlay;
+				wine_reply.ias.io_blocks = state->io_blocks;
+				wine_reply.ias.z_order = state->z_order;
+				wine_reply.ias.pid = state->pid;
+				wine_reply.ias.info = state->info;
+			}
+			if (!send_framed_reply(wine_fd, &wine_reply, sizeof(wine_reply))) {
+				return false;
+			}
 			continue;
 		}
 		if (info.reply_size == 0 || !recv_exact(native_fd, reply, info.reply_size) ||
