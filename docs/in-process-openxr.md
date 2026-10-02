@@ -1,7 +1,8 @@
 # In-process Wine OpenXR
 
 Date: 2026-10-02. Phase 0 study followed by the authorized x86_64 prototype.
-**Core loading/instance/system gate passed; graphics and Phase 2 remain pending.**
+**Core and independent DXMT GPU probes pass. Graphics adaptation builds;
+Monado swapchain validation and Phase 2 are blocked by XPC test isolation.**
 The proxy and native-host implementations remain available and unchanged.
 
 ## Finding
@@ -156,7 +157,7 @@ do not carry SteamVR/Vulkan registry dependencies into the macOS slice.
 
 ## Licence and reuse
 
-The bridge's `LICENSE` is **BSL-1.0**, not LGPL. Proton's root `LICENSE` states
+The baseline bridge's `LICENSE` was **BSL-1.0**, before the licence decision below. Proton's root `LICENSE` states
 that licences vary and directs top-level content to `LICENSE.proton`
 (BSD-3-Clause), while component licences apply separately.
 
@@ -432,7 +433,7 @@ before this decision. Commercial intent does not determine compatibility.
 
 ## Direct-object DXMT prerequisite
 
-The companion DXMT branch codex/in-process-metal-import adds the new
+The companion DXMT branch codex/in-process-metal-import, commit f8e535b, adds the new
 IDXMTNativeDevice2 IID (5a6d2e1b-b10a-4ab7-8ade-d9a64c417283). The original
 IDXMTNativeDevice ABI and broker imports are unchanged. The new methods return
 DXMT's borrowed Metal device and import a raw texture/event with a retained
@@ -468,3 +469,130 @@ Do not use WINEDLLPATH alone to replace an existing engine DLL: Wine searches
 its installed builtin directory first. The dedicated runtime avoids changing
 either fallback engine. The recorded first successful run used prefix-core
 with only test files replaced; the dedicated runner now keeps the probes apart.
+
+
+## D3D11/Metal adaptation and current stopping point
+
+The generated module now advertises XR_KHR_D3D11_enable only when the native
+loader reports XR_KHR_metal_enable. Creation substitutes the native extension;
+Windows Metal entry points stay hidden. D3D11 graphics requirements call native
+Metal requirements, select DXMT's default DXGI adapter LUID, and validate the
+actual Metal device at session creation. There is one instance and one session.
+
+PE session/swapchain wrappers and projection/event handle translation follow
+Proton's manual-entry-point pattern. Color formats initially cover RGBA/BGRA
+8-bit UNORM/sRGB and RGBA16_FLOAT when the native runtime advertises them.
+Single-mip/sample, non-cube 2D/2D-array images with COLOR_ATTACHMENT/SAMPLED usage
+are supported by the implementation; unsupported flags/chains return errors.
+Only an empty frame or one stereo projection layer is accepted. Actions and
+spaces use the generated core dispatch. Native Metal images are imported
+through IDXMTNativeDevice2; a failed exact import logs an error and returns
+failure. There is no copy fallback.
+
+Release enqueues a DXMT shared-event fence signal, flushes submission, then
+commits an event wait on the Metal queue bound to the native OpenXR session.
+Monado's existing completion barrier on that queue orders the producer before
+release. The independent probe validates the direct fence import and Signal /
+Flush ordering; this whole release path still needs the Monado image test.
+
+The two loaders have separate manifest selection. The Windows loader uses its
+prefix-local ActiveRuntime registry value. MWXR_NATIVE_RUNTIME_JSON names the
+native manifest; the unixlib puts it into the native libc environment's
+XR_RUNTIME_JSON without changing Wine's Windows environment. Runners unset the
+inherited Windows XR_RUNTIME_JSON, avoiding dependence on its elevated-context
+ignore behavior. The native loader remains linked, as in Proton.
+
+The existing Khronos D3D11 hello_xr executable was run with Metal validation
+against the isolated ARM64 simulated service. It passed Windows loader runtime
+negotiation, instance/system enumeration, D3D11 adapter/requirements, session
+creation and reference spaces. It then failed its first color swapchain:
+
+```text
+wineopenxr: selected direct-object zero-copy Metal/DXMT, queue=... event=...
+ERROR [swapchain_server_import] ipc_call_swapchain_import failed: XRT_ERROR_IPC_FAILURE
+ERROR [ipc_metal_xpc_service_take_textures_for_pid]
+  Metal token ownership mismatch/missing texture token=0x000000004d2766f8 image=0 pid=73860
+```
+
+The selection log describes the required route, not proof that any Monado image
+was successfully wrapped. The Wine native PID in that run was 73860. No frames,
+Monado every-image GPU probe, alpha-blend run, OpenComposite run or performance
+comparison is claimed. The first count reported by this client runtime was
+four images; do not hard-code the host path's historical three-image count.
+
+### Why testing stopped before a Monado change
+
+The service socket was isolated with XDG_RUNTIME_DIR, but both client and service
+use the hard-coded org.freedesktop.monado.metal-ipc Mach-service name. The XPC
+publish operation went to the already registered launchd service, whereas the
+swapchain import request went to the task's isolated service. The latter
+correctly rejected the token. The registered LaunchAgent is configured for
+PS VR2 hardware, so using or replacing it would interfere with the user's
+hardware path. Its configuration and Monado sources were left unchanged.
+The task's directly started simulated service is stopped after the core tests.
+The initial XPC attempt reached the registered launchd endpoint and could
+activate that service; no frames were submitted, and no further graphics
+tests used it after its hardware configuration was identified.
+
+The narrow proposed Monado change is an **opt-in XPC endpoint-name setting**,
+with the existing default preserved:
+
+1. Introduce one shared accessor for the selected name, with an environment
+   override such as XRT_MACOS_METAL_IPC_SERVICE_NAME and the existing constant
+   as the default. Resolve/configure it before connecting or starting listeners.
+2. Use it consistently for NSXPCConnection and NSXPCListener construction in
+   ipc_metal_xpc.m and ipc_metal_xpc_service.m; ensure the optional broker's
+   generated registration names use the same accessor when that broker is used.
+3. Start an independent LaunchAgent with a unique label and matching MachServices
+   entry, the simulated-only service binary, and the isolated Unix-socket path.
+   Give the Wine client the same endpoint setting. No existing LaunchAgent is
+   replaced; no protocol, handle ownership, compositor or Linux behavior changes.
+
+This is needed for nonintrusive service-backed graphics testing alongside the
+registered service, not an intrinsic requirement of the in-process Wine design.
+Temporarily replacing the hardware LaunchAgent is an alternative operational
+approach, but has not been done. Under the user's explicit requirement to stop
+before necessary Monado changes, implementation/testing pauses at this point
+for that decision. No Monado patch is applied or committed.
+
+### Remaining acceptance work
+
+After resolving endpoint isolation: complete a Monado runtime-owned image
+identity/GPU pattern probe over every image and both array slices; validate
+session recreation and all accepted chains; run opaque and alpha hello_xr;
+then OpenComposite and identical-workload comparisons of all three paths.
+The current simulated HMD advertises only Opaque in the observed run; determine
+an existing simulated configuration for AlphaBlend before advertising a result.
+The minimum-period hint, pacer traces, latency distributions, frame median/p95,
+late frames and hardware command ledger remain pending. In-process code adds
+no bridge pacing hint. No conclusion about removing Monado's pacer hint follows
+from these control/import probes.
+
+The application runner exists as scripts/run-in-process-openxr.zsh. It uses the
+cloned Wine/DXMT runtime and a separate prefix-openxr (or explicitly selected
+MWXR_IN_PROCESS_PREFIX). A compatible service's socket and XPC endpoint must
+refer to the same service. Once the simulated gate passes, the hardware runner
+will use the registered service deliberately, with hardware execution by the
+user. The current failure must not be used as a performance sample.
+
+
+### Saved prototype commits
+
+- 3bc1815: Phase 0 design/architecture report.
+- 46a67f6: generator/native-client/core gate and licensing/provenance.
+- 2226aa7: independent direct-object texture/fence probe.
+- The subsequent graphics-adaptation commit includes the implementation above
+  and this stopping-point evidence. All are local on
+  codex/in-process-wine-openxr; no branch has been pushed.
+- DXMT f8e535b is local on codex/in-process-metal-import in the companion
+  checkout .build/in-process-dxmt of the supplied Monado workspace.
+
+
+A concrete, **unapplied and unbuilt** candidate is saved at
+[docs/proposals/monado-xpc-service-name.patch](proposals/monado-xpc-service-name.patch).
+It changes the shared name macro to an accessor, so the inspected existing
+client, service, external client, broker and control-tool call sites all use the
+same selected name. A custom service label/plist is still needed for the test;
+the hardware LaunchAgent stays as-is. Review and validate the candidate in
+Monado only after authorization, including default-name regression and a
+private simulated LaunchAgent cold-start/teardown test.

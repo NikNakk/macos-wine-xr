@@ -13,7 +13,8 @@ export WINEPREFIX=${repo}/build-in-process/prefix-core
 export WINEARCH=win64
 export WINEDEBUG=${WINEDEBUG:--all}
 export WINEDLLPATH=${root}
-export XR_RUNTIME_JSON=${MWXR_NATIVE_RUNTIME_JSON}
+export MWXR_NATIVE_RUNTIME_JSON
+unset XR_RUNTIME_JSON
 unset WINEDLLOVERRIDES
 wine=${MWXR_WINE_RUNTIME}/bin/wine
 [[ -f ${root}/in_process_gate.exe && -f ${root}/x86_64-unix/wineopenxr.so ]] || {

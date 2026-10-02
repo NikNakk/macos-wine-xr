@@ -4,9 +4,11 @@
 # scripts/build-in-process-gate.zsh and generates the listed thunk sources.
 MODULE = wineopenxr.dll
 UNIXLIB = wineopenxr.so
-IMPORTS = kernel32
+IMPORTS = kernel32 dxgi
 UNIX_LIBS = -lopenxr_loader
 SOURCES = \
+	graphics.cpp \
+	graphics_native.m \
 	openxr.c \
 	openxr_loader.c \
 	openxr_thunks.c \

@@ -19,7 +19,7 @@ int main(void)
     PFN_xrEnumerateApiLayerProperties enumerate_layers;
     uint32_t count = 99;
     if (XR_FAILED(gipa(XR_NULL_HANDLE, "xrEnumerateInstanceExtensionProperties", (void *)&enumerate)) ||
-        XR_FAILED(enumerate(NULL, 0, &count, NULL)) || count != 0 ||
+        XR_FAILED(enumerate(NULL, 0, &count, NULL)) || count > 1 ||
         XR_FAILED(gipa(XR_NULL_HANDLE, "xrEnumerateApiLayerProperties", (void *)&enumerate_layers)) ||
         XR_FAILED(enumerate_layers(0, &count, NULL)) || count != 0) return 5;
     XrInstanceCreateInfo ci = {XR_TYPE_INSTANCE_CREATE_INFO};
@@ -50,7 +50,7 @@ int main(void)
     XrResult second_destroy = destroy(recreated);
     printf("recreate=%d second_destroy=%d\n", recreate_result, second_destroy);
     if (XR_FAILED(second_destroy)) return 9;
-    const char *unsupported = "XR_KHR_D3D11_enable";
+    const char *unsupported = "XR_NOT_SUPPORTED_prototype";
     ci.enabledExtensionCount = 1;
     ci.enabledExtensionNames = &unsupported;
     if (create(&ci, &recreated) != XR_ERROR_EXTENSION_NOT_PRESENT || recreated != XR_NULL_HANDLE) return 10;
