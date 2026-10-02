@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NikNakk/monado
-          ref: 6171ca5b46cbb9d154731586ab797880f969e9fc
+          ref: 0f919ce71f7b71c997d7ef22abffbbaadb9cce5f
           path: monado
       - name: Install Monado dependencies
         run: >-
