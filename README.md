@@ -206,7 +206,7 @@ fields or payload types. Its command count changed from 137 to 128; native token
 imports are now IDs 96 (textures) and 128 (shared events). The Wine IDs remain
 frozen. Follow-up cleanup also removes unused bootstrap reconstruction helpers.
 The proxy CI checkout is pinned to Monado
-`6171ca5b46cbb9d154731586ab797880f969e9fc`.
+`0f919ce71f7b71c997d7ef22abffbbaadb9cce5f`, with upstream native PID layouts.
 
 The six bridge regression tests include an assertion that rejects missing,
 blitting or mixed Monado sharing paths. Set

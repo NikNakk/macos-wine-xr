@@ -87,3 +87,33 @@ For generic-host runs select the native runtime with `XR_RUNTIME_JSON` and set
 and native Khronos loader for GPU image verification.
 
 PS VR2 visual output, pacing and controller hardware regression remain pending.
+
+## PID ABI follow-up
+
+Proxy commit `a9abcf2` adds frozen Wine client-description/app-state aggregates
+with `int64_t` PIDs, and converts `instance_describe_client` requests and
+`system_get_client_info` replies field by field. Unrepresentable native PIDs are
+rejected locally. Static layout assertions preserve the Wine offsets. Neither
+aggregate is in shared memory, and no image path changes are involved.
+
+Native Monado `0f919ce71f7b71c997d7ef22abffbbaadb9cce5f` restores upstream
+`pid_t`, its client assignment and PID logging format, removes the redundant
+macOS `unistd.h` include and restores the upstream author address. The per-session
+minimum-frame-period flag remains for the transitional proxy; the contribution
+note explicitly excludes its enum/field, pacing vtable entry, compositor hook
+and OpenVR initializer from the upstream series.
+
+All 35 native tests, contribution style and REUSE pass. All six proxy tests pass
+against both the preceding native layout and the restored `pid_t` layout,
+including description conversion, app-state flags, failed replies and oversized
+PID rejection. The wire compatibility checker passes. End-to-end synthetic
+Monado: proxy hello_xr exits 0; both 2D/array swapchains pass with three images;
+generic native host exits 0 after 564 shared-metal-zero-copy frames. All eight GPU
+pattern image checks (four images for each array size) report zero mismatches.
+
+The temporary launchd job initially stalled before main while dyld resolved
+libraries (captured startup sample), causing socket-startup timeouts. A diagnostic
+rerun started successfully and passed without source changes. The original
+LaunchAgent registration was restored. Follow-up raw logs are retained as
+`pid-validation-summary.log`, `pid-native-ctest.log`, `pid-style.log` and
+`pid-reuse.log` in the same local evidence directory.
