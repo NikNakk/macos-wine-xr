@@ -1,0 +1,4 @@
+display=1 size=1710x1107 mode_hz=60.000
+display=3 size=4000x2040 mode_hz=120.000
+nominal=16666666/1000000000 flags=0 hz=60.000
+callbacks=71 measured_hz=59.982 actual_period_s=0.000000000
