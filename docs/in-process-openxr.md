@@ -428,3 +428,43 @@ and source-level notices remain preserved under LICENSES/ and in legacy files;
 third-party source retains its own notices. See LICENSES/README.md for pinned
 Proton provenance. The earlier BSL-only assessment above describes the baseline
 before this decision. Commercial intent does not determine compatibility.
+
+
+## Direct-object DXMT prerequisite
+
+The companion DXMT branch codex/in-process-metal-import adds the new
+IDXMTNativeDevice2 IID (5a6d2e1b-b10a-4ab7-8ade-d9a64c417283). The original
+IDXMTNativeDevice ABI and broker imports are unchanged. The new methods return
+DXMT's borrowed Metal device and import a raw texture/event with a retained
+reference. Native validation checks texture device identity, descriptor, usage
+and framebufferOnly. MTLSharedEvent.device==nil is accepted. The raw-import
+route retains exactly the input object and records its GPU resource ID; no
+sharing handle, replacement texture or blit is involved.
+
+The independent probe tests three 2D objects and three two-slice arrays,
+D3D11 render-target clears into every slice, a fence signal followed by Flush,
+and native getBytes from each original shared-storage texture. All nine slice
+checks passed with Metal API validation enabled on 2026-10-02. Six unsignaled
+fence waits timed out as expected, six descriptor mismatches were rejected,
+and passing a texture as an event was rejected. This is a DXMT prerequisite
+probe, **not yet the Monado runtime-owned swapchain pattern probe**. Native
+getBytes is test-only readback; no production render copy is implemented.
+
+Build DXMT with the same existing scripts/toolchain configuration, supplying
+this companion checkout and an isolated build/install directory. Then:
+
+```sh
+export DXMT_SOURCE_DIR=/path/to/dxmt-direct-object-checkout
+export DXMT_BUILD_DIR=/path/to/dxmt-direct-object-build
+scripts/install-direct-metal-dxmt.zsh
+scripts/build-direct-metal-probe.zsh
+scripts/run-direct-metal-probe.zsh
+```
+
+The helper uses a test-only PE/unixlib DLL, so it creates Metal objects on the
+actual DXMT device in the Wine process. The new runtime is copied to
+build-in-process/wine-direct; the probe prefix is build-in-process/prefix-metal.
+Do not use WINEDLLPATH alone to replace an existing engine DLL: Wine searches
+its installed builtin directory first. The dedicated runtime avoids changing
+either fallback engine. The recorded first successful run used prefix-core
+with only test files replaced; the dedicated runner now keeps the probes apart.
