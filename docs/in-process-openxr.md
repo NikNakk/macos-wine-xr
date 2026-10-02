@@ -706,9 +706,10 @@ flag itself was not measured, so no cause is asserted here.
 
 The hosted client's CVDisplayLink initialization and subsequent callbacks
 explicitly reported 60 Hz despite the 120 Hz headset mode. Its stable 60 Hz
-result **does not validate 120 Hz**. The origin of this discrepancy requires
-investigation; no Monado timing fix or new hint was applied. These results do
-not yet justify removing the minimum-period hint for other paths/workloads.
+result **does not validate 120 Hz**. A standalone architecture comparison below
+isolates this discrepancy to the translated x64 CoreVideo path on this machine.
+No Monado timing fix or new hint was applied. These results do not yet justify
+removing the minimum-period hint for other paths/workloads.
 
 The existing 200-empty-frame latency probe also passed on PS VR2 in both
 compositor modes. With the first ten frames excluded, median/p95 microseconds:
@@ -731,6 +732,46 @@ For this installed service, correct the manifest in the hardware commands above:
 
 ```zsh
 export MWXR_NATIVE_RUNTIME_JSON=/Users/nickkennedy/Code/monado-2/.build/in-process-native-hardware/monado-x64/openxr_monado-dev.json
+```
+
+### Why the hosted x64 compositor paced at 60 Hz
+
+A standalone CoreGraphics/CoreVideo probe, with no Wine, DXMT or Monado loaded,
+was compiled from the same C source for ARM64 and x86_64 and run against the
+connected PS VR2 on 2026-10-02. Both selected display ID 3, 4000x2040, and read
+120.000 Hz from CGDisplayModeGetRefreshRate. Results over 1.2 seconds:
+
+| API/observation | ARM64 native | x64 under Rosetta |
+| --- | ---: | ---: |
+| CVDisplayLink nominal period | 200201 / 24000000 s | 16666666 / 1000000000 s |
+| Nominal frequency | 119.880 Hz | 60.000 Hz |
+| Observed callback frequency | 119.789 Hz | 59.982 Hz |
+
+Thus Wine is not required to reproduce the 60 Hz display link. This is an
+observed behavior of the translated x64 CoreVideo path on this Mac; it does not
+establish a universal Rosetta limitation across macOS versions or displays.
+Both nominal timing and actual callback cadence disagree with the real display
+mode in x64, so this is more than an inaccurate FPS label or renderer overload.
+
+Monado's macos_display_link_create takes the nominal CVDisplayLink period,
+comp_window_macos_init assigns it to the compositor frame_interval_ns, and the
+app pacer then predicts 16.667 ms periods. The realtime priority 97 compositor
+therefore deliberately runs around 60 Hz. The callback source also ticks at
+60 Hz, so changing a frame-period hint alone is not an established solution.
+An alternative timing source needs validation before changing Monado.
+
+Diagnostic source: tests/in_process/display_refresh_native.c. Evidence:
+[ARM64 output](results/psvr2-in-process-2026-10-02/display-refresh-arm64.txt) and
+[x64 output](results/psvr2-in-process-2026-10-02/display-refresh-x64.txt).
+Reproduce without starting the hardware service or rendering:
+
+```zsh
+clang -arch arm64 tests/in_process/display_refresh_native.c \
+  -framework CoreGraphics -framework CoreVideo -o build-in-process/display-refresh-arm64
+clang -arch x86_64 tests/in_process/display_refresh_native.c \
+  -framework CoreGraphics -framework CoreVideo -o build-in-process/display-refresh-x64
+build-in-process/display-refresh-arm64
+build-in-process/display-refresh-x64
 ```
 
 ### Next blocking acceptance requirement
