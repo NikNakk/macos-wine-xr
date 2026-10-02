@@ -41,7 +41,10 @@ def load_calls(monado: Path):
 
 
 def field(arg):
-    return f"\t{arg['type']} {arg['name']};"
+    wire_type = arg['type']
+    if wire_type in ('struct ipc_client_description', 'struct ipc_app_state'):
+        wire_type = wire_type.replace('struct ipc_', 'struct mwxr_ipc_')
+    return f"\t{wire_type} {arg['name']};"
 
 
 def main():
