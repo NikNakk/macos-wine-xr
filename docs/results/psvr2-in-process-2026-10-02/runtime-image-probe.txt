@@ -1,0 +1,21 @@
+wineopenxr: zero-copy image=0 Metal=00007fa164f0d8b0 D3D11=0000000000c0a780 array=1
+wineopenxr: zero-copy image=1 Metal=00007fa195aae110 D3D11=0000000000c0abd0 array=1
+wineopenxr: zero-copy image=2 Metal=00007fa194f22420 D3D11=0000000000c0b020 array=1
+wineopenxr: zero-copy image=3 Metal=00007fa194f229d0 D3D11=0000000000c0b470 array=1
+PASS runtime-image=0/4 arrays=1 slice=0 Metal=7fa164f0d8b0 pixel=ff0000ff
+PASS runtime-image=1/4 arrays=1 slice=0 Metal=7fa195aae110 pixel=ffff00ff
+PASS runtime-image=2/4 arrays=1 slice=0 Metal=7fa194f22420 pixel=ff0000ff
+PASS runtime-image=3/4 arrays=1 slice=0 Metal=7fa194f229d0 pixel=ffff00ff
+wineopenxr: zero-copy image=0 Metal=00007fa164f10af0 D3D11=0000000000c0d6f0 array=2
+wineopenxr: zero-copy image=1 Metal=00007fa164f0ffc0 D3D11=0000000000c0df90 array=2
+wineopenxr: zero-copy image=2 Metal=00007fa164f11240 D3D11=0000000000c0e830 array=2
+wineopenxr: zero-copy image=3 Metal=00007fa164f12500 D3D11=0000000000c0f0d0 array=2
+PASS runtime-image=0/4 arrays=2 slice=0 Metal=7fa164f10af0 pixel=ff0000ff
+PASS runtime-image=0/4 arrays=2 slice=1 Metal=7fa164f10af0 pixel=ff00ff00
+PASS runtime-image=1/4 arrays=2 slice=0 Metal=7fa164f0ffc0 pixel=ffff00ff
+PASS runtime-image=1/4 arrays=2 slice=1 Metal=7fa164f0ffc0 pixel=ffffff00
+PASS runtime-image=2/4 arrays=2 slice=0 Metal=7fa164f11240 pixel=ff0000ff
+PASS runtime-image=2/4 arrays=2 slice=1 Metal=7fa164f11240 pixel=ff00ff00
+PASS runtime-image=3/4 arrays=2 slice=0 Metal=7fa164f12500 pixel=ffff00ff
+PASS runtime-image=3/4 arrays=2 slice=1 Metal=7fa164f12500 pixel=ffffff00
+PASS all runtime-owned 2D and array images/slices

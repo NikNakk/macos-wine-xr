@@ -1,0 +1,76 @@
+{
+  "service": {
+    "xrWaitFrame": {
+      "samples": 190,
+      "median_us": 7515.8,
+      "p95_us": 8785.5
+    },
+    "xrLocateSpace": {
+      "samples": 3800,
+      "median_us": 23.4,
+      "p95_us": 56.1
+    },
+    "xrGetActionStateBoolean": {
+      "samples": 3800,
+      "median_us": 1.7,
+      "p95_us": 4.2
+    },
+    "xrGetActionStateFloat": {
+      "samples": 3800,
+      "median_us": 1.4,
+      "p95_us": 2.6
+    },
+    "xrGetActionStateVector2f": {
+      "samples": 3800,
+      "median_us": 1.4,
+      "p95_us": 2.7
+    },
+    "xrGetActionStatePose": {
+      "samples": 3800,
+      "median_us": 1.4,
+      "p95_us": 2.6
+    },
+    "xrEndFrame": {
+      "samples": 190,
+      "median_us": 24.5,
+      "p95_us": 43.5
+    }
+  },
+  "client": {
+    "xrWaitFrame": {
+      "samples": 190,
+      "median_us": 15314.8,
+      "p95_us": 17462.0
+    },
+    "xrLocateSpace": {
+      "samples": 3800,
+      "median_us": 59.0,
+      "p95_us": 87.7
+    },
+    "xrGetActionStateBoolean": {
+      "samples": 3800,
+      "median_us": 4.8,
+      "p95_us": 6.3
+    },
+    "xrGetActionStateFloat": {
+      "samples": 3800,
+      "median_us": 4.1,
+      "p95_us": 4.7
+    },
+    "xrGetActionStateVector2f": {
+      "samples": 3800,
+      "median_us": 4.0,
+      "p95_us": 4.8
+    },
+    "xrGetActionStatePose": {
+      "samples": 3800,
+      "median_us": 4.0,
+      "p95_us": 4.7
+    },
+    "xrEndFrame": {
+      "samples": 190,
+      "median_us": 23.2,
+      "p95_us": 58.4
+    }
+  }
+}

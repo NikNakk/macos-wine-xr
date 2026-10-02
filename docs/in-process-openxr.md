@@ -608,13 +608,13 @@ image probes with scripts/build-direct-metal-probe.zsh.
 
 ### PS VR2 commands for the user
 
-The installed hardware service must be rebuilt from a matching Monado revision
-and the headset available. Do not use the simulated-service runner for hardware.
+The native client and installed hardware service must use matching Monado
+revisions, and the headset must be available. Do not use the simulated-service runner for hardware.
 The hardware LaunchAgent configuration remains user-owned; the client-side
 unset below does not change the service's pacing flags.
 
 ```zsh
-export MWXR_NATIVE_RUNTIME_JSON=/Users/nickkennedy/Code/monado-2/.build/in-process-monado-x64/openxr_monado-dev.json
+export MWXR_NATIVE_RUNTIME_JSON=/Users/nickkennedy/Code/monado-2/.build/in-process-native-hardware/monado-x64/openxr_monado-dev.json
 export MWXR_IN_PROCESS_PREFIX="$PWD/build-in-process/prefix-core"
 unset XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR U_PACING_APP_USE_MIN_FRAME_PERIOD
 export MTL_DEBUG_LAYER=1
@@ -637,6 +637,102 @@ CSVs. Compare all three paths with the same application, duration, compositor
 mode, validation setting and service flags. Simulated metrics above cannot
 replace this hardware comparison.
 
+### PS VR2 hardware run, 2026-10-02
+
+The user connected PS VR2 and explicitly authorized agent-run hardware tests.
+macOS reported 4000x2040 at 120 Hz. Bridge tree: `4b86477`, DXMT: `f8e535b`;
+installed ARM64 Monado service and the matching native x86_64 client:
+`7fd7f2835693d447d46da933e9a54c9f71ddfae9` / v25.1.0-2051-g7fd7f2835.
+The installed service, LaunchAgent configuration, fallback paths and Monado
+sources were unchanged. The current ffec3b71a client was correctly rejected by
+the older service; **IPC_IGNORE_VERSION was never enabled**.
+
+The matching client source is the detached worktree
+`.build/in-process-monado-hardware-source` in the supplied Monado workspace;
+its build is `.build/in-process-native-hardware/monado-x64`. Monado's revision
+helper produced -128-NOTFOUND for this worktree, so its existing `GIT_DESC`
+CMake input was set to the independently verified git describe string of that
+exact clean source revision. This corrects build metadata, not compatibility.
+Use its `openxr_monado-dev.json` in MWXR_NATIVE_RUNTIME_JSON when testing the
+currently installed service. The newer simulated-client manifest remains
+appropriate only for its matching service.
+
+Initial hardware startup failed setting the USB status interface to alt 1, then
+claiming that interface. The user power-cycled/reconnected the headset/adapter;
+the next startup selected PS VR2 and succeeded. No driver patch was needed.
+
+**GPU result:** all four runtime-owned 2D images and both slices of all four
+array images passed exact D3D11-written pixel checks, producer shared-event
+synchronization and native release. The
+[runtime image evidence](results/psvr2-in-process-2026-10-02/runtime-image-probe.txt)
+contains all 12 checks. The diagnostic readback blit is test-only.
+
+**Rendering/API result:** Opaque hello_xr ran for 45 seconds through the service
+compositor and exited 0. It reached FOCUSED, selected Monado: PS VR2 HMD, reported
+position/orientation tracking, and imported four 2800x2856 images per eye.
+A second 30-second run with XRT_MACOS_CLIENT_COMPOSITOR=1 also exited 0, created a
+CAContext, and logged a visible hosted front-end on PS VR2. This validates
+in-process compositor initialization/presentation plumbing inside Wine.
+Client Metal validation was enabled in both runs; no Metal validation assertion
+was observed. MoltenVK's rejected high-priority queue request in the client
+compositor fell back successfully. Service Metal validation was not enabled by
+changing the registered job. Visual stereo/head-motion confirmation was requested
+from the user and remains pending; successful submission is not proof of the
+picture's quality. OpenComposite was not rerun in this hardware step.
+
+**Pacing result:** U_PACING_APP_USE_MIN_FRAME_PERIOD was unset in clients and
+absent from the registered service's explicit/inherited environment. Existing
+service presentation/camera settings were preserved. These are sequential
+service-vs-client compositor runs of the in-process bridge, not the requested
+proxy-vs-native-host-vs-in-process comparison.
+
+| Measurement | Service compositor | Client compositor inside Wine |
+| --- | ---: | ---: |
+| hello_xr delivered frames | 3213 | 1416 |
+| Pacer predicted period | 8.342 ms | 16.667 ms |
+| Submission interval median / p95 | 8.635 / 31.088 ms | 16.596 / 19.755 ms |
+| Physical presented interval median / p95 | 91.757 / 108.441 ms | 16.683 / 16.684 ms |
+| Physical intervals >1.5 predicted periods | 454 / 535 | 39 / 1385 |
+| GPU-done after predicted display | 2729 / 3183 | 0 / 1386 |
+| Compositor thread priority | 4 throughout | 97 throughout |
+
+Thirty startup samples are excluded. For the service path, physical samples are
+restricted to frame IDs with a nonempty submitted layer; for the client path,
+they are restricted to the delivered-frame time range. Intervals use the
+presented_monotonic_ns callbacks, not requested present timestamps. Callback
+cadence does not establish motion-to-photon latency. The service trace shows a
+priority clamp consistent with the known throttling problem, but the Game Mode
+flag itself was not measured, so no cause is asserted here.
+
+The hosted client's CVDisplayLink initialization and subsequent callbacks
+explicitly reported 60 Hz despite the 120 Hz headset mode. Its stable 60 Hz
+result **does not validate 120 Hz**. The origin of this discrepancy requires
+investigation; no Monado timing fix or new hint was applied. These results do
+not yet justify removing the minimum-period hint for other paths/workloads.
+
+The existing 200-empty-frame latency probe also passed on PS VR2 in both
+compositor modes. With the first ten frames excluded, median/p95 microseconds:
+
+| Call | Service compositor | Client compositor |
+| --- | ---: | ---: |
+| xrLocateSpace | 23.4 / 56.1 | 59.0 / 87.7 |
+| xrGetActionStateBoolean | 1.7 / 4.2 | 4.8 / 6.3 |
+| xrGetActionStateFloat | 1.4 / 2.6 | 4.1 / 4.7 |
+| xrGetActionStateVector2f | 1.4 / 2.7 | 4.0 / 4.8 |
+| xrGetActionStatePose | 1.4 / 2.6 | 4.0 / 4.7 |
+| xrWaitFrame | 7515.8 / 8785.5 | 15314.8 / 17462.0 |
+
+Actions were inactive/unbound; WaitFrame includes the pacing wait. This control
+probe does not reproduce the rendered hello_xr workload. Measurements, run
+receipts and compressed raw pacing/presentation traces are in
+[the hardware result directory](results/psvr2-in-process-2026-10-02).
+
+For this installed service, correct the manifest in the hardware commands above:
+
+```zsh
+export MWXR_NATIVE_RUNTIME_JSON=/Users/nickkennedy/Code/monado-2/.build/in-process-native-hardware/monado-x64/openxr_monado-dev.json
+```
+
 ### Next blocking acceptance requirement
 
 AlphaBlend against the simulated HMD needs a small, opt-in simulated-driver
@@ -646,7 +742,7 @@ SIMULATED_ALPHA_BLEND=1 appends AlphaBlend to the simulated HMD's existing Opaqu
 mode list; unset keeps current behavior. It changes no hardware driver or
 compositor. Under the user's Monado-change constraint, stop for review before
 applying this separate change. Alpha blending, array projection, rendered
-OpenComposite frames, matched three-path latency/pacing comparison and hardware
+OpenComposite frames, matched three-path latency/pacing comparison and full-rate/visual hardware
 validation remain pending.
 
 ### Local commits and provenance

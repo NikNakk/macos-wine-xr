@@ -1,0 +1,44 @@
+{
+  "native_pid": 3149,
+  "delivered_frames": 1416,
+  "predicted_periods_ns": [
+    16666666
+  ],
+  "app_submission_interval_ms": {
+    "n": 1385,
+    "median": 16.596,
+    "p95": 19.755
+  },
+  "physical_present_interval_ms": {
+    "n": 1385,
+    "median": 16.683209,
+    "p95": 16.68425
+  },
+  "physical_intervals_above_1_5_period": 39,
+  "physical_intervals_above_12ms": 1343,
+  "gpu_done_after_predicted_display": 0,
+  "gpu_done_samples": 1386,
+  "compositor_display_periods_ns": [
+    "16666666"
+  ],
+  "compositor_priorities": [
+    "97"
+  ],
+  "actual_times_ms": {
+    "cpu_actual_ns": {
+      "n": 1386,
+      "median": 0.01,
+      "p95": 0.015
+    },
+    "draw_actual_ns": {
+      "n": 1386,
+      "median": 0.4975,
+      "p95": 1.019
+    },
+    "gpu_actual_ns": {
+      "n": 1386,
+      "median": 2.356,
+      "p95": 3.066
+    }
+  }
+}
