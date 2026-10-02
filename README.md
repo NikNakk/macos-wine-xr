@@ -102,9 +102,15 @@ native runtime used by the new path.
 On an Apple Silicon Mac with Homebrew CMake, Ninja, Meson and MinGW installed:
 
 ```zsh
-./scripts/build-current-dxmt.zsh
+MACOS_WINE_XR_WINE11_SOURCE="/Applications/Wine Devel.app/Contents/Resources/wine" \
+  ./scripts/build-current-dxmt.zsh
 ./scripts/run-current-dxmt-sharing-probe.zsh
 ```
+
+Applications use a private Wine 11.10 copy; Wine 8.16 is only the DXMT build SDK.
+Source the generated `build-current-dxmt/env.zsh` to select it for the generic
+OpenXR launcher. See [Wine 11.10 and Underture](docs/native-openxr-backend.md#wine-1110-and-underture-2026-10-02)
+for game validation and OpenComposite configuration.
 
 The probe creates a shared D3D11 `Texture2DArray` and fence under current
 DXMT, reads the generic DXMT metadata, and reopens the same objects as native

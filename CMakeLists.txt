@@ -60,6 +60,12 @@ add_library(macos_wine_xr_dxmt STATIC
 
 	target_link_libraries(macos_wine_xr_dxmt PRIVATE d3d11 dxguid)
 
+	add_executable(dxmt_window_probe tests/windows/dxmt_window_probe.cpp)
+	target_link_libraries(dxmt_window_probe PRIVATE d3d11 dxgi dxguid)
+	if(MINGW)
+		target_link_options(dxmt_window_probe PRIVATE -static -static-libgcc -static-libstdc++)
+	endif()
+
 	add_executable(dxmt_native_sharing_probe
 		tests/windows/dxmt_native_sharing_probe.cpp
 	)

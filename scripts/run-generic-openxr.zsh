@@ -7,13 +7,21 @@ set -euo pipefail
 repo=${0:A:h:h}
 : ${XR_RUNTIME_JSON:?Set XR_RUNTIME_JSON to the native macOS runtime manifest}
 : ${MWXR_OPENXR_LOADER:?Set MWXR_OPENXR_LOADER to the native Khronos loader dylib}
-: ${MWXR_WINE:?Set MWXR_WINE to Wine with the matching current DXMT installed}
-: ${MWXR_PRIVATE_WINEPREFIX:?Set MWXR_PRIVATE_WINEPREFIX to a dedicated test prefix}
+stack=${MACOS_WINE_XR_CURRENT_DXMT_ROOT:-${repo}/build-current-dxmt}
+: ${MWXR_WINE:=${stack}/bin/wine-current-dxmt}
+: ${MWXR_PRIVATE_WINEPREFIX:=${stack}/prefix}
+[[ -x ${MWXR_WINE} ]] || { print -u2 'Build the Wine 11.10 stack with build-current-dxmt.zsh first'; exit 1; }
 if (( $# == 0 )); then
  print -u2 'usage: run-generic-openxr.zsh application.exe [arguments]'; exit 2
 fi
 native_build=${MWXR_NATIVE_BUILD:-${repo}/build-native-openxr}
 win_build=${MWXR_WIN_BUILD:-${repo}/build-win-openxr}
+if [[ -z ${MWXR_NATIVE_BUILD:-} && ! -x ${native_build}/macos_wine_xr_host && -x ${repo}/build/macos_wine_xr_host ]]; then
+ native_build=${repo}/build
+fi
+if [[ -z ${MWXR_WIN_BUILD:-} && ! -f ${win_build}/macos_wine_xr_openxr.json && -f ${repo}/build-win/macos_wine_xr_openxr.json ]]; then
+ win_build=${repo}/build-win
+fi
 export MWXR_RPC_PORT=${MWXR_RPC_PORT:-4243}
 export MWXR_RPC_TOKEN=${MWXR_RPC_TOKEN:-$(python3 -c 'import secrets; print(secrets.token_hex(32))')}
 export WINEPREFIX=${MWXR_PRIVATE_WINEPREFIX}
@@ -36,4 +44,8 @@ windows_manifest="Z:${manifest//\//\\}"
  /v ActiveRuntime /t REG_SZ /d "${windows_manifest}" /f
 # Only the native host loads the native manifest. The Windows process gets the
 # thin runtime manifest. Switching native runtimes does not rebuild the DLL.
-XR_RUNTIME_JSON="${windows_manifest}" "${MWXR_WINE}" "$@"
+# Unity/game plugins may resolve resources relative to the executable directory.
+application=${1:A}
+shift
+cd "${application:h}"
+XR_RUNTIME_JSON="${windows_manifest}" "${MWXR_WINE}" "${application}" "$@"

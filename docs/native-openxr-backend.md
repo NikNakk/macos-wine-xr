@@ -214,6 +214,67 @@ IOSurface texture descriptor. The next runtime-side step is to inspect/report
 that native reproduction to Meta; no bridge workaround is justified by these
 results.
 
+
+### Wine 11.10 and Underture, 2026-10-02
+
+The current-DXMT builder now runs applications with **Wine 11.10**. The existing
+Wine 8.16 SDK is retained only for linking DXMT. Set
+`MACOS_WINE_XR_WINE11_SOURCE` to an installed Wine 11.10 tree containing
+`bin/wine`; the builder clones it privately and installs current DXMT there.
+Source the generated `env.zsh` before using `run-generic-openxr.zsh`. The
+launcher respects that private prefix and changes to the executable's directory.
+
+The tested local stack is `.build/wine11-current-dxmt` in the Monado workspace.
+Its prefix is an APFS copy of the previously working `build-wine-dxmt/prefix`;
+its engine is copied from the older Wine 11.10 installation. Original engines,
+prefixes and game files were preserved. A fresh minimal prefix is not covered
+by this game validation.
+
+Current DXMT also needed desktop presentation support for stock Wine 11.10,
+which hides the macdrv Metal-view exports. The companion DXMT fork now matches
+the requested HWND to Wine's `WineWindow` on the AppKit thread and attaches a
+Metal view to that exact window. It retains the existing exported-hook path.
+The two-window desktop probe passed create, present, resize and destruction
+with the foreground window deliberately different from the first swapchain.
+This proves more than the earlier XR-only test, which did not create a desktop
+DXGI swapchain.
+
+Underture uses Unity 2018.3.1f1, bundled Mono and OpenComposite
+`a27e7e6a64bdcd1eff6b7fba1ea2ea34bcf1273d` (1.0.1539). Wine 8.16 repeatedly
+faulted during MonoManager reload, including with OpenVR disabled. Wine 11.10
+completes reload and initializes the game's OpenVR rendering. Meta then
+rejected its legacy inverted texture bounds: the submitted OpenXR rectangle
+was `0,1760 1680x-1760`, yielding `XR_ERROR_LAYER_INVALID`. This is separate
+from Meta's native alpha-blend Metal-validation assertion.
+
+The private copy at `.build/wine11-current-dxmt/games/Underture` has:
+
+```ini
+initUsingVulkan=false
+invertUsingShaders=true
+```
+
+OpenComposite's shader inversion preserves the flip while submitting positive
+OpenXR rectangle extents. This copy submitted **562 frames** to Meta without
+`xrEndFrame` rejection during a bounded run. The bridge still uses its single
+Metal blit for Meta; the shader inversion is an additional OpenComposite GPU
+pass. No CPU pixel transfer was introduced. Native host error logging records
+the first two rejected frames' rectangles, pose, FOV and blend mode per client.
+
+With the same Wine 11.10/current-DXMT stack, opaque `hello_xr` passed with Metal
+validation enabled: **328 frames** against simulated Monado using shared Metal
+images, and **520 frames** against Meta using the Metal blit path. The public
+launcher was checked separately. The source build/provision script completed.
+
+Evidence is local in `.build/reverse-sharing/`: `wine11-window-probe.log`,
+`wine11-{monado,meta}-hello-{run,host,wine}.log`, and
+`underture-wine11-shader-flip-{run,host,wine,player}.log`. Game runs were bounded
+and terminated by the harness. Accepted frame submission does not establish
+physical headset output, controller/gameplay compatibility or pacing. PS VR2
+audio routing from the older launcher has not been ported or validated; Unity
+still logs audio/codec warnings. The user should check visible rendering and
+audio with the new private game copy.
+
 Native capability/auth/serialization/framing tests pass. Native and MinGW
 builds pass, including the legacy metadata probe and transitional proxy.
 Clean Monado service plus shared-memory/socket-security/thread-shutdown tests

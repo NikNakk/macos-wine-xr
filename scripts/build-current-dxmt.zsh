@@ -22,11 +22,14 @@ readonly llvm_version=llvmorg-15.0.7
 sources=${root}/sources
 toolchains=${root}/toolchains
 wine_root=${toolchains}/wine
+# Wine 8.16 supplies the existing DXMT link-time SDK only. Applications run 11.10.
+runtime_root=${root}/wine-11.10
+runtime_source=${MACOS_WINE_XR_WINE11_SOURCE:-/Applications/Wine Devel.app/Contents/Resources/wine}
 dxmt_source=${DXMT_SOURCE_DIR:-${sources}/dxmt}
 llvm_root=${DXMT_LLVM_PATH:-${toolchains}/llvm-darwin}
 llvm_source=${toolchains}/llvm-project
 llvm_build=${toolchains}/llvm-darwin-build
-dxmt_build=${root}/dxmt-build
+dxmt_build=${DXMT_BUILD_DIR:-${root}/dxmt-build}
 dxmt_install=${root}/dxmt-install
 prefix=${MACOS_WINE_XR_WINEPREFIX:-${root}/prefix}
 bin_dir=${root}/bin
@@ -47,6 +50,20 @@ done
 if [[ $(uname -m) == arm64 ]] && ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
 	print -u2 "Rosetta 2 is required for the x86_64 Wine/DXMT test stack."
 	exit 1
+fi
+
+# Validate the runtime before starting an expensive build. Never overlay the
+# supplied engine: current DXMT is installed into a private copy below.
+if [[ ! -x ${runtime_root}/bin/wine ]]; then
+	if [[ ! -x ${runtime_source}/bin/wine ]]; then
+		print -u2 "Set MACOS_WINE_XR_WINE11_SOURCE to a Wine 11.10 install tree (containing bin/wine)."
+		exit 1
+	fi
+	actual_version=$("${runtime_source}/bin/wine" --version)
+	if [[ ${actual_version} != wine-11.10 && ${actual_version} != wine-11.10\ * ]]; then
+		print -u2 "Expected Wine 11.10, got ${actual_version}"
+		exit 1
+	fi
 fi
 
 mkdir -p "${sources}" "${toolchains}" "${bin_dir}"
@@ -121,8 +138,11 @@ if [[ ! -f ${llvm_root}/lib/libLLVMCore.a && ! -f ${llvm_root}/lib/libLLVMCore.d
 	cmake --install "${llvm_build}"
 fi
 
-rm -rf "${dxmt_build}" "${dxmt_install}"
-meson setup \
+setup_options=()
+if [[ -f ${dxmt_build}/build.ninja ]]; then
+	setup_options+=(--reconfigure)
+fi
+meson setup "${setup_options[@]}" \
 	--cross-file "${dxmt_source}/build-win64.txt" \
 	-Dnative_llvm_path="${llvm_root}" \
 	-Dwine_install_path="${wine_root}" \
@@ -147,46 +167,71 @@ if [[ ! -s ${unix_dxmt}/winemetal.so ]]; then
 	exit 1
 fi
 
+# Clone the selected runtime once; leave the source engine untouched.
+if [[ ! -x ${runtime_root}/bin/wine ]]; then
+	cp -R "${runtime_source}" "${runtime_root}"
+fi
+actual_version=$("${runtime_root}/bin/wine" --version)
+[[ ${actual_version} == wine-11.10 || ${actual_version} == wine-11.10\ * ]] || {
+	print -u2 "Private runtime must be Wine 11.10, got ${actual_version}"; exit 1
+}
+
 # Builtin-DLL install layout recommended by DXMT itself.
-mkdir -p "${wine_root}/lib/wine/x86_64-windows" "${wine_root}/lib/wine/x86_64-unix"
-cp -f "${windows_dxmt}/d3d10core.dll" "${wine_root}/lib/wine/x86_64-windows/"
-cp -f "${windows_dxmt}/d3d11.dll" "${wine_root}/lib/wine/x86_64-windows/"
-cp -f "${windows_dxmt}/dxgi.dll" "${wine_root}/lib/wine/x86_64-windows/"
-cp -f "${windows_dxmt}/winemetal.dll" "${wine_root}/lib/wine/x86_64-windows/"
-cp -f "${unix_dxmt}/winemetal.so" "${wine_root}/lib/wine/x86_64-unix/"
+mkdir -p "${runtime_root}/lib/wine/x86_64-windows" "${runtime_root}/lib/wine/x86_64-unix"
+cp -f "${windows_dxmt}/d3d10core.dll" "${runtime_root}/lib/wine/x86_64-windows/"
+cp -f "${windows_dxmt}/d3d11.dll" "${runtime_root}/lib/wine/x86_64-windows/"
+cp -f "${windows_dxmt}/dxgi.dll" "${runtime_root}/lib/wine/x86_64-windows/"
+cp -f "${windows_dxmt}/winemetal.dll" "${runtime_root}/lib/wine/x86_64-windows/"
+cp -f "${unix_dxmt}/winemetal.so" "${runtime_root}/lib/wine/x86_64-unix/"
 
 mkdir -p "${prefix}"
-WINEPREFIX="${prefix}" WINEARCH=win64 WINEDEBUG=-all WINEDLLOVERRIDES= \
-	"${wine_root}/bin/wineboot" -u
+WINEPREFIX="${prefix}" WINEARCH=win64 WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=" \
+	"${runtime_root}/bin/wineboot" -u
 
 system32=${prefix}/drive_c/windows/system32
 mkdir -p "${system32}"
-cp -f "${windows_dxmt}/winemetal.dll" "${system32}/winemetal.dll"
+for artifact in d3d10core.dll d3d11.dll dxgi.dll winemetal.dll; do
+	cp -f "${windows_dxmt}/${artifact}" "${system32}/${artifact}"
+done
 
 wrapper=${bin_dir}/wine-current-dxmt
 cat > "${wrapper}" <<'WRAPPER'
 #!/bin/zsh
 set -euo pipefail
 root=${0:A:h:h}
-export WINEPREFIX=${MACOS_WINE_XR_WINEPREFIX:-${root}/prefix}
+export WINEPREFIX=${MACOS_WINE_XR_WINEPREFIX:-${WINEPREFIX:-${root}/prefix}}
 export WINEARCH=win64
 export WINEDEBUG=${WINEDEBUG:--all}
 # Current DXMT is built as Wine builtin DLLs. Explicit native,builtin overrides
 # for dxgi/d3d11/d3d10core are wrong for this configuration.
 unset WINEDLLOVERRIDES
-exec "${root}/toolchains/wine/bin/wine" "$@"
+exec "${root}/wine-11.10/bin/wine" "$@"
 WRAPPER
 chmod +x "${wrapper}"
 
+# Sourcing this file selects the private runtime for the generic OpenXR runner.
+cat > "${root}/env.zsh" <<EOF
+export MACOS_WINE_XR_CURRENT_DXMT_ROOT=${(q)root}
+export MWXR_WINE=${(q)wrapper}
+export MWXR_PRIVATE_WINEPREFIX=${(q)prefix}
+EOF
+
 manifest=${root}/manifest.txt
-wine_sha=$(shasum -a 256 "${root}/wine-${wine_version}.tar.gz" | awk '{print $1}')
+if [[ -f ${root}/wine-${wine_version}.tar.gz ]]; then
+	wine_sha=$(shasum -a 256 "${root}/wine-${wine_version}.tar.gz" | awk '{print $1}')
+else
+	wine_sha="not downloaded in this root; SDK executable $(shasum -a 256 "${wine_root}/bin/wine" | awk '{print $1}')"
+fi
 cat > "${manifest}" <<EOF
 macOS Wine XR current-DXMT toolchain
 DXMT repo: ${dxmt_repo}
 DXMT branch: ${dxmt_branch}
 DXMT commit: $(git -C "${dxmt_source}" rev-parse HEAD)
+DXMT local tracked changes: $(git -C "${dxmt_source}" diff --stat)
 DXMT license: LGPL-2.1-or-later for current branch changes
-Wine: 3Shain ${wine_version}
+Wine runtime: ${actual_version}
+Wine runtime source: ${runtime_source}
+Wine link-time SDK: 3Shain ${wine_version}
 Wine archive SHA-256: ${wine_sha}
 LLVM: ${llvm_version} x86_64-apple-darwin
 Wine prefix: ${prefix}
@@ -197,7 +242,7 @@ print ""
 print "Current DXMT toolchain installed privately."
 print "  root:    ${root}"
 print "  DXMT:    $(git -C "${dxmt_source}" rev-parse --short HEAD)"
-print "  Wine:    ${wine_root}"
+print "  Wine:    ${runtime_root}"
 print "  prefix:  ${prefix}"
 print "  wrapper: ${wrapper}"
 print ""

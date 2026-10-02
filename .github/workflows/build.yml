@@ -57,7 +57,7 @@ jobs:
           -DDXMT_INCLUDE_DIR="$GITHUB_WORKSPACE/dxmt/include"
           -DOPENXR_INCLUDE_DIR="$GITHUB_WORKSPACE/OpenXR-SDK/include"
       - name: Build DXMT metadata and reverse-import probes
-        run: cmake --build build-win --target dxmt_native_sharing_probe dxmt_reverse_import_probe macos_wine_xr_openxr openxr_rpc_smoke rpc_serialization_test --parallel
+        run: cmake --build build-win --target dxmt_window_probe dxmt_native_sharing_probe dxmt_reverse_import_probe macos_wine_xr_openxr openxr_rpc_smoke rpc_serialization_test --parallel
 
   macos-proxy:
     runs-on: macos-14

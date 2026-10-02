@@ -74,3 +74,19 @@ both processes really share a Mach bootstrap namespace. The longer-term bridge
 architecture resolves the DXMT object in that namespace and then hands the
 native Metal object onward, specifically so `monado-service` does not need to
 be launched inside the Wine/DXMT namespace.
+
+## Wine 11.10 desktop presentation
+
+`build-current-dxmt.zsh` requires a Wine 11.10 installation and overlays current
+DXMT into a private copy. Wine 8.16 remains the link-time SDK only. The generic
+launcher uses the generated `env.zsh` to select this runtime and prefix.
+
+Build the Windows `dxmt_window_probe` target and run its executable with the
+generated `bin/wine-current-dxmt` wrapper. It creates two desktop swapchains,
+presents distinct colors, resizes one and releases both; the initial foreground
+window deliberately differs from the first swapchain's HWND. This checks the
+stock-Wine Metal-view fallback, which the XR-only import tests do not exercise.
+
+The two-window probe and runtime-owned texture/event paths passed on Wine
+11.10 on 2026-10-02. These do not validate the older shared-fence metadata
+probe: it exercises a different resource creation/export path.

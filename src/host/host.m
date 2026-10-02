@@ -45,6 +45,7 @@ struct host {
 	id<MTLSharedEvent> event;
 	struct mwxr_native_capability *event_cap;
 	uint64_t frames, last_frame_ns;
+	unsigned end_frame_reports;
 };
 // Handle classes occupy distinct ranges; IDs never contain native handles.
 #define INSTANCE_ID 1
@@ -559,6 +560,23 @@ static XrResult dispatch(struct host *h, uint32_t op, const struct mwxr_wire_req
 				     .layerCount = q->a ? 1 : 0,
 				     .layers = q->a ? layers : NULL};
 		XrResult x = b->EndFrame(b->session, &ci);
+		if (XR_FAILED(x)) {
+			if (h->end_frame_reports++ < 2) {
+				fprintf(stderr, "host: EndFrame failed=%d blend=%u flags=%llu views=%u\n", x, q->b,
+				        (unsigned long long)q->flags, q->a);
+				for (unsigned i = 0; i < q->a; i++) {
+					const XrCompositionLayerProjectionView *v = &views[i];
+					fprintf(stderr,
+					        "host: view=%u rect=%d,%d %dx%d array=%u pose=%g,%g,%g,%g "
+					        "fov=%g,%g,%g,%g\n",
+					        i, v->subImage.imageRect.offset.x, v->subImage.imageRect.offset.y,
+					        v->subImage.imageRect.extent.width, v->subImage.imageRect.extent.height,
+					        v->subImage.imageArrayIndex, v->pose.orientation.x,
+					        v->pose.orientation.y, v->pose.orientation.z, v->pose.orientation.w,
+					        v->fov.angleLeft, v->fov.angleRight, v->fov.angleUp, v->fov.angleDown);
+				}
+			}
+		}
 		if (XR_SUCCEEDED(x)) {
 			uint64_t n = now_ns();
 			h->frames++;
