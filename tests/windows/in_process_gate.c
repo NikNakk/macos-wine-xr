@@ -26,6 +26,9 @@ int main(void)
     strcpy(ci.applicationInfo.applicationName, "Wine in-process architecture gate");
     ci.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
     XrInstance instance = XR_NULL_HANDLE;
+    ci.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 1, 0);
+    if (create(&ci, &instance) != XR_ERROR_API_VERSION_UNSUPPORTED || instance != XR_NULL_HANDLE) return 11;
+    ci.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
     XrResult result = create(&ci, &instance);
     printf("Windows pid=%lu xrCreateInstance=%d\n", GetCurrentProcessId(), result);
     if (XR_FAILED(result)) return 3;

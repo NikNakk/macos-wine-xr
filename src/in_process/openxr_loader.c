@@ -14,7 +14,10 @@ XrResult WINAPI xrCreateInstance(const XrInstanceCreateInfo *info, XrInstance *i
 {
     if (!info || !instance) return XR_ERROR_VALIDATION_FAILURE;
     *instance = XR_NULL_HANDLE;
-    if (info->next) return XR_ERROR_VALIDATION_FAILURE;
+    if (info->type != XR_TYPE_INSTANCE_CREATE_INFO || info->next) return XR_ERROR_VALIDATION_FAILURE;
+    if (XR_VERSION_MAJOR(info->applicationInfo.apiVersion) != 1 ||
+        XR_VERSION_MINOR(info->applicationInfo.apiVersion) != 0)
+        return XR_ERROR_API_VERSION_UNSUPPORTED;
     wine_XrInstance *wrapper = calloc(1, sizeof(*wrapper));
     if (!wrapper) return XR_ERROR_OUT_OF_MEMORY;
     struct xrCreateInstance_params params = {.createInfo = info, .instance = &wrapper->host_instance, .wine_instance = wrapper};
