@@ -83,12 +83,12 @@ def main() -> int:
         print(f"Not a directory: {directory}", file=sys.stderr)
         return 2
 
-    submit_path = newest(directory, "monado_psvr2_*_wine_submit.csv")
+    submit_path = newest(directory, "monado_psvr2_*_ipc_submit.csv")
     if submit_path is None:
-        print("No monado_psvr2_*_wine_submit.csv found.", file=sys.stderr)
+        print("No monado_psvr2_*_ipc_submit.csv found.", file=sys.stderr)
         return 1
 
-    m = re.search(r"monado_psvr2_(\d+)_wine_submit\.csv$", submit_path.name)
+    m = re.search(r"monado_psvr2_(\d+)_ipc_submit\.csv$", submit_path.name)
     if not m:
         print(f"Could not determine native service PID from {submit_path.name}", file=sys.stderr)
         return 1
@@ -104,7 +104,7 @@ def main() -> int:
     presented_path = companion("presented")
     complete_path = companion("present_complete")
     present_worker_path = companion("present_worker")
-    swapchain_path = companion("wine_swapchain")
+    swapchain_path = companion("ipc_swapchain")
     pacing_path = companion("app_pacing")
     wine_path = directory / "wine.csv"
 

@@ -47,6 +47,8 @@ The current path includes:
 - publication into Monado's PID-scoped Metal XPC broker;
 - a standalone authenticated Wine TCP -> native Monado Unix-IPC proxy;
 - proxy-owned minimum-frame-period pacing policy;
+- proxy-owned shared-memory snapshots and layer uploads, translated into native
+  shared-memory slots and `layer_sync` / `layer_sync_with_semaphore`;
 - a bridge-owned D3D11 client compositor and OpenXR D3D requirements helper;
 - current-DXMT provisioning/build scripts;
 - native-sharing probes; and
@@ -151,3 +153,67 @@ of the last integrated Monado branch only for the Windows state-tracker/build
 framework, while its D3D11 bridge sources live here. The native runtime and
 service come exclusively from `macos-upstream-clean`.
 
+
+## Native IPC boundary (bridge-first migration)
+
+On `codex/native-monado-proxy`, the proxy terminates every transitional command:
+`instance_get_shm_chunk`, `compositor_layer_copy_chunk`, both
+`compositor_layer_sync_copy_commit*` commands, all three
+`compositor_layer_sync_single*` commands and both `*_metal_bootstrap` imports.
+None of these commands is sent to native Monado. The proxy receives and maps
+Monado's shared-memory fd once per connection, serves Wine snapshot chunks
+locally, stages only layer metadata and submits through native shared-memory
+slots. It consumes the native reply even for Wine's asynchronous single-layer
+submission, so the next submission uses the returned free slot. The Wine side
+still receives no reply for that command.
+
+Textures and shared events retain the existing bootstrap resolution ->
+`monado_metal_xpc_publish_textures` / `monado_metal_xpc_publish_shared_event` ->
+native token-import path. No image copy or GPU blit is added by this migration.
+Each successful translated texture import logs its image count,
+`path=shared-metal-zero-copy pixel-copies=0 gpu-blits=0`; successful shared-event
+imports log `path=native-token`. These logs describe the proxy's handoff, not
+compositor rendering or a completed hardware validation.
+
+`protocol/monado-wine.json` freezes the Wine/proxy command IDs and layouts.
+`generate_monado_wire.py` independently generates native IDs from the selected
+Monado schemas and checks them against its generated header. It embeds the
+Monado commit and protocol SHA-256 in the proxy's startup log. CMake pins `MONADO_HEADER_REVISION` at configuration; changing the selected
+commit requires reconfiguration (`run-proxy.zsh` does this). Build against the
+same Monado checkout/build used by the service, and rebuild the proxy whenever
+that revision changes. Native IDs may shift without rebuilding the Wine client.
+`check_monado_wire_compat.py` checks the Wine/proxy ABI separately from the native
+commands the proxy sends; removed transitional native commands are allowed.
+
+Local validation on 2026-10-02, before any Monado deletion: native proxy build
+and all five configured CTest tests pass against unchanged Monado
+`7fd7f2835693d447d46da933e9a54c9f71ddfae9`. The production socket test covers fd
+transfer with a fragmented reply, local shared-memory chunks, invalid uploads,
+native shared-memory slots, both sync handshakes, async ordering and fragmented
+Wine requests. The generator test removes the transitional native commands in
+a fixture and checks ID regeneration and incompatible-schema rejection.
+Object-symbol inspection confirms the proxy still references the existing
+resolve/publish functions and introduces no GPU queue or blit API. Synthetic Monado hello_xr exits 0 with Metal validation; the explicit OpenXR
+swapchain probe passes 2D and array-size-2 imports/acquire/wait/release with three
+images each. Service logs confirm native token imports for both array sizes.
+Meta's generic-host hello_xr also exits 0 with validation (46 frames); Meta
+selects its existing `gpu-blit` fallback because its images are not shareable.
+No PS VR2 hardware run was performed. Native Monado protocol deletion follows
+this simulator gate, as authorized by the user.
+
+For the required headset validation, keep Monado on the revision above and run:
+
+```zsh
+export MONADO_SOURCE_DIR=/Users/nickkennedy/Code/monado-2
+export MONADO_BUILD_DIR=$MONADO_SOURCE_DIR/.build/native-service-check
+export MACOS_WINE_XR_CURRENT_DXMT_ROOT=$MONADO_SOURCE_DIR/.build/wine11-current-dxmt
+# Use MWXR_BOOTSTRAP_SERVICE=1 only if intentionally replacing the development LaunchAgent.
+./scripts/run-hello-xr-current-dxmt.zsh
+./scripts/run-current-dxmt-sharing-probe.zsh
+ctest --test-dir build-proxy --output-on-failure
+```
+
+Record the hello_xr result, 2D/array resource results, proxy import logs and
+selected Monado commit before proceeding with native protocol deletion. Optional `MWXR_PROXY_TRACE=1` logs Wine command IDs and sizes; leave it unset
+for timing runs. Timing
+analysis now reads `ipc_submit` and `ipc_swapchain` trace filenames.

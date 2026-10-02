@@ -204,7 +204,7 @@ print "  timing trace: ${trace_host}"
 print ""
 
 # The transitional PE frontend comes from a different Monado commit while the
-# split is being proven. Wire structs/IDs are deliberately kept compatible.
+# split is being proven. Wine IDs are frozen in the proxy; native IDs are regenerated.
 IPC_IGNORE_VERSION=1 \
 MONADO_WINE_TCP_PORT="${port}" \
 IPC_WINE_TCP_TOKEN="${IPC_WINE_TCP_TOKEN}" \

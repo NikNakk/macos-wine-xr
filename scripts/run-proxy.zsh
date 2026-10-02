@@ -77,6 +77,7 @@ fi
 cmake -S "${repo_root}" -B "${build_dir}" \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DMONADO_SOURCE_DIR="${MONADO_SOURCE_DIR}" \
+    -DMONADO_HEADER_REVISION="$(git -C "${MONADO_SOURCE_DIR}" rev-parse HEAD)" \
 	-DMONADO_BUILD_DIR="${MONADO_BUILD_DIR}"
 cmake --build "${build_dir}" --target macos_wine_xr_proxy --parallel
 
