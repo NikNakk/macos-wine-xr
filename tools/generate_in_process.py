@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2026, Nick Kennedy
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Configure Proton's unchanged generator for the initial OpenXR 1.0 gate."""
+"""Configure Proton's unchanged generator for the OpenXR 1.0 Metal adaptation."""
 import argparse
 import logging
 import importlib.machinery
@@ -20,16 +20,25 @@ loader.exec_module(g)
 g.LOGGER.setLevel(logging.WARNING)
 g.WINE_XR_VERSION = (1, 0)
 g.NOT_OUR_FUNCTIONS = g.NOT_OUR_FUNCTIONS + ["xrCreateApiLayerInstance"]
-# Graphics is intentionally unavailable until direct-object interop is built.
-g.XrRegistry._is_extension_supported = lambda self, name: False
+# Generate Windows D3D11 and internal native Metal structures. Only D3D11
+# is advertised; native Metal entry points are hidden from Windows GIPA.
+g.XrRegistry._is_extension_supported = lambda self, name: name in {'XR_KHR_D3D11_enable', 'XR_KHR_metal_enable'}
 g.MANUAL_UNIX_THUNKS = {'xrCreateInstance', 'xrEnumerateInstanceExtensionProperties', 'xrEnumerateApiLayerProperties',
-                        'xrCreateSession', 'xrCreateSwapchain', 'xrDestroyInstance'}
+                        'xrCreateSession', 'xrCreateSwapchain', 'xrDestroyInstance', 'xrDestroySession',
+    'xrGetD3D11GraphicsRequirementsKHR', 'xrEnumerateSwapchainFormats', 'xrReleaseSwapchainImage'}
 g.FUNCTION_OVERRIDES = {name: {'dispatch': name not in
-    {'xrCreateInstance', 'xrEnumerateInstanceExtensionProperties', 'xrEnumerateApiLayerProperties', 'xrGetInstanceProcAddr'}}
+    {'xrCreateInstance', 'xrEnumerateInstanceExtensionProperties', 'xrEnumerateApiLayerProperties', 'xrGetInstanceProcAddr', 'xrGetD3D11GraphicsRequirementsKHR'}}
     for name in g.MANUAL_UNIX_THUNKS | {'xrGetInstanceProcAddr'}}
 g.MANUAL_LOADER_FUNCTIONS = {'xrGetInstanceProcAddr', 'xrNegotiateLoaderRuntimeInterface',
     'xrCreateApiLayerInstance', 'xrNegotiateLoaderApiLayerInterface'}
-g.MANUAL_LOADER_THUNKS = {'xrCreateInstance', 'xrDestroyInstance'}
+g.MANUAL_LOADER_THUNKS = {'xrCreateInstance', 'xrDestroyInstance', 'xrCreateSession',
+    'xrDestroySession', 'xrCreateSwapchain', 'xrDestroySwapchain', 'xrEnumerateSwapchainImages',
+    'xrReleaseSwapchainImage', 'xrPollEvent', 'xrEndFrame', 'xrGetD3D11GraphicsRequirementsKHR'}
+g.MANUAL_LOADER_FUNCTIONS.discard('xrGetD3D11GraphicsRequirementsKHR')
+g.ALLOWED_PROTECTS = g.ALLOWED_PROTECTS + ['XR_USE_GRAPHICS_API_METAL']
+g.FUNCTION_OVERRIDES['xrCreateInstance']['extra_param'] = 'wine_instance'
+g.FUNCTION_OVERRIDES['xrCreateSession']['extra_param'] = 'wine_session'
+
 registry = g.XrRegistry(a.xml)
 generator = g.XrGenerator(registry)
 out = Path(a.output)

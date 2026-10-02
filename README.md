@@ -29,13 +29,13 @@ The original authenticated Monado byte-stream proxy and transitional frontend
 remain available as a regression path. DXMT has no Monado dependency; clean
 Monado has no Wine/DXMT transport code.
 
-An experimental third path is in development: a Proton-style builtin Wine OpenXR
-runtime with PE and native macOS halves in the application's process. Its initial core module
-calls the native Khronos loader directly; instance/system queries from x86_64
-Wine to an ARM64 simulated Monado service have passed. D3D11/Metal sharing is
-not implemented yet. The intended graphics path wraps runtime-owned images
-through DXMT and removes bridge RPC and the native host; see
-[the design, prerequisites and risks](docs/in-process-openxr.md).
+An experimental third path uses a Proton-style builtin Wine OpenXR runtime
+with PE and native macOS halves in the application's process. Core queries
+from x86_64 Wine to an ARM64 Monado service pass, as does an independent DXMT
+Metal texture/event probe. D3D11 session and swapchain adaptation builds, but
+Monado swapchain validation is blocked by the fixed XPC endpoint conflicting
+with the separately registered hardware service. This path is not ready for
+games. See [the implementation, evidence and blocker](docs/in-process-openxr.md).
 
 ## Active development branches
 
