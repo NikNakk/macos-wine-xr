@@ -30,12 +30,12 @@ remain available as a regression path. DXMT has no Monado dependency; clean
 Monado has no Wine/DXMT transport code.
 
 An experimental third path uses a Proton-style builtin Wine OpenXR runtime
-with PE and native macOS halves in the application's process. Core queries
-from x86_64 Wine to an ARM64 Monado service pass, as does an independent DXMT
-Metal texture/event probe. D3D11 session and swapchain adaptation builds, but
-Monado swapchain validation is blocked by the fixed XPC endpoint conflicting
-with the separately registered hardware service. This path is not ready for
-games. See [the implementation, evidence and blocker](docs/in-process-openxr.md).
+with PE and native macOS halves in the application's process. x86_64 Wine and
+its x86_64 native client talk to an ARM64 Monado service. Opaque D3D11 hello_xr
+and pixel checks over every runtime-owned 2D/array Metal image pass with Metal
+validation. Private XPC endpoint cold activation also passes. Alpha blending,
+rendered OpenComposite frames and matched performance comparisons remain
+pending. See [the implementation, measurements and acceptance ledger](docs/in-process-openxr.md).
 
 ## Active development branches
 

@@ -1,0 +1,22 @@
+--- a/src/xrt/drivers/simulated/simulated_hmd.c
++++ b/src/xrt/drivers/simulated/simulated_hmd.c
+@@ -68,6 +68,7 @@
+ 
+ DEBUG_GET_ONCE_LOG_OPTION(simulated_log, "SIMULATED_LOG", U_LOGGING_WARN)
+ DEBUG_GET_ONCE_NUM_OPTION(view_count, "SIMULATED_VIEW_COUNT", 2)
++DEBUG_GET_ONCE_BOOL_OPTION(alpha_blend, "SIMULATED_ALPHA_BLEND", false)
+ 
+ #define HMD_TRACE(hmd, ...) U_LOG_XDEV_IFL_T(&hmd->base, hmd->log_level, __VA_ARGS__)
+ #define HMD_DEBUG(hmd, ...) U_LOG_XDEV_IFL_D(&hmd->base, hmd->log_level, __VA_ARGS__)
+@@ -243,6 +244,11 @@
+ 		return NULL;
+ 	}
+ 
++	/* Opt-in alpha-blend acceptance tests; the simulated default stays opaque. */
++	if (debug_get_bool_option_alpha_blend()) {
++		hmd->base.hmd->blend_modes[hmd->base.hmd->blend_mode_count++] = XRT_BLEND_MODE_ALPHA_BLEND;
++	}
++
+ 	// Setup variable tracker.
+ 	u_var_add_root(hmd, "Simulated HMD", true);
+ 	u_var_add_pose(hmd, &hmd->pose, "pose");

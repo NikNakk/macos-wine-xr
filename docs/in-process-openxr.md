@@ -448,8 +448,9 @@ and native getBytes from each original shared-storage texture. All nine slice
 checks passed with Metal API validation enabled on 2026-10-02. Six unsignaled
 fence waits timed out as expected, six descriptor mismatches were rejected,
 and passing a texture as an event was rejected. This is a DXMT prerequisite
-probe, **not yet the Monado runtime-owned swapchain pattern probe**. Native
-getBytes is test-only readback; no production render copy is implemented.
+probe. That initial result preceded the Monado runtime-owned image probe below.
+The diagnostic now uses test-only GPU readback so it can inspect Private-storage
+runtime images too; no production render copy is implemented.
 
 Build DXMT with the same existing scripts/toolchain configuration, supplying
 this companion checkout and an isolated build/install directory. Then:
@@ -471,128 +472,188 @@ either fallback engine. The recorded first successful run used prefix-core
 with only test files replaced; the dedicated runner now keeps the probes apart.
 
 
-## D3D11/Metal adaptation and current stopping point
+## D3D11/Metal vertical slice and validation
 
-The generated module now advertises XR_KHR_D3D11_enable only when the native
-loader reports XR_KHR_metal_enable. Creation substitutes the native extension;
-Windows Metal entry points stay hidden. D3D11 graphics requirements call native
-Metal requirements, select DXMT's default DXGI adapter LUID, and validate the
-actual Metal device at session creation. There is one instance and one session.
+The generated module advertises XR_KHR_D3D11_enable when the native loader
+reports XR_KHR_metal_enable. Instance creation substitutes Metal; Windows Metal
+entry points stay hidden. The PE side accepts OpenXR 1.0 only, one instance and
+one session. Adapter requirements use DXMT's default LUID and validate the
+actual Metal device against the native runtime's device at session creation.
 
-PE session/swapchain wrappers and projection/event handle translation follow
-Proton's manual-entry-point pattern. Color formats initially cover RGBA/BGRA
-8-bit UNORM/sRGB and RGBA16_FLOAT when the native runtime advertises them.
-Single-mip/sample, non-cube 2D/2D-array images with COLOR_ATTACHMENT/SAMPLED usage
-are supported by the implementation; unsupported flags/chains return errors.
-Only an empty frame or one stereo projection layer is accepted. Actions and
-spaces use the generated core dispatch. Native Metal images are imported
-through IDXMTNativeDevice2; a failed exact import logs an error and returns
-failure. There is no copy fallback.
+PE session/swapchain wrappers, projection and event translation follow Proton's
+manual-entry-point model. Actions and spaces use generated core dispatch.
+Single-mip/sample, non-cube 2D/2D-array color images are supported, with RGBA/BGRA
+8-bit UNORM/sRGB and RGBA16_FLOAT formats filtered against the native runtime.
+Only empty frames or one stereo projection layer are accepted. Unsupported
+usage flags and extension chains fail explicitly. No copy fallback exists.
 
-Release enqueues a DXMT shared-event fence signal, flushes submission, then
-commits an event wait on the Metal queue bound to the native OpenXR session.
-Monado's existing completion barrier on that queue orders the producer before
-release. The independent probe validates the direct fence import and Signal /
-Flush ordering; this whole release path still needs the Monado image test.
+Native runtime Metal images are imported through IDXMTNativeDevice2. Release
+signals the DXMT shared-event fence, flushes submission, and enqueues an event
+wait on the queue bound to the native OpenXR session. Monado's existing release
+completion barrier on that queue orders producer writes before release.
 
-The two loaders have separate manifest selection. The Windows loader uses its
-prefix-local ActiveRuntime registry value. MWXR_NATIVE_RUNTIME_JSON names the
-native manifest; the unixlib puts it into the native libc environment's
-XR_RUNTIME_JSON without changing Wine's Windows environment. Runners unset the
-inherited Windows XR_RUNTIME_JSON, avoiding dependence on its elevated-context
-ignore behavior. The native loader remains linked, as in Proton.
+Windows and native loaders have separate manifest selection. The Windows loader
+uses prefix-local ActiveRuntime; MWXR_NATIVE_RUNTIME_JSON sets the native
+libc environment's XR_RUNTIME_JSON without changing Wine's Windows environment.
+The native loader remains linked, as in Proton. The application runner unsets
+inherited Windows XR_RUNTIME_JSON.
 
-The existing Khronos D3D11 hello_xr executable was run with Metal validation
-against the isolated ARM64 simulated service. It passed Windows loader runtime
-negotiation, instance/system enumeration, D3D11 adapter/requirements, session
-creation and reference spaces. It then failed its first color swapchain:
+### Endpoint isolation: resolved
 
-```text
-wineopenxr: selected direct-object zero-copy Metal/DXMT, queue=... event=...
-ERROR [swapchain_server_import] ipc_call_swapchain_import failed: XRT_ERROR_IPC_FAILURE
-ERROR [ipc_metal_xpc_service_take_textures_for_pid]
-  Metal token ownership mismatch/missing texture token=0x000000004d2766f8 image=0 pid=73860
+The first graphics run failed token validation: a private Unix socket paired
+with the fixed hardware Mach endpoint reached two different services. The
+approved Monado commit `ffec3b71a` adds XRT_MACOS_METAL_IPC_SERVICE_NAME through
+one shared accessor, preserving the original default and ignoring the override
+on Linux. Its clients, listeners, external client and optional broker all use
+that accessor. No Monado graphics or protocol change was needed.
+
+An independent simulated-only LaunchAgent used
+org.freedesktop.monado.inprocess-test.501 and the matching private Metal endpoint.
+The registered hardware LaunchAgent was neither replaced nor reconfigured.
+After SIGTERM of the private service, Wine caused launchd to restart it: the
+job reported `immediate reason = ipc (mach)`, a new PID 88444, and both image
+probes passed again. The reusable runner below exercises cold activation with
+RunAtLoad=false and removes its own job on exit.
+
+The earlier endpoint proposal in `docs/proposals/monado-xpc-service-name.patch`
+is historical; its change is now applied, built and committed in Monado.
+
+### Results on Apple M5, Wine 11.10, 2026-10-02
+
+- Core gate: API 1.1 rejected; singleton limit, unknown-extension rejection,
+  instance destruction and recreation passed.
+- Khronos hello_xr D3D11, Local space, Opaque: successful bounded run with Metal
+  validation. Both eye swapchains imported all four runtime-owned images.
+- Runtime-image GPU probe: all four images of an 8x8 2D swapchain and both slices
+  of all four images of a two-layer array swapchain passed exact pixel checks.
+  It acquires/waits, clears through D3D11, signals/flushed an imported shared
+  event, verifies pixels in the original runtime Metal object, and releases
+  through the production OpenXR synchronization path. No Metal validation
+  error was reported. Array projection rendering in hello_xr remains pending:
+  this pinned hello_xr D3D11 plugin asserts imageArrayIndex==0.
+- MWXRProbeSwapchainImage is a diagnostic export outside OpenXR GIPA, returning
+  borrowed runtime objects while the swapchain is alive. GPU readback blits in
+  the test helper inspect Private-storage images; they are absent from the
+  production graphics path.
+- Independent direct-object probe still covers descriptor mismatch, wrong object
+  type and unsignaled-event timeout, as well as 2D/array pixel checks.
+- OpenComposite/Underture, private game copy, 20-second bounded run: OpenVR
+  initialized and bootstrap/session replacement completed, but no swapchain
+  render was observed before termination. This is partial compatibility
+  evidence, not working VR output. Original games and fallback paths unchanged.
+- AlphaBlend hello_xr exited 1 with "Selected blendmode is not available from
+  runtime". The simulated driver configures Opaque only; no existing blend-mode
+  override was found. No further Monado change has been applied.
+
+### Pacing hint unused: preliminary measurements
+
+For the opaque hello_xr run, U_PACING_APP_USE_MIN_FRAME_PERIOD was absent from
+both client and service environments. The app-pacer CSV contains 190 delivered
+frames; exclude the first ten for these statistics. Its predicted period was
+16,666,666 ns throughout. Submission/event intervals: median 16.278 ms, p95
+21.053 ms. CPU/draw/GPU actual times seen by the pacer: medians
+0.031/0.7545/1.0595 ms, p95 0.069/1.864/2.855 ms. None of the remaining 180
+GPU-done events occurred after predicted display time. This deadline count is
+not a measurement of late physical presentation. The raw evidence is
+[hello-opaque-app-pacing.csv](results/in-process-2026-10-02/hello-opaque-app-pacing.csv).
+
+A separate 200-empty-frame control probe used the Windows Khronos loader,
+view-to-local xrLocateSpace, and inactive unbound actions. Excluding the first
+ten frames, with 20 reads per type per frame:
+
+| Call | Samples | Median (us) | p95 (us) |
+| --- | ---: | ---: | ---: |
+| xrLocateSpace | 3800 | 20.2 | 58.8 |
+| xrGetActionStateBoolean | 3800 | 2.0 | 5.9 |
+| xrGetActionStateFloat | 3800 | 1.7 | 4.5 |
+| xrGetActionStateVector2f | 3800 | 1.7 | 4.5 |
+| xrGetActionStatePose | 3800 | 1.6 | 4.4 |
+| xrWaitFrame | 190 | 15653.6 | 21858.3 |
+
+WaitFrame includes intentional pacing wait. Actions were unbound, so these do
+not measure active controller input work. p95 uses nearest rank; timings use
+QueryPerformanceCounter. The full local CSV is build-in-process/latency-in-process.csv;
+[latency-summary.json](results/in-process-2026-10-02/latency-summary.json) records
+results and method. Metal validation was enabled. No speedup or pacer-hint
+conclusion is claimed before identical-workload proxy/native-host comparisons
+and longer hardware runs. The reusable runner explicitly disables the service
+hint to override any inherited launchd setting; the original hello run left it
+unset.
+
+### Repeat the isolated tests
+
+From this checkout on this machine (paths refer to the supplied Monado workspace):
+
+```zsh
+export MONADO_SIM_BUILD=/Users/nickkennedy/Code/monado-2/.build/native-service-check
+export MONADO_VULKAN_ICD=/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json
+export MWXR_NATIVE_RUNTIME_JSON=/Users/nickkennedy/Code/monado-2/.build/in-process-monado-x64/openxr_monado-dev.json
+export MWXR_IN_PROCESS_PREFIX="$PWD/build-in-process/prefix-core"
+scripts/run-in-process-simulated.zsh "$PWD/build-in-process/gate/in_process_swapchain.exe"
+scripts/run-in-process-simulated.zsh "$PWD/build-in-process/gate/in_process_gate.exe"
+scripts/run-in-process-simulated.zsh "$PWD/build-in-process/gate/in_process_latency.exe" \
+  "Z:${PWD//\//\\}\\build-in-process\\latency-repeat.csv"
+scripts/run-in-process-simulated.zsh \
+  /Users/nickkennedy/Code/monado-2/build-wine-hello-xr/khr_hello_xr_d3d11.exe \
+  --graphics D3D11 --space Local --blendmode Opaque --verbose
 ```
 
-The selection log describes the required route, not proof that any Monado image
-was successfully wrapped. The Wine native PID in that run was 73860. No frames,
-Monado every-image GPU probe, alpha-blend run, OpenComposite run or performance
-comparison is claimed. The first count reported by this client runtime was
-four images; do not hard-code the host path's historical three-image count.
+The runner refuses a service build with PS VR2/PS Sense enabled or unknown. It
+creates a unique Mach endpoint/socket, launches on demand, records traces and
+tears down only its job. Its logs remain under build-in-process/isolated-UID-PID.
+Press a key to stop hello_xr. Build the latency executable with
+scripts/build-in-process-latency.zsh and MWXR_WINDOWS_LOADER pointing at the
+static Win64 Khronos libopenxr_loader.a used by the hello_xr build. Build the
+image probes with scripts/build-direct-metal-probe.zsh.
 
-### Why testing stopped before a Monado change
+### PS VR2 commands for the user
 
-The service socket was isolated with XDG_RUNTIME_DIR, but both client and service
-use the hard-coded org.freedesktop.monado.metal-ipc Mach-service name. The XPC
-publish operation went to the already registered launchd service, whereas the
-swapchain import request went to the task's isolated service. The latter
-correctly rejected the token. The registered LaunchAgent is configured for
-PS VR2 hardware, so using or replacing it would interfere with the user's
-hardware path. Its configuration and Monado sources were left unchanged.
-The task's directly started simulated service is stopped after the core tests.
-The initial XPC attempt reached the registered launchd endpoint and could
-activate that service; no frames were submitted, and no further graphics
-tests used it after its hardware configuration was identified.
+The installed hardware service must be rebuilt from a matching Monado revision
+and the headset available. Do not use the simulated-service runner for hardware.
+The hardware LaunchAgent configuration remains user-owned; the client-side
+unset below does not change the service's pacing flags.
 
-The narrow proposed Monado change is an **opt-in XPC endpoint-name setting**,
-with the existing default preserved:
+```zsh
+export MWXR_NATIVE_RUNTIME_JSON=/Users/nickkennedy/Code/monado-2/.build/in-process-monado-x64/openxr_monado-dev.json
+export MWXR_IN_PROCESS_PREFIX="$PWD/build-in-process/prefix-core"
+unset XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR U_PACING_APP_USE_MIN_FRAME_PERIOD
+export MTL_DEBUG_LAYER=1
+scripts/run-in-process-openxr.zsh "$PWD/build-in-process/gate/in_process_swapchain.exe"
+scripts/run-in-process-openxr.zsh \
+  /Users/nickkennedy/Code/monado-2/build-wine-hello-xr/khr_hello_xr_d3d11.exe \
+  --graphics D3D11 --space Local --blendmode Opaque --verbose
+# Repeat with client-side compositing, the Game Mode path:
+XRT_MACOS_CLIENT_COMPOSITOR=1 scripts/run-in-process-openxr.zsh \
+  /Users/nickkennedy/Code/monado-2/build-wine-hello-xr/khr_hello_xr_d3d11.exe \
+  --graphics D3D11 --space Local --blendmode Opaque --verbose
+scripts/run-in-process-openxr.zsh \
+  "$PWD/build-in-process/games/Underture/Underture.exe" -force-d3d11 \
+  -logFile "Z:${PWD//\//\\}\\build-in-process\\underture-hardware.log"
+```
 
-1. Introduce one shared accessor for the selected name, with an environment
-   override such as XRT_MACOS_METAL_IPC_SERVICE_NAME and the existing constant
-   as the default. Resolve/configure it before connecting or starting listeners.
-2. Use it consistently for NSXPCConnection and NSXPCListener construction in
-   ipc_metal_xpc.m and ipc_metal_xpc_service.m; ensure the optional broker's
-   generated registration names use the same accessor when that broker is used.
-3. Start an independent LaunchAgent with a unique label and matching MachServices
-   entry, the simulated-only service binary, and the isolated Unix-socket path.
-   Give the Wine client the same endpoint setting. No existing LaunchAgent is
-   replaced; no protocol, handle ownership, compositor or Linux behavior changes.
+Record source commits, service environment, image probe output, visible behavior,
+Metal validation output, game session transitions, app-pacer and presentation
+CSVs. Compare all three paths with the same application, duration, compositor
+mode, validation setting and service flags. Simulated metrics above cannot
+replace this hardware comparison.
 
-This is needed for nonintrusive service-backed graphics testing alongside the
-registered service, not an intrinsic requirement of the in-process Wine design.
-Temporarily replacing the hardware LaunchAgent is an alternative operational
-approach, but has not been done. Under the user's explicit requirement to stop
-before necessary Monado changes, implementation/testing pauses at this point
-for that decision. No Monado patch is applied or committed.
+### Next blocking acceptance requirement
 
-### Remaining acceptance work
+AlphaBlend against the simulated HMD needs a small, opt-in simulated-driver
+change. The concrete unapplied candidate is
+[monado-simulated-alpha-blend.patch](proposals/monado-simulated-alpha-blend.patch):
+SIMULATED_ALPHA_BLEND=1 appends AlphaBlend to the simulated HMD's existing Opaque
+mode list; unset keeps current behavior. It changes no hardware driver or
+compositor. Under the user's Monado-change constraint, stop for review before
+applying this separate change. Alpha blending, array projection, rendered
+OpenComposite frames, matched three-path latency/pacing comparison and hardware
+validation remain pending.
 
-After resolving endpoint isolation: complete a Monado runtime-owned image
-identity/GPU pattern probe over every image and both array slices; validate
-session recreation and all accepted chains; run opaque and alpha hello_xr;
-then OpenComposite and identical-workload comparisons of all three paths.
-The current simulated HMD advertises only Opaque in the observed run; determine
-an existing simulated configuration for AlphaBlend before advertising a result.
-The minimum-period hint, pacer traces, latency distributions, frame median/p95,
-late frames and hardware command ledger remain pending. In-process code adds
-no bridge pacing hint. No conclusion about removing Monado's pacer hint follows
-from these control/import probes.
+### Local commits and provenance
 
-The application runner exists as scripts/run-in-process-openxr.zsh. It uses the
-cloned Wine/DXMT runtime and a separate prefix-openxr (or explicitly selected
-MWXR_IN_PROCESS_PREFIX). A compatible service's socket and XPC endpoint must
-refer to the same service. Once the simulated gate passes, the hardware runner
-will use the registered service deliberately, with hardware execution by the
-user. The current failure must not be used as a performance sample.
-
-
-### Saved prototype commits
-
-- 3bc1815: Phase 0 design/architecture report.
-- 46a67f6: generator/native-client/core gate and licensing/provenance.
-- 2226aa7: independent direct-object texture/fence probe.
-- The subsequent graphics-adaptation commit includes the implementation above
-  and this stopping-point evidence. All are local on
-  codex/in-process-wine-openxr; no branch has been pushed.
-- DXMT f8e535b is local on codex/in-process-metal-import in the companion
-  checkout .build/in-process-dxmt of the supplied Monado workspace.
-
-
-A concrete, **unapplied and unbuilt** candidate is saved at
-[docs/proposals/monado-xpc-service-name.patch](proposals/monado-xpc-service-name.patch).
-It changes the shared name macro to an accessor, so the inspected existing
-client, service, external client, broker and control-tool call sites all use the
-same selected name. A custom service label/plist is still needed for the test;
-the hardware LaunchAgent stays as-is. Review and validate the candidate in
-Monado only after authorization, including default-name regression and a
-private simulated LaunchAgent cold-start/teardown test.
+Bridge branch: codex/in-process-wine-openxr. Phase 0: 3bc1815; core gate/licensing:
+46a67f6; direct-object probe: 2226aa7; D3D11 graphics adaptation: c3a2f43.
+Runtime-owned image verification and the 1.0-only gate: f141dda. DXMT direct import: f8e535b on
+codex/in-process-metal-import. Monado endpoint change: ffec3b71a on
+macos-upstream-clean, preserving unrelated local documentation/test edits.
+No branch has been pushed.
