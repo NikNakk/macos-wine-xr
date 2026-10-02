@@ -7,7 +7,7 @@
 #include <dxgi1_2.h>
 #include <stdio.h>
 #include "dxmt_native_interop.h"
-struct SwapState { wine_XrSwapchain *wrapper; ID3D11Texture2D **textures; uint32_t count; SwapState *next; };
+struct SwapState { wine_XrSwapchain *wrapper; ID3D11Texture2D **textures; XrSwapchainImageMetalKHR *metal; uint32_t count; SwapState *next; };
 struct SessionState { ID3D11Device *device; IDXMTNativeDevice2 *native;
     ID3D11DeviceContext4 *context; ID3D11Fence *fence; SwapState *swapchains;
     CRITICAL_SECTION release_lock; };
@@ -137,9 +137,8 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
             }
             fprintf(stderr, "wineopenxr: zero-copy image=%u Metal=%p D3D11=%p array=%u\n", i, metal[i].texture, textures[i], desc.ArraySize);
         }
-        free(metal);
-        if (XR_FAILED(result)) { for (uint32_t i = 0; i < state->count; ++i) if (textures[i]) textures[i]->Release(); free(textures); return result; }
-        state->textures = textures;
+        if (XR_FAILED(result)) { free(metal); for (uint32_t i = 0; i < state->count; ++i) if (textures[i]) textures[i]->Release(); free(textures); return result; }
+        state->textures = textures; state->metal = metal;
     }
     *count = state->count;
     if (!capacity) return XR_SUCCESS;
@@ -149,6 +148,19 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
         if (d3d[i].type != XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR || d3d[i].next) return XR_ERROR_VALIDATION_FAILURE;
         d3d[i].texture = state->textures[i];
     }
+    return XR_SUCCESS;
+}
+// Test diagnostic, deliberately outside OpenXR GIPA. Returns borrowed runtime
+// objects only while the caller keeps the swapchain alive and owns this image.
+extern "C" __declspec(dllexport) XrResult WINAPI MWXRProbeSwapchainImage(
+    XrSwapchain swapchain, uint32_t index, UINT64 *device, UINT64 *texture)
+{
+    if (!swapchain || !device || !texture) return XR_ERROR_VALIDATION_FAILURE;
+    auto *wrapper = wine_swapchain_from_handle(swapchain);
+    auto *state = (SwapState *)wrapper->graphics;
+    if (!state->metal || index >= state->count) return XR_ERROR_INDEX_OUT_OF_RANGE;
+    *device = (UINT64)wrapper->session->metal_device;
+    *texture = (UINT64)state->metal[index].texture;
     return XR_SUCCESS;
 }
 extern "C" XrResult WINAPI xrDestroySwapchain(XrSwapchain swapchain)
@@ -164,7 +176,7 @@ extern "C" XrResult WINAPI xrDestroySwapchain(XrSwapchain swapchain)
     while (*link && *link != state) link = &(*link)->next;
     if (*link) *link = state->next;
     for (uint32_t i = 0; state->textures && i < state->count; ++i) state->textures[i]->Release();
-    free(state->textures); free(state); free(wrapper);
+    free(state->metal); free(state->textures); free(state); free(wrapper);
     return result;
 }
 extern "C" XrResult WINAPI xrDestroySession(XrSession session)

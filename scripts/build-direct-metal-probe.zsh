@@ -20,3 +20,8 @@ clang -arch x86_64 -shared -D__WINESRC__ -D_WIN64 -DWINE_NO_LONG_TYPES -DWINE_UN
 x86_64-w64-mingw32-g++ -static -I"${DXMT_SOURCE_DIR}/include" \
  -I"${DXMT_SOURCE_DIR}/include/native/directx" "${repo}/tests/windows/direct_metal_import.cpp" \
  -ld3d11 -ldxguid -o "${root}/direct_metal_import.exe"
+: ${OPENXR_SOURCE_DIR:?OpenXR SDK headers}
+x86_64-w64-mingw32-g++ -static -I"${DXMT_SOURCE_DIR}/include" \
+ -I"${DXMT_SOURCE_DIR}/include/native/directx" -I"${OPENXR_SOURCE_DIR}/include" \
+ "${repo}/tests/windows/in_process_swapchain.cpp" -ld3d11 -ldxguid \
+ -o "${root}/in_process_swapchain.exe"
