@@ -154,9 +154,9 @@ framework, while its D3D11 bridge sources live here. The native runtime and
 service come exclusively from `macos-upstream-clean`.
 
 
-## Native IPC boundary (bridge-first migration)
+## Native IPC boundary
 
-On `codex/native-monado-proxy`, the proxy terminates every transitional command:
+The proxy terminates every transitional command:
 `instance_get_shm_chunk`, `compositor_layer_copy_chunk`, both
 `compositor_layer_sync_copy_commit*` commands, all three
 `compositor_layer_sync_single*` commands and both `*_metal_bootstrap` imports.
@@ -201,7 +201,22 @@ selects its existing `gpu-blit` fallback because its images are not shareable.
 No PS VR2 hardware run was performed. Native Monado protocol deletion follows
 this simulator gate, as authorized by the user.
 
-For the required headset validation, keep Monado on the revision above and run:
+Native Monado now has none of these transitional commands, handlers, staging
+fields or payload types. Its command count changed from 137 to 128; native token
+imports are now IDs 96 (textures) and 128 (shared events). The Wine IDs remain
+frozen. Follow-up cleanup also removes unused bootstrap reconstruction helpers.
+The proxy CI checkout is pinned to Monado
+`6171ca5b46cbb9d154731586ab797880f969e9fc`.
+
+The six bridge regression tests include an assertion that rejects missing,
+blitting or mixed Monado sharing paths. Set
+`MWXR_EXPECT_SHARING_PATH=shared-metal-zero-copy` with
+`scripts/run-generic-openxr.zsh` to enforce it in an application run. The GPU
+pattern probe checks every returned image for both 2D and array swapchains.
+See [native IPC verification](docs/native-ipc-verification.md) for simulator
+results and zero-copy evidence. PS VR2 hardware validation remains pending.
+
+Rebuild against the selected native service revision before headset validation:
 
 ```zsh
 export MONADO_SOURCE_DIR=/Users/nickkennedy/Code/monado-2
@@ -213,7 +228,6 @@ export MACOS_WINE_XR_CURRENT_DXMT_ROOT=$MONADO_SOURCE_DIR/.build/wine11-current-
 ctest --test-dir build-proxy --output-on-failure
 ```
 
-Record the hello_xr result, 2D/array resource results, proxy import logs and
-selected Monado commit before proceeding with native protocol deletion. Optional `MWXR_PROXY_TRACE=1` logs Wine command IDs and sizes; leave it unset
-for timing runs. Timing
-analysis now reads `ipc_submit` and `ipc_swapchain` trace filenames.
+Record the selected Monado commit, hello_xr result, 2D/array results and import
+logs. Optional `MWXR_PROXY_TRACE=1` logs Wine command IDs and sizes; leave it unset
+for timing runs. Timing analysis reads `ipc_submit` and `ipc_swapchain` filenames.

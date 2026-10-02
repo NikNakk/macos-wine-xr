@@ -42,6 +42,7 @@ int main(int argc, char **argv)
 		if (!device) return 1;
 		int ret = 0;
 		for (unsigned array_size = 1; array_size <= 2 && !ret; ++array_size) {
+			unsigned image_count = 3;
 			MTLPixelFormat format = argc == 4 ? MTLPixelFormatRGBA8Unorm_sRGB : MTLPixelFormatRGBA8Unorm;
 #ifdef MWXR_HAVE_NATIVE_OPENXR
 			struct mwxr_native_swapchain *swapchain = NULL;
@@ -52,8 +53,9 @@ int main(int argc, char **argv)
 				    .format = format, .sampleCount = 1, .width = 64, .height = 32,
 				    .faceCount = 1, .arraySize = array_size, .mipCount = 1};
 				if (XR_FAILED(mwxr_native_swapchain_create(backend,&ci,&swapchain))) { ret = 1; break; }
-				if (mwxr_native_swapchain_image_count(swapchain) != 3) {
-					fprintf(stderr,"this proof expects three runtime images\n");
+				image_count = mwxr_native_swapchain_image_count(swapchain);
+				if (image_count == 0 || image_count > 16) {
+					fprintf(stderr,"unsupported runtime image count\n");
 					mwxr_native_swapchain_destroy(swapchain); ret = 1; break;
 				}
 				direct = mwxr_native_swapchain_image(swapchain,0)->strategy == MWXR_IMAGE_SHARED_METAL;
@@ -70,15 +72,15 @@ int main(int argc, char **argv)
 			NSString *event_name = event_cap ? [NSString stringWithUTF8String:mwxr_native_capability_name(event_cap)] : @"";
 			[event_handle release]; // eventPort is borrowed from this handle.
 			if (!event_registered) ret = 1;
-			id<MTLTexture> textures[3] = {nil,nil,nil};
-			NSString *names[3] = {nil,nil,nil};
-			struct mwxr_native_capability *caps[3] = {NULL,NULL,NULL};
+			id<MTLTexture> textures[16] = {nil};
+			NSString *names[16] = {nil};
+			struct mwxr_native_capability *caps[16] = {NULL};
 			MTLTextureDescriptor *desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
 			    width:64 height:32 mipmapped:NO];
 			desc.textureType = array_size == 1 ? MTLTextureType2D : MTLTextureType2DArray;
 			desc.arrayLength = array_size; desc.storageMode = MTLStorageModePrivate;
 			desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead | MTLTextureUsagePixelFormatView;
-			for (unsigned i = 0; i < 3; ++i) {
+			for (unsigned i = 0; i < image_count; ++i) {
 				mach_port_t port = MACH_PORT_NULL;
 #ifdef MWXR_HAVE_NATIVE_OPENXR
 				if (direct) {
@@ -99,8 +101,11 @@ int main(int argc, char **argv)
 			NSTask *task = [[NSTask alloc] init];
 			NSPipe *input = [NSPipe pipe], *output = [NSPipe pipe];
 			task.executableURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:argv[1]]];
-			task.arguments = @[[NSString stringWithUTF8String:argv[2]], [NSString stringWithFormat:@"%u",array_size],
-			    format == MTLPixelFormatRGBA8Unorm ? @"28" : @"29",names[0],names[1],names[2],event_name];
+			NSMutableArray *arguments = [NSMutableArray arrayWithObjects:[NSString stringWithUTF8String:argv[2]],
+			    [NSString stringWithFormat:@"%u",array_size], format == MTLPixelFormatRGBA8Unorm ? @"28" : @"29", nil];
+			for (unsigned i = 0; i < image_count; ++i) { [arguments addObject:names[i]]; }
+			[arguments addObject:event_name];
+			task.arguments = arguments;
 			task.standardInput = input; task.standardOutput = output;
 			NSError *error = nil;
 			bool launched = !ret && [task launchAndReturnError:&error];
@@ -117,11 +122,11 @@ int main(int argc, char **argv)
 					if (ready <= 0 || !fgets(line,sizeof(line),stream)) break;
 					if (!strncmp(line,"imported",8)) {
 						mwxr_native_capability_close(event_cap); event_cap = NULL;
-						for (unsigned i = 0; i < 3; ++i) {
+						for (unsigned i = 0; i < image_count; ++i) {
 							mwxr_native_capability_close(caps[i]); caps[i] = NULL;
 						}
 					} else {
-						unsigned index = 3;
+						unsigned index = image_count;
 						if (sscanf(line,"rendered=%u",&index) != 1 || index != expected) {
 							fprintf(stderr,"unexpected renderer response: %s\n",line); break;
 						}
@@ -140,7 +145,7 @@ int main(int argc, char **argv)
 #ifdef MWXR_HAVE_NATIVE_OPENXR
 						if (swapchain && mwxr_native_swapchain_release(swapchain) != XR_SUCCESS) break;
 #endif
-						if (++rendered == 3) { found = true; break; }
+						if (++rendered == image_count) { found = true; break; }
 					}
 					expected = rendered;
 #ifdef MWXR_HAVE_NATIVE_OPENXR
@@ -164,7 +169,7 @@ int main(int argc, char **argv)
 			[task release];
 			mwxr_native_capability_close(event_cap);
 			[event release];
-			for (unsigned i = 0; i < 3; ++i) {
+			for (unsigned i = 0; i < image_count; ++i) {
 				mwxr_native_capability_close(caps[i]);
 				[textures[i] release];
 			}
@@ -176,7 +181,7 @@ int main(int argc, char **argv)
 #ifdef MWXR_HAVE_NATIVE_OPENXR
 		mwxr_native_backend_close(backend);
 #endif
-		if (!ret) puts("native-to-D3D11: 2D/array/three-images verified on GPU");
+		if (!ret) puts("native-to-D3D11: 2D/array/all-runtime-images verified on GPU");
 		return ret;
 	}
 }
