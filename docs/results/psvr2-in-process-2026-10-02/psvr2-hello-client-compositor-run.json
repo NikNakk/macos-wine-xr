@@ -1,0 +1,10 @@
+{
+  "start_utc": "2026-10-02T22:37:08.001405+00:00",
+  "end_utc": "2026-10-02T22:37:38.074305+00:00",
+  "exit_code": 0,
+  "blend": "Opaque",
+  "client_compositor": true,
+  "client_metal_validation": true,
+  "pacing_hint": "unset",
+  "native_pid": 3149
+}

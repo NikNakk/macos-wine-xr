@@ -33,7 +33,9 @@ An experimental third path uses a Proton-style builtin Wine OpenXR runtime
 with PE and native macOS halves in the application's process. x86_64 Wine and
 its x86_64 native client talk to an ARM64 Monado service. Opaque D3D11 hello_xr
 and pixel checks over every runtime-owned 2D/array Metal image pass with Metal
-validation. Private XPC endpoint cold activation also passes. Alpha blending,
+validation. The same image checks and Opaque hello_xr now pass on PS VR2;
+client-side compositing runs inside Wine but currently paces at 60 Hz on its
+120 Hz display. Private XPC endpoint cold activation also passes. Alpha blending,
 rendered OpenComposite frames and matched performance comparisons remain
 pending. See [the implementation, measurements and acceptance ledger](docs/in-process-openxr.md).
 
