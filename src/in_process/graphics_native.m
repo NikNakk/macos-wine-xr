@@ -125,6 +125,12 @@ XrResult wine_xrReleaseSwapchainImage(XrSwapchain swapchain, const XrSwapchainIm
     @autoreleasepool {
         id<MTLCommandBuffer> buffer = [(id<MTLCommandQueue>)session->metal_queue commandBuffer];
         [buffer encodeWaitForEvent:(id<MTLSharedEvent>)session->metal_event value:session->fence_value];
+        if (wrapper->copy_source) {
+            // Explicit, logged graphics copy fallback only; zero-copy backends never set it.
+            id<MTLBlitCommandEncoder> blit = [buffer blitCommandEncoder];
+            [blit copyFromTexture:(id<MTLTexture>)wrapper->copy_source toTexture:(id<MTLTexture>)wrapper->copy_target];
+            [blit endEncoding];
+        }
         [buffer commit];
         // Monado commits and completes an empty command buffer on this same
         // queue in release, so it waits for the earlier DXMT producer signal.

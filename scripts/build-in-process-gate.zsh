@@ -23,7 +23,7 @@ inc=(-I"${repo}/src/in_process" -I"${repo}/src/in_process/proton" \
 pe_lib=${MWXR_WINE_SDK}/lib/wine/x86_64-windows
 # PE graphics: OpenXR adaptation plus the renderer-neutral interop backends.
 graphics_objects=()
-for source in graphics graphics_interop graphics_interop_dxmt; do
+for source in graphics graphics_interop graphics_interop_dxmt graphics_interop_d3dmetal; do
  x86_64-w64-mingw32-g++ -c -fno-exceptions -fno-rtti -fcheck-new -D__WINESRC__ -D_WIN64 -DWINE_NO_LONG_TYPES \
   -I"${repo}/src/in_process" -I"${root}/generated" -I"${root}/support" -I"${DXMT_SOURCE_DIR}/include" -I"${DXMT_SOURCE_DIR}/include/native/directx" \
   "${repo}/src/in_process/${source}.cpp" -o "${root}/${source}.o"

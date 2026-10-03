@@ -31,7 +31,7 @@ g.FUNCTION_OVERRIDES = {name: {'dispatch': name not in
     for name in g.MANUAL_UNIX_THUNKS | {'xrGetInstanceProcAddr'}}
 g.MANUAL_LOADER_FUNCTIONS = {'xrGetInstanceProcAddr', 'xrNegotiateLoaderRuntimeInterface',
     'xrCreateApiLayerInstance', 'xrNegotiateLoaderApiLayerInterface'}
-g.MANUAL_LOADER_THUNKS = {'xrCreateInstance', 'xrDestroyInstance', 'xrCreateSession',
+g.MANUAL_LOADER_THUNKS = {'xrCreateInstance', 'xrDestroyInstance', 'xrCreateSession', 'xrAcquireSwapchainImage',
     'xrDestroySession', 'xrCreateSwapchain', 'xrDestroySwapchain', 'xrEnumerateSwapchainImages',
     'xrReleaseSwapchainImage', 'xrPollEvent', 'xrEndFrame', 'xrGetD3D11GraphicsRequirementsKHR'}
 g.MANUAL_LOADER_FUNCTIONS.discard('xrGetD3D11GraphicsRequirementsKHR')

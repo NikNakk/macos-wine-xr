@@ -51,12 +51,16 @@ HRESULT mw_graphics_interop_open(ID3D11Device *device, const GraphicsNativeHost 
     *out = nullptr;
     const char *mode = getenv("MWXR_GRAPHICS_BACKEND");
     if (!mode || !mode[0]) mode = "auto";
-    if (strcmp(mode, "auto") && strcmp(mode, "dxmt")) {
-        fprintf(stderr, "wineopenxr: ERROR MWXR_GRAPHICS_BACKEND=%s; use auto or dxmt\n", mode);
+    bool automatic = !strcmp(mode, "auto"), copy = !strcmp(mode, "d3dmetal-copy");
+    bool dxmt = automatic || !strcmp(mode, "dxmt"), d3dmetal = automatic || copy || !strcmp(mode, "d3dmetal");
+    if (!dxmt && !d3dmetal) {
+        fprintf(stderr, "wineopenxr: ERROR MWXR_GRAPHICS_BACKEND=%s; use auto, dxmt, d3dmetal or d3dmetal-copy\n", mode);
         return E_INVALIDARG;
     }
-    // Each factory declines (S_FALSE) a device owned by another translation layer.
-    HRESULT hr = mw_graphics_open_dxmt(device, host, out);
+    // Each factory declines (S_FALSE) a device owned by another translation
+    // layer. DXMT answers a private interface; D3DMetal is identified natively.
+    HRESULT hr = dxmt ? mw_graphics_open_dxmt(device, host, out) : S_FALSE;
+    if (hr == S_FALSE && d3dmetal) hr = mw_graphics_open_d3dmetal(device, host, copy, out);
     if (hr == S_FALSE) {
         fprintf(stderr, "wineopenxr: ERROR no graphics backend (selection=%s) recognises this D3D11 device\n", mode);
         return E_NOINTERFACE;
