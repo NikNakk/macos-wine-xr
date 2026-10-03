@@ -87,6 +87,13 @@ if(APPLE)
  target_link_libraries(rpc_transport_test PRIVATE macos_wine_xr_rpc)
  add_test(NAME rpc_transport COMMAND rpc_transport_test)
  set_tests_properties(rpc_transport PROPERTIES TIMEOUT 10)
+	# In-process graphics interop allocation interposer; needs only Metal.
+	add_executable(graphics_interposer_test
+		tests/macos/graphics_interposer_test.m src/in_process/graphics_interop_native.m)
+	target_link_libraries(graphics_interposer_test PRIVATE
+		"-framework Metal" "-framework Foundation" "-framework IOSurface")
+	add_test(NAME graphics_interposer COMMAND graphics_interposer_test)
+	set_tests_properties(graphics_interposer PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
 	if(NOT OPENXR_INCLUDE_DIR)
 		find_path(MWXR_DISCOVERED_OPENXR_INCLUDE_DIR openxr/openxr.h)
 		if(MWXR_DISCOVERED_OPENXR_INCLUDE_DIR)
