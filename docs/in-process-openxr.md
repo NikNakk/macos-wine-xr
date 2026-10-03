@@ -859,6 +859,44 @@ render poses, timewarp targets and physical presented timestamps, and explicitly
 check alternation/order. No predictor, pacing or Monado source change is justified
 by this feedback alone.
 
+### Corrected Underture trace assessment, 2026-10-03
+
+Normal traces **were captured** for the user's successful run in
+`/tmp/monado_psvr2_77379_*.csv` (last modified about 21:42). The service identifies
+PID 77379 as `OpenComposite_Underture`. The initial response overlooked these
+files and used only presentation-worker console counters from the agent's
+separate PID 76564 test. Those counters are not the user's performance result.
+Archived the complete client trace set and a reproducible stdlib analyser under
+[the user-run results](results/underture-in-process-2026-10-03/user-run/timing-summary.json).
+
+The measurement window spans 59.876 seconds: the focused valid-source interval
+with the first two and final one seconds excluded.
+
+| Measurement | Result |
+| --- | --- |
+| Application frame deliveries | 3,160; 52.77/s |
+| Application delivery interval median / p95 | 16.788 / 32.613 ms |
+| Physical presentations | 3,746; 62.57/s |
+| Physical interval median / p95 / max | 16.683 / 33.366 / 41.709 ms |
+| Physical gaps exceeding 1.5 refreshes | 2,679 / 3,745 (71.54%) |
+| Repeated source frame across physical presentations | 33.11% |
+| Compositor GPU time median / p95 | 0.909 / 2.079 ms |
+| GPU completion to physical output median / p95 | 38.421 / 57.535 ms |
+| Physical output after compositor pose target median / p95 | 9.891 / 33.799 ms |
+| Source predicted-time age at physical output median / p95 | 19.234 / 53.336 ms |
+| Compositor or application source ID reversal in physical order | 0 / 0 |
+
+Thus 119.88 Hz display-link callbacks do not establish 120 physical updates or
+120 application FPS. This run shows uneven display cadence, repeated application
+content, and physical presentation after the pose target. The short compositor
+GPU time does not account for the later presentation delay; it does not establish
+which presentation stage or process policy causes that delay. There was also a
+688 ms application-delivery gap. The source-frame ID sequence rules out simple
+old-frame/new-frame order reversal in the recorded physical output, but cannot
+prove that every image matches its submitted render pose or identify the user's
+subjective alternating backward step. Further analysis can start from these
+existing traces; no fresh run is required just to establish the cadence failure.
+
 ### Next blocking acceptance requirement
 
 AlphaBlend against the simulated HMD needs a small, opt-in simulated-driver
