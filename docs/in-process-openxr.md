@@ -1000,10 +1000,12 @@ launching without each game's main-display mirror window.
 Unity's [2018.3 player command-line reference](https://docs.unity3d.com/kr/2018.3/Manual/CommandLineArguments.html)
 documents `-batchmode` for headless operation. In a bounded Underture run,
 `-force-d3d11 -batchmode` retains D3D11, initializes OpenVR, creates both eye
-swapchains and imports all their runtime-owned Metal images. InMind's older
+swapchains and imports all their runtime-owned Metal images. Those checks did
+not establish visible headset output: the user subsequently confirmed that
+Underture's `-batchmode` also disables HMD rendering. InMind's older
 Unity 5.3 player instead selects `NullGfxDevice` in batch mode, even with
 `-force-d3d11`, and logs "VR rendering requires Direct3D11". Do not recommend
-batch mode for InMind or add `-nographics` to either game's VR launch.
+batch mode for either game or add `-nographics` to either game's VR launch.
 
 For InMind, `MWXR_DESKTOP_MIRROR=offscreen` enables a small Windows child-process
 launcher. It polls only the game's `UnityWndClass` windows and moves them
@@ -1022,9 +1024,10 @@ source frames. All diagnostic game/helper processes were stopped. These are
 initialization/submission checks, not visual or performance comparisons.
 
 Off-screen mode still renders the desktop mirror and can briefly show its window
-before the launcher moves it. It is not a zero-cost mirror-disable option. Native
-batch mode is preferable for Underture; the off-screen workaround is optional
-for InMind. The legacy Alyx runner already uses `-nowindow`, but that is a Source 2
+before the launcher moves it. It is not a zero-cost mirror-disable option. Use
+`MWXR_DESKTOP_MIRROR=offscreen` for **both Underture and InMind**, without
+`-batchmode`. The user confirms this is required to preserve HMD rendering in
+both games; this supersedes the earlier batch-mode recommendation for Underture. The legacy Alyx runner already uses `-nowindow`, but that is a Source 2
 argument; no prior Unity no-window solution was found in the bridge scripts/notes.
 [Logs and source-frame evidence](results/unity-desktop-mirror-2026-10-03/summary.json)
 are archived.
@@ -1038,17 +1041,17 @@ export MWXR_IN_PROCESS_PREFIX="$bridge/build-in-process/prefix-core"
 export XRT_MACOS_CLIENT_COMPOSITOR=1
 unset XR_RUNTIME_JSON XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR IPC_IGNORE_VERSION
 
-# Underture: native Unity headless mode, keeping D3D11.
+# Underture: preserve headset rendering while moving the mirror off-screen.
 cd "$bridge/build-in-process/games/Underture"
-MWXR_DESKTOP_MIRROR=window "$bridge/scripts/run-in-process-openxr.zsh" "$PWD/Underture.exe" -force-d3d11 -batchmode -logFile 'C:\openxr\underture-batchmode.log'
+MWXR_DESKTOP_MIRROR=offscreen "$bridge/scripts/run-in-process-openxr.zsh" "$PWD/Underture.exe" -force-d3d11 -logFile 'C:\openxr\underture-offscreen.log'
 
 # InMind: preserve graphics while moving the mirror off-screen.
 cd "$bridge/build-in-process/games/InMind"
 MWXR_DESKTOP_MIRROR=offscreen "$bridge/scripts/run-in-process-openxr.zsh" "$PWD/InMind.exe" -force-d3d11 -logFile 'C:\openxr\inmind-offscreen.log'
 ```
 
-Removing `-batchmode` for Underture or choosing `MWXR_DESKTOP_MIRROR=window`
-for InMind restores the previous desktop-window launch. No Monado source or
+Choosing `MWXR_DESKTOP_MIRROR=window` for either game restores the previous
+desktop-window launch. Keep `-batchmode` absent in both cases. No Monado source or
 Wine/DXMT modification was needed.
 
 ### Next blocking acceptance requirement

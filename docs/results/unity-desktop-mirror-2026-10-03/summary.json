@@ -1,6 +1,6 @@
 {
   "date": "2026-10-03",
-  "Underture": "-batchmode preserves D3D11, OpenVR initialization, both eye swapchains and direct imports in the bounded test. No subjective picture/performance confirmation.",
+  "Underture": "Initial bounded batch-mode test observed D3D11/OpenVR initialization and image imports, but did not verify visible HMD output. User subsequently confirmed -batchmode disables HMD rendering; use MWXR_DESKTOP_MIRROR=offscreen without -batchmode.",
   "InMind": "-batchmode selects NullGfxDevice despite -force-d3d11 and explicitly reports VR requires D3D11. Use opt-in offscreen mirror mode instead.",
   "offscreen_public_runner": {
     "exit_before_timeout": null,
@@ -12,5 +12,6 @@
     "window_snapshot": "2026-10-03 22:36:46.851 mwxr-game-windows[425:74598089] pid=99958 owner=wine title=InMind layer=0 bounds={\n    Height = 1139;\n    Width = 1710;\n    X = \"-16000\";\n    Y = \"-16032\";\n}\n"
   },
   "scope": "Desktop mirror is moved outside screen bounds, not removed from rendering. Win32 window remains visible/active; native Monado headset layer is untouched. Window can briefly appear during startup. No new Monado source or Wine/DXMT changes.",
-  "historical_solution": "run-wine-alyx.zsh uses Source 2 -nowindow; not evidence of a previous Unity solution."
+  "historical_solution": "run-wine-alyx.zsh uses Source 2 -nowindow; not evidence of a previous Unity solution.",
+  "user_confirmation": "Both Underture and InMind require MWXR_DESKTOP_MIRROR=offscreen to remove the desktop mirror while retaining HMD rendering. This supersedes the initial Underture batch-mode recommendation."
 }
