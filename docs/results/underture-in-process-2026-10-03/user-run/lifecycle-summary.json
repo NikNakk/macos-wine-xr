@@ -1,0 +1,133 @@
+{
+  "window": {
+    "start_ns": 2748757281131460,
+    "end_ns": 2748817157411314
+  },
+  "joined_frames": 3746,
+  "stages_ms": {
+    "enqueue_to_worker_ms": {
+      "n": 3746,
+      "median": 2.903,
+      "p95": 7.97,
+      "max": 10.922
+    },
+    "worker_to_commit_ms": {
+      "n": 3746,
+      "median": 0.129,
+      "p95": 0.283,
+      "max": 0.497
+    },
+    "commit_to_scheduled_ms": {
+      "n": 3746,
+      "median": 0.13,
+      "p95": 1.824,
+      "max": 5.63
+    },
+    "commit_to_completion_ms": {
+      "n": 3746,
+      "median": 1.431,
+      "p95": 3.435,
+      "max": 8.871
+    },
+    "completion_to_physical_ms": {
+      "n": 3746,
+      "median": 38.353585,
+      "p95": 57.425501,
+      "max": 92.936043
+    },
+    "physical_after_pose_target_ms": {
+      "n": 3746,
+      "median": 9.890928,
+      "p95": 33.798909,
+      "max": 70.324403
+    },
+    "renderer_cpu_ms": {
+      "n": 3746,
+      "median": 0.806,
+      "p95": 1.389,
+      "max": 5.82
+    },
+    "drawable_prefetch_wait_ms": {
+      "n": 3746,
+      "median": 16.099,
+      "p95": 30.453,
+      "max": 47.691
+    },
+    "client_semaphore_wait_ms": {
+      "n": 3159,
+      "median": 14.692,
+      "p95": 16.925,
+      "max": 147.321
+    },
+    "app_reported_gpu_ms": {
+      "n": 3159,
+      "median": 15.498,
+      "p95": 18.24,
+      "max": 147.427
+    },
+    "app_draw_actual_ms": {
+      "n": 3160,
+      "median": 4.381,
+      "p95": 6.755,
+      "max": 663.136
+    }
+  },
+  "ca_callback_interval_ms": {
+    "n": 7177,
+    "median": 8.342,
+    "p95": 8.377,
+    "max": 12.356
+  },
+  "compositor_scheduler_samples": {
+    "1/31": 7186
+  },
+  "scheduler_transition_rows": [
+    {
+      "sample": "34",
+      "frame_id": "1",
+      "sample_ns": "2748754190084000",
+      "wall_since_previous_predict_ns": "582174000",
+      "thread_id": "74454543",
+      "display_period_ns": "8341708",
+      "cpu_since_previous_predict_ns": "0",
+      "configured_computation_ns": "2919597",
+      "configured_constraint_ns": "5839195",
+      "over_computation_budget": "0",
+      "basic_info_kr": "0",
+      "basic_policy": "1",
+      "basic_cpu_usage": "0",
+      "basic_run_state": "1",
+      "basic_flags": "0",
+      "policy_transition": "1",
+      "previous_basic_policy": "2",
+      "detail_sampled": "1",
+      "extended_info_kr": "0",
+      "extended_policy": "1",
+      "cur_priority": "31",
+      "base_priority": "31",
+      "max_priority": "63",
+      "policy_get_kr": "0",
+      "policy_get_default": "1",
+      "tc_period_ticks": "0",
+      "tc_computation_ticks": "5000000",
+      "tc_constraint_ticks": "10000000"
+    }
+  ],
+  "pose_target_reversals": 0,
+  "source_predicted_time_reversals": 0,
+  "pose_target_lateness_by_source_transition_ms": {
+    "new": {
+      "n": 2505,
+      "median": 10.190675,
+      "p95": 35.102151,
+      "max": 70.324403
+    },
+    "reused": {
+      "n": 1240,
+      "median": 9.323819,
+      "p95": 27.680158,
+      "max": 69.995266
+    }
+  },
+  "scope": "Client traces only; no server policy/sensor traces or destination warp poses. App reported GPU includes readiness latency, not isolated hardware GPU execution. Scheduler thread ID is cached globally in source and must not be used to prove thread continuity. No proof of alternating image/pose mismatch."
+}
