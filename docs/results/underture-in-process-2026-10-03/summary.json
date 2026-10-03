@@ -13,6 +13,15 @@
   "underture_result": "Still running at timeout; terminated by diagnostic harness. Two eye swapchains imported, session FOCUSED. No startup crash or fatal OpenComposite abort after fix.",
   "metal_validation": true,
   "minimum_frame_period_hint": "unset in client",
-  "visual_confirmation": "pending",
-  "zero_copy_scope": "DXMT wrapper uses exact runtime-owned Metal image. OpenComposite still copies/shader-draws the OpenVR app textures into OpenXR images upstream of this bridge; end-to-end OpenVR zero copy is not achieved."
+  "visual_confirmation": "User confirms visible game output; high subjective FPS with high-frequency backward-step motion judder.",
+  "zero_copy_scope": "DXMT wrapper uses exact runtime-owned Metal image. OpenComposite still copies/shader-draws the OpenVR app textures into OpenXR images upstream of this bridge; end-to-end OpenVR zero copy is not achieved.",
+  "agent_run_completion_cadence": {
+    "windows": 11,
+    "intervals": 2640,
+    "mean_ms": 11.542181818181819,
+    "rate_hz": 86.63873223905989,
+    "late_over_1_5_display_periods": 1120,
+    "late_percent": 42.42424242424242,
+    "scope": "Presentation worker completion timestamps, not physical presentation or application FPS; includes startup with Metal validation."
+  }
 }

@@ -832,6 +832,33 @@ client. Original proxy/native-host prefixes and installed ARM64 service were
 not modified. [Captured logs and summary](results/underture-in-process-2026-10-03/summary.json)
 record the failures and successful initialization.
 
+### Underture motion feedback, 2026-10-03
+
+The user confirmed the repaired launch displayed the game. Subjectively FPS felt
+high, but movement showed high-frequency judder, described as every other frame
+jumping slightly backwards. This establishes visible output; it does not establish
+smoothness, measured application FPS or controller compatibility.
+
+The earlier agent-run 40-second initialization test used Metal validation and
+included startup/session transitions. Eleven 240-interval presentation-worker
+completion windows averaged 11.542 ms (86.64 completions/s); 1,120/2,640 intervals
+(42.42%) exceeded 1.5 display periods. Window averages ranged from 9.159 to
+15.085 ms, with individual maxima up to 28.344 ms. CADisplayLink generally tracked
+8.342 ms / 119.88 Hz. These completion logs measure worker execution, not physical
+drawable presentation or new application frames. They cannot provide median/p95,
+identify alternating source-frame order, or characterize the user's separate run.
+Do not label 86.64 as game FPS. The user's Unity log has 3,113 repeated FMOD-system
+errors, another confound to investigate rather than an established judder cause.
+
+Current native evidence already distinguishes presentation stalls from regular
+source-refresh/parallax under rotational-only timewarp; see Monado's
+`doc/macos-psvr2-judder-evidence.md`. The Underture report is consistent with a
+pose/image timing or source-transition discontinuity, but is not proof of any
+specific cause. A moving-head capture should correlate application frame IDs,
+render poses, timewarp targets and physical presented timestamps, and explicitly
+check alternation/order. No predictor, pacing or Monado source change is justified
+by this feedback alone.
+
 ### Next blocking acceptance requirement
 
 AlphaBlend against the simulated HMD needs a small, opt-in simulated-driver
