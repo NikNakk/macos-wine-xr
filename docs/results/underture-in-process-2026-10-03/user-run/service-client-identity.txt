@@ -1,0 +1,18 @@
+ INFO [comp_window_macos_update_timings] CADisplayLink measured display period 8.341708ms (119.880 Hz)
+ INFO [client_connected] Client 1 connected
+ INFO [ipc_handle_instance_describe_client] Client info:
+	id: 1
+	application_name: 'OpenComposite_Underture'
+	pid: 77379
+	extensions:
+		ext_hand_tracking_enabled: false
+		ext_hand_tracking_data_source_enabled: false
+ INFO [client_disconnected] Client 1 disconnected
+ INFO [client_connected] Client 2 connected
+ INFO [ipc_handle_instance_describe_client] Client info:
+	id: 2
+	application_name: 'OpenComposite_Underture'
+	pid: 77379
+	extensions:
+		ext_hand_tracking_enabled: false
+		ext_hand_tracking_data_source_enabled: false

@@ -1,0 +1,60 @@
+{
+  "pid": 77379,
+  "identity": "OpenComposite_Underture, verified against service client descriptions",
+  "window": "Focused valid source range, excluding first 2 seconds and last 1 second",
+  "start_monotonic_ns": 2748757281131460,
+  "end_monotonic_ns": 2748817157411314,
+  "duration_s": 59.876279854,
+  "physical_presentations": 3746,
+  "physical_rate_hz": 62.57230915882731,
+  "physical_intervals_ms": {
+    "n": 3745,
+    "median": 16.682917,
+    "p95": 33.36575,
+    "p99": 33.367542,
+    "max": 41.708957
+  },
+  "physical_intervals_over_1_5_refresh": 2679,
+  "application_deliveries": 3160,
+  "application_delivery_rate_hz": 52.773990732092024,
+  "application_delivery_intervals_ms": {
+    "n": 3159,
+    "median": 16.788,
+    "p95": 32.613,
+    "p99": 36.486,
+    "max": 688.269
+  },
+  "physical_compositor_frame_id_reversals": 0,
+  "physical_source_frame_id_reversals": 0,
+  "physical_source_changes": 2505,
+  "physical_source_reuse_fraction": 0.3311081441922563,
+  "physical_minus_compositor_pose_target_ms": {
+    "n": 3746,
+    "median": 9.890928,
+    "p95": 33.798909,
+    "p99": 44.972013,
+    "max": 70.324403
+  },
+  "source_age_at_physical_ms": {
+    "n": 3746,
+    "median": 19.234147,
+    "p95": 53.336439,
+    "p99": 494.3265,
+    "max": 819.647751
+  },
+  "compositor_gpu_duration_ms": {
+    "n": 3746,
+    "median": 0.9090411476790905,
+    "p95": 2.079457975924015,
+    "p99": 2.472084015607834,
+    "max": 3.504666034132242
+  },
+  "gpu_end_to_physical_ms": {
+    "n": 3746,
+    "median": 38.420584,
+    "p95": 57.534959,
+    "p99": 73.247751,
+    "max": 93.059126
+  },
+  "limits": "No external pose ground truth or image-pixel validation during this moving run. No conclusion about subjective backward motion mechanism, end-to-end app FPS, or overhead attributable to Wine. Source IDs do not prove pose/image correspondence."
+}
