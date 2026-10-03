@@ -8,6 +8,8 @@ IMPORTS = kernel32 dxgi
 UNIX_LIBS = -lopenxr_loader
 SOURCES = \
 	graphics.cpp \
+	graphics_interop.cpp \
+	graphics_interop_dxmt.cpp \
 	graphics_interop_native.m \
 	graphics_native.m \
 	openxr.c \

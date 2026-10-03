@@ -1,18 +1,21 @@
 // Copyright 2026, Nick Kennedy
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // PE graphics wrappers follow Proton's manual entry-point model. The graphics
-// adaptation differs on macOS: DXMT retains native runtime-owned Metal objects.
+// adaptation differs on macOS: a GraphicsInterop backend exposes native
+// runtime-owned Metal objects as D3D11 resources. Nothing here is specific to
+// the D3D translation layer in use.
 #include "openxr_loader.h"
 #include <d3d11_4.h>
 #include <dxgi1_2.h>
 #include <stdio.h>
-#include "dxmt_native_interop.h"
-struct SwapState { wine_XrSwapchain *wrapper; ID3D11Texture2D **textures; XrSwapchainImageMetalKHR *metal; uint32_t count; SwapState *next; };
-struct SessionState { ID3D11Device *device; IDXMTNativeDevice2 *native;
-    ID3D11DeviceContext4 *context; ID3D11Fence *fence; SwapState *swapchains;
+#include "graphics_interop.h"
+struct SwapState { wine_XrSwapchain *wrapper; GraphicsImage *images; XrSwapchainImageMetalKHR *metal; uint32_t count; SwapState *next; };
+struct SessionState { ID3D11Device *device; GraphicsInterop *interop; SwapState *swapchains;
     CRITICAL_SECTION release_lock; };
 static wine_XrSession *active_session;
 static XrResult call_result(NTSTATUS status, XrResult result) { return status ? XR_ERROR_RUNTIME_FAILURE : result; }
+static int32_t native_graphics_call(void *params) { return UNIX_CALL(mw_graphics_native, params); }
+static const GraphicsNativeHost native_host = {native_graphics_call};
 extern "C" XrResult WINAPI xrGetD3D11GraphicsRequirementsKHR(XrInstance instance, XrSystemId system,
                                                            XrGraphicsRequirementsD3D11KHR *requirements)
 {
@@ -22,8 +25,8 @@ extern "C" XrResult WINAPI xrGetD3D11GraphicsRequirementsKHR(XrInstance instance
     NTSTATUS status = UNIX_CALL(xrGetD3D11GraphicsRequirementsKHR, &params);
     XrResult result = call_result(status, params.result);
     if (XR_FAILED(result)) return result;
-    // DXMT's default hardware adapter must match the native Metal device at
-    // session creation; that check is mandatory, rather than a silent fallback.
+    // The translation layer's default hardware adapter must match the native
+    // Metal device at session creation; that check is mandatory, not a fallback.
     IDXGIFactory1 *factory = nullptr; IDXGIAdapter1 *adapter = nullptr;
     HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void **)&factory);
     if (SUCCEEDED(hr)) hr = factory->EnumAdapters1(0, &adapter);
@@ -38,9 +41,7 @@ extern "C" XrResult WINAPI xrGetD3D11GraphicsRequirementsKHR(XrInstance instance
 static void destroy_state(SessionState *state)
 {
     DeleteCriticalSection(&state->release_lock);
-    if (state->fence) state->fence->Release();
-    if (state->context) state->context->Release();
-    if (state->native) state->native->Release();
+    delete state->interop;
     if (state->device) state->device->Release();
     free(state);
 }
@@ -59,26 +60,23 @@ extern "C" XrResult WINAPI xrCreateSession(XrInstance instance, const XrSessionC
     if (!wrapper || !state) { free(wrapper); free(state); return XR_ERROR_OUT_OF_MEMORY; }
     InitializeCriticalSection(&state->release_lock);
     state->device = binding->device; state->device->AddRef();
-    HRESULT hr = state->device->QueryInterface(DXMT_IID_NATIVE_DEVICE2, (void **)&state->native);
-    ID3D11DeviceContext *context = nullptr;
-    if (SUCCEEDED(hr)) { state->device->GetImmediateContext(&context);
-        hr = context->QueryInterface(__uuidof(ID3D11DeviceContext4), (void **)&state->context);
-        context->Release(); }
-    UINT64 metal_device = 0;
-    if (SUCCEEDED(hr)) hr = state->native->GetMetalDevice(&metal_device);
+    HRESULT hr = mw_graphics_interop_open(state->device, native_host, &state->interop);
     if (FAILED(hr)) {
-        fprintf(stderr, "wineopenxr: ERROR direct-object DXMT interface/context unavailable; copying is forbidden\n");
+        fprintf(stderr, "wineopenxr: ERROR no graphics interop backend for this D3D11 device hr=%#lx\n", hr);
         destroy_state(state); free(wrapper); return XR_ERROR_GRAPHICS_DEVICE_INVALID;
     }
-    wrapper->instance = parent; wrapper->metal_device = (void *)metal_device; wrapper->graphics = state;
+    wrapper->instance = parent; wrapper->metal_device = state->interop->metal_device(); wrapper->graphics = state;
     struct xrCreateSession_params params = {};
     params.instance = instance; params.createInfo = info; params.session = &wrapper->host_session; params.wine_session = wrapper;
     NTSTATUS status = UNIX_CALL(xrCreateSession, &params);
     XrResult result = call_result(status, params.result);
     if (XR_SUCCEEDED(result)) {
-        hr = state->native->ImportMetalSharedEvent((UINT64)wrapper->metal_event, &state->fence);
-        if (FAILED(hr)) {
-            fprintf(stderr, "wineopenxr: ERROR shared-event import failed; no copy fallback\n");
+        hr = state->interop->bind_completion_event(wrapper->metal_event);
+        if (SUCCEEDED(hr))
+            fprintf(stderr, "wineopenxr: session backend=%s api=D3D11 sync=%s\n", state->interop->name(),
+                    mw_graphics_sync_name(state->interop->sync()));
+        else {
+            fprintf(stderr, "wineopenxr: ERROR %s completion-event binding failed hr=%#lx\n", state->interop->name(), hr);
             struct xrDestroySession_params rollback = {(XrSession)wrapper};
             UNIX_CALL(xrDestroySession, &rollback);
             result = XR_ERROR_GRAPHICS_DEVICE_INVALID;
@@ -112,7 +110,7 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
     wine_XrSwapchain *wrapper = wine_swapchain_from_handle(swapchain);
     auto *state = (SwapState *)wrapper->graphics;
     auto *session = (SessionState *)wrapper->session->graphics;
-    if (!state->textures) {
+    if (!state->images) {
         struct xrEnumerateSwapchainImages_params params = {swapchain, 0, &state->count, nullptr};
         NTSTATUS status = UNIX_CALL(xrEnumerateSwapchainImages, &params);
         XrResult result = call_result(status, params.result);
@@ -120,8 +118,8 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
         if (capacity && capacity < state->count) { *count = state->count; return XR_ERROR_SIZE_INSUFFICIENT; }
         if (!capacity) { *count = state->count; return result; }
         auto *metal = (XrSwapchainImageMetalKHR *)calloc(state->count, sizeof(XrSwapchainImageMetalKHR));
-        auto **textures = (ID3D11Texture2D **)calloc(state->count, sizeof(ID3D11Texture2D *));
-        if (!metal || !textures) { free(metal); free(textures); return XR_ERROR_OUT_OF_MEMORY; }
+        auto *images = (GraphicsImage *)calloc(state->count, sizeof(GraphicsImage));
+        if (!metal || !images) { free(metal); free(images); return XR_ERROR_OUT_OF_MEMORY; }
         for (uint32_t i = 0; i < state->count; ++i) metal[i].type = XR_TYPE_SWAPCHAIN_IMAGE_METAL_KHR;
         params.imageCapacityInput = state->count; params.images = (XrSwapchainImageBaseHeader *)metal;
         status = UNIX_CALL(xrEnumerateSwapchainImages, &params); result = call_result(status, params.result);
@@ -129,16 +127,30 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
         desc.Width = wrapper->info.width; desc.Height = wrapper->info.height; desc.ArraySize = wrapper->info.arraySize;
         desc.MipLevels = 1; desc.SampleDesc.Count = 1; desc.Format = (DXGI_FORMAT)wrapper->info.format;
         desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        GraphicsInterop *interop = session->interop;
+        uint32_t zero_copy = 0, iosurface = 0;
         if (XR_SUCCEEDED(result)) for (uint32_t i = 0; i < state->count; ++i) {
-            HRESULT hr = session->native->ImportMetalTexture((UINT64)metal[i].texture, &desc, &textures[i]);
+            HRESULT hr = interop->import_image(metal[i].texture, desc, &images[i]);
             if (FAILED(hr)) {
-                fprintf(stderr, "wineopenxr: ERROR zero-copy import rejected image=%u Metal=%p; copying/blitting forbidden\n", i, metal[i].texture);
+                fprintf(stderr, "wineopenxr: ERROR %s import rejected image=%u Metal=%p hr=%#lx; no implicit copy\n",
+                        interop->name(), i, metal[i].texture, hr);
                 result = XR_ERROR_RUNTIME_FAILURE; break;
             }
-            fprintf(stderr, "wineopenxr: zero-copy image=%u Metal=%p D3D11=%p array=%u\n", i, metal[i].texture, textures[i], desc.ArraySize);
+            zero_copy += images[i].zero_copy; iosurface += images[i].iosurface;
+            fprintf(stderr, "wineopenxr: %s image=%u Metal=%p D3D11=%p array=%u\n", images[i].zero_copy ? "zero-copy" : "COPY",
+                    i, metal[i].texture, images[i].texture, desc.ArraySize);
         }
-        if (XR_FAILED(result)) { free(metal); for (uint32_t i = 0; i < state->count; ++i) if (textures[i]) textures[i]->Release(); free(textures); return result; }
-        state->textures = textures; state->metal = metal;
+        if (XR_FAILED(result)) {
+            for (uint32_t i = 0; i < state->count; ++i) interop->release_image(&images[i]);
+            free(metal); free(images); return result;
+        }
+        // One summary per swapchain; release paths never log per frame.
+        fprintf(stderr, "wineopenxr: swapchain=%p backend=%s api=D3D11 images=%u %ux%u array=%u format=%u "
+                "native=MTLTexture iosurface=%u/%u sync=%s zero-copy=%s%s\n", (void *)wrapper, interop->name(),
+                state->count, desc.Width, desc.Height, desc.ArraySize, (unsigned)desc.Format, iosurface, state->count,
+                mw_graphics_sync_name(interop->sync()), zero_copy == state->count ? "yes" : "no",
+                zero_copy == state->count ? "" : " fallback=explicit-gpu-blit");
+        state->images = images; state->metal = metal;
     }
     *count = state->count;
     if (!capacity) return XR_SUCCESS;
@@ -146,7 +158,7 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
     auto *d3d = (XrSwapchainImageD3D11KHR *)images;
     for (uint32_t i = 0; i < state->count; ++i) {
         if (d3d[i].type != XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR || d3d[i].next) return XR_ERROR_VALIDATION_FAILURE;
-        d3d[i].texture = state->textures[i];
+        d3d[i].texture = state->images[i].texture;
     }
     return XR_SUCCESS;
 }
@@ -175,8 +187,8 @@ extern "C" XrResult WINAPI xrDestroySwapchain(XrSwapchain swapchain)
     SwapState **link = &parent->swapchains;
     while (*link && *link != state) link = &(*link)->next;
     if (*link) *link = state->next;
-    for (uint32_t i = 0; state->textures && i < state->count; ++i) state->textures[i]->Release();
-    free(state->metal); free(state->textures); free(state); free(wrapper);
+    for (uint32_t i = 0; state->images && i < state->count; ++i) parent->interop->release_image(&state->images[i]);
+    free(state->metal); free(state->images); free(state); free(wrapper);
     return result;
 }
 extern "C" XrResult WINAPI xrDestroySession(XrSession session)
@@ -187,7 +199,7 @@ extern "C" XrResult WINAPI xrDestroySession(XrSession session)
         XrResult result = xrDestroySwapchain((XrSwapchain)state->swapchains->wrapper);
         if (XR_FAILED(result)) return result;
     }
-    state->context->Flush();
+    state->interop->flush();
     struct xrDestroySession_params params = {session};
     NTSTATUS status = UNIX_CALL(xrDestroySession, &params);
     XrResult result = call_result(status, params.result);
@@ -204,12 +216,12 @@ extern "C" XrResult WINAPI xrReleaseSwapchainImage(XrSwapchain swapchain, const 
     auto *wrapper = wine_swapchain_from_handle(swapchain);
     auto *session = wrapper->session; auto *state = (SessionState *)session->graphics;
     EnterCriticalSection(&state->release_lock);
-    HRESULT hr = state->context->Signal(state->fence, ++session->fence_value);
+    HRESULT hr = state->interop->signal_completion(++session->fence_value);
     if (FAILED(hr)) {
         LeaveCriticalSection(&state->release_lock);
-        fprintf(stderr, "wineopenxr: ERROR producer fence signal failed\n"); return XR_ERROR_RUNTIME_FAILURE;
+        fprintf(stderr, "wineopenxr: ERROR %s producer completion signal failed hr=%#lx\n", state->interop->name(), hr);
+        return XR_ERROR_RUNTIME_FAILURE;
     }
-    state->context->Flush();
     struct xrReleaseSwapchainImage_params params = {swapchain, info};
     NTSTATUS status = UNIX_CALL(xrReleaseSwapchainImage, &params);
     XrResult result = call_result(status, params.result);
