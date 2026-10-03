@@ -50,6 +50,8 @@ DXMT-specific. Those four operations are the interface.
   import, IOSurface import/export, shared texture, shared event, keyed
   mutex, zero-copy import/export and copy fallback.
 - `metal_device()`: the borrowed `MTLDevice` behind the D3D device.
+- `extra_swapchain_usage()`: OpenXR usage flags the backend needs on native
+  images (D3DMetal: `MUTABLE_FORMAT`). The app's swapchain info is unchanged.
 - `bind_completion_event(MTLSharedEvent)` and `sync()`:
   `SharedEventGpu` or `FenceCpuWait`.
 - `import_image(MTLTexture, D3D11_TEXTURE2D_DESC, GraphicsImage*)` returns the
@@ -75,12 +77,25 @@ not offered here.
 
 ## Phase 2: D3DMetal findings
 
-### Local availability
+### Test runtime
 
-No Game Porting Toolkit, `D3DMetal.framework` or `libd3dshared.dylib` is
-installed on this Mac (searched `/Applications`, `/Library`, `~`, `/opt`,
-`/usr/local`). The D3DMetal backend is therefore built but not executed.
-Apple binaries are not vendored.
+Initially no Game Porting Toolkit was installed. The user then supplied
+`Game_Porting_Toolkit_4.0_beta_2.dmg`. Its nested "Evaluation environment for
+Windows games 4.0 beta 2" image holds `redist/lib`:
+
+- `external/D3DMetal.framework` 4.0b2 and `external/libd3dshared.dylib`, both
+  x86_64.
+- PE `d3d10/11/12`, `dxgi`, `nvapi64` and `nvngx-on-metalfx` DLLs.
+- Matching unix `.so` links to `libd3dshared.dylib`.
+
+That tree was extracted outside the repository. No Apple binary is vendored.
+
+The Wine is CrossOver 26.3.0 (based on Wine 11.0), built from CodeWeavers'
+FOSS tarball (`crossover-sources-26.3.0.tar.gz`, SHA-256
+`ac99c8ca4b3848f3e81784135f023df266b61c2345726ea55a50b3e030dd6872`). It is
+x86_64 only, with the optional libraries disabled; see "Building the GPTK
+runtime". `scripts/install-gptk-runtime.zsh` then applies the GPTK files to a
+copy of that install.
 
 ### How D3DMetal is loaded under Wine
 
@@ -110,19 +125,21 @@ Apple binaries are not vendored.
   suballocates from pools. Its D3D11 cross-process fences publish completion
   from the CPU.
 
-Consequences for this bridge:
+Consequences for this bridge, confirmed with GPTK 4.0b2:
 
-1. The app's `ID3D11Device*` may be a native D3DMetal object or a PE object
-   that thunks through `__wine_unix_call`. Identification accepts either: a
-   vtable inside `D3DMetal.framework`, or a PE vtable while the framework is
-   loaded and DXMT has declined.
-2. Either way, D3DMetal's Metal allocations run on the calling OS thread, as
-   Wine unix calls do, unless D3DMetal defers them to a worker. Thread-local
-   arming relies on this. It is checked on every call, not assumed.
-3. The in-process runtime is currently built and tested against stock Wine
-   11.10. A D3DMetal test needs `wineopenxr` loaded into a CrossOver-based GPTK
-   Wine. That Wine's unix-call ABI must match the
-   `__wine_init_unix_call`/`__wine_unix_call_funcs` split used here.
+1. In CrossOver 26.3 + GPTK 4.0b2 the app's `ID3D11Device*` is a **PE object**
+   (`d3dmetal device PE object, framework loaded`), not a native D3DMetal
+   vtable. Identification by loaded framework is therefore required.
+2. D3DMetal's Metal allocations for `CreateTexture2D` and `CreateFence` **run
+   on the calling thread** and go through `-[MTLDevice
+   newTextureWithDescriptor:]` and `-[MTLDevice newEvent]`, so thread-local
+   arming works. GPTK 4.0b2 exports `D3DMDevice::UseInternalHeaps`. With it
+   cleared during arming, no heap suballocation was seen.
+3. For a DEFAULT render-target/shader-resource texture, D3DMetal requests
+   **Shared** storage and usage `ShaderRead|RenderTarget|PixelFormatView`
+   (`0x15`), whatever the format.
+4. D3DMetal backs `ID3D11Fence` with a plain **`MTLEvent`** (`newEvent`), not an
+   `MTLSharedEvent`.
 
 ### Central question
 
@@ -130,32 +147,37 @@ Consequences for this bridge:
 > through D3DMetal as an `ID3D11Texture2D` referring to the same underlying
 > allocation, with GPU-side synchronization and no texture copy?
 
-**No supported API can do it.** D3DMetal exposes no import of an existing
+**There is no supported API.** D3DMetal exposes no import of an existing
 `MTLTexture`, `IOSurface` or `MTLSharedEvent`, and its D3D sharing entry points
-are stubs in v3.0. The only route is allocation interposition: arm the thread,
-call `CreateTexture2D`, and have D3DMetal's own `newTextureWithDescriptor:`
-return the runtime's texture. This is implemented and its mechanism is
-verified with plain Metal. It is **not demonstrated with D3DMetal**.
+are stubs (v3.0, per d3dmetal-native). Allocation interposition works instead:
+arm the thread, call `CreateTexture2D`, and D3DMetal's own
+`newTextureWithDescriptor:` returns the runtime texture.
 
-For the *IOSurface-backed* case, the answer for D3DMetal ≤ 3.0 is **blocked
-even by interposition**. IOSurface textures use Shared storage and have no
-`-heap`, and d3dmetal-native found that D3DMetal zero-fills new Shared
-textures through `[[tex heap] newBufferWithLength:...]`, which would
-dereference nil. The interposer refuses these with
-`storage-mismatch-or-heapless-shared`. Monado's in-process direct swapchains
-are Private `newSharedTextureWithDescriptor:` textures and are not affected.
-A shadow-heap shim, as d3dmetal-native uses, could lift this but is not
-implemented.
+- **Runtime-owned Private `MTLTexture`** (Monado's in-process direct
+  swapchains, `newSharedTextureWithDescriptor:`): **yes, zero copy with GPU
+  synchronization, demonstrated** with GPTK 4.0b2 under Metal validation. D3D11
+  renders into the runtime's object, native Metal reads the pixels, native
+  writes are visible to D3D11, and the D3D11 fence signals the session
+  `MTLSharedEvent` that the runtime queue waits on. Two rules make this work.
+  A Private runtime texture may serve D3DMetal's Shared request; D3DMetal uses
+  these textures only on the GPU, and validation would assert on CPU access.
+  And the session `MTLSharedEvent` is handed out from `newEvent`, since an
+  `MTLSharedEvent` is an `MTLEvent`.
+- **IOSurface-backed (Shared, heapless) texture**: **refused, not tested.**
+  d3dmetal-native found that D3DMetal 3.0 zero-fills new Shared textures
+  through `[[tex heap] newBufferWithLength:...]`, which would dereference nil.
+  Whether 4.0b2 still does so is untested; the interposer refuses these with
+  `storage-mismatch-or-heapless-shared`. A shadow-heap shim like
+  d3dmetal-native's could lift it. Monado's in-process path does not need it.
 
-Remaining unknowns, each reported precisely at runtime:
+Diagnostics for runs on other GPTK/Wine versions:
 
-| Unknown | Reported as |
+| Condition | Reported as |
 | --- | --- |
-| `CreateTexture2D` allocates on another thread or through an unhooked selector | `not-reached` (probe texture at session start) |
-| D3DMetal requests usage/format/storage that differs from the runtime image | `usage-not-subset`, `descriptor-mismatch`, `storage-mismatch...` with both descriptors logged |
-| Pool suballocation despite clearing `UseInternalHeaps` | `heap-suballocation` |
-| D3DMetal uses a private `MTLEvent` for D3D11 fences | `private-mtlevent`, so sync becomes `fence-cpu-wait` |
-| D3DMetal relies on private texture state (residency, aliasing) the runtime texture lacks | not detectable in advance; needs a GPU capture and pixel probe on the target Mac |
+| Allocation on another thread or through an unhooked selector | `not-reached` (device-capture texture at session start) |
+| Requested usage/format/storage differs from the runtime image | `usage-not-subset`, `descriptor-mismatch`, `storage-mismatch...`, with both descriptors logged |
+| Pool suballocation | `heap-suballocation` |
+| Fence not created through `newSharedEvent`/`newEvent` | `not-reached`, so sync becomes `fence-cpu-wait` |
 
 ## Phase 3/4: D3DMetal backend and synchronization
 
@@ -166,6 +188,10 @@ Remaining unknowns, each reported precisely at runtime:
   placement), `newSharedEvent` and `newEvent` on the process's `MTLDevice`
   classes. One capture-only 1×1 `CreateTexture2D` learns D3DMetal's
   `MTLDevice`; failure is a clear error.
+- **Swapchain usage**: `extra_swapchain_usage()` returns
+  `XR_SWAPCHAIN_USAGE_MUTABLE_FORMAT_BIT`, so the native runtime creates its
+  images with `PixelFormatView` (Monado maps the flag). The app's own create
+  info is unchanged. This is a standard OpenXR flag; Monado is not changed.
 - **Images**: for each runtime image, arm with that `MTLTexture`, then
   `CreateTexture2D(desc)`, then disarm. `substituted` means zero copy, and the
   D3D texture refers to the exact runtime object (+1 retained, released with
@@ -176,22 +202,23 @@ Remaining unknowns, each reported precisely at runtime:
   completion wait, the native half encodes `copyFromTexture:toTexture:` into
   the runtime image on the session queue. The swapchain log says
   `zero-copy=no fallback=explicit-gpu-blit` and the caps include
-  `copy-fallback`.
+  `copy-fallback`. **Not exercised**: with GPTK 4.0b2 every Monado image is
+  imported without a copy.
 - **Sync**: arm the session `MTLSharedEvent`, then
-  `ID3D11Device5::CreateFence`. If substituted, the D3D11 fence is the session
-  event and release is the same as DXMT: `Signal`, `Flush`, native
-  `encodeWaitForEvent`. That is `shared-event-gpu-wait`, although whether
-  D3DMetal encodes the signal on the GPU or sets it on completion is internal
-  to D3DMetal. Otherwise `fence-cpu-wait`: `Signal`, `SetEventOnCompletion`,
-  `Flush`, wait for the Win32 event (5 s limit), then set the session event
-  from the CPU. This is a real CPU stall on the app thread, used only when the
-  GPU route was refused, and it is logged at session creation.
+  `ID3D11Device5::CreateFence`. D3DMetal's `newEvent` receives the session
+  event, so the D3D11 fence's GPU signals land on it. Release is then the same
+  as DXMT: `Signal`, `Flush`, native `encodeWaitForEvent`
+  (`shared-event-gpu-wait`). If no substitution happens, the fallback is
+  `fence-cpu-wait`: `Signal`, `SetEventOnCompletion`, `Flush`, wait for the
+  Win32 event (5 s limit), then set the session event from the CPU. That is a
+  CPU stall on the app thread, logged at session creation. It is not used with
+  GPTK 4.0b2.
 
-| Point | DXMT | D3DMetal (substituted fence) | D3DMetal (fallback) |
+| Point | DXMT | D3DMetal 4.0b2 | D3DMetal fallback (unused) |
 | --- | --- | --- | --- |
 | `xrAcquireSwapchainImage` | runtime | runtime (index recorded in PE) | same |
 | `xrWaitSwapchainImage` | runtime | runtime | runtime |
-| `xrReleaseSwapchainImage` | fence = session event, `Signal`+`Flush`; native queue GPU wait | same | CPU wait on D3DMetal fence, CPU event signal; native queue wait already satisfied |
+| `xrReleaseSwapchainImage` | fence = session event, `Signal`+`Flush`; native queue GPU wait | same | CPU wait on D3DMetal fence, CPU event signal |
 | Remaining CPU wait | Monado's own empty-buffer completion in release (all backends) | same | plus the producer completion wait |
 
 The Monado release behaviour (commit and wait an empty command buffer on the
@@ -205,73 +232,102 @@ d3dmetal-native already handles D3D12 committed/placed resources and fences.
 The OpenXR side needs D3D12 binding, queue and resource-state handling,
 following Proton's D3D12 path. Not started.
 
-## Phase 5: tests and results (2026-10-03, Apple M5, macOS 26.6.2)
+## Phase 5: tests and results (2026-10-03/04, Apple M5, macOS 26.6.2)
 
-| Test | Result |
-| --- | --- |
-| Pre-refactor baseline: `in_process_swapchain.exe`, isolated simulated Monado `v25.1.0-2074-g1b400a8e7` | 12/12 pixel checks PASS |
-| After DXMT refactor, same probe | 12/12 PASS, identical log semantics plus summaries |
-| `graphics_interposer_test`, arm64 and x86_64, `MTL_DEBUG_LAYER` 0 and 1 | PASS: exact-object substitution (2D, array), refusal of descriptor/usage/storage/IOSurface, capture-only, per-thread isolation, heap report, shared-event substitution, private-event report, CPU signal |
-| ctest (rpc_serialization, rpc_transport, graphics_interposer, native_capability, tcp_auth) | 5/5 PASS |
-| `graphics_interop_probe.exe` under direct-object DXMT, Wine 11.10, Metal validation | 0 failures. Private 2D, Private array (2 slices) and IOSurface Shared 2D: zero copy, event not early, native reads D3D11 clears, D3D11 reads native writes |
-| Same, `MWXR_GRAPHICS_BACKEND=dxmt` / `d3dmetal` / invalid | PASS / clean `E_NOINTERFACE` refusal / clean `E_INVALIDARG` |
-| Final build: runtime-image probe, core gate | 12/12 PASS; gate PASS |
-| Khronos `hello_xr` D3D11, Opaque, ~30 s, simulated Monado, Metal validation | FOCUSED, 2,713 delivered frames, exit 0, both swapchains `zero-copy=yes`, no validation errors in client or service logs |
+All OpenXR runs used an isolated simulated-only ARM64 Monado service and the
+matching x86_64 client (`v25.1.0-2074-g1b400a8e7`), with Metal validation
+enabled.
 
-Not run: any D3DMetal execution, PS VR2 hardware and the Meta runtime (no
-code there changed), and proxy/native-host end-to-end runs (no code there
+| Test | DXMT (Wine 11.10) | D3DMetal 4.0b2 (CrossOver 26.3) |
+| --- | --- | --- |
+| Pre-refactor `in_process_swapchain.exe` | 12/12 PASS | n/a |
+| `graphics_interop_probe.exe` | 17 PASS: Private 2D, Private 2-slice array and IOSurface 2D; zero copy; event not early; native reads D3D11; D3D11 reads native | 12 PASS for Private 2D and array; IOSurface REFUSED as designed; sync `shared-event-gpu-wait` |
+| `in_process_swapchain.exe` (now backend-neutral; pixel checks in the runtime's own images) | 12/12 PASS | 12/12 PASS |
+| Khronos `hello_xr` D3D11, Opaque, 30 s | FOCUSED, 3,044 frames, exit 0, 2 swapchains `zero-copy=yes` | FOCUSED, 3,146 frames, exit 0, 2 swapchains `zero-copy=yes` |
+| Metal validation assertions (client and service) | 0 | 0 |
+
+Independent of the D3D runtime:
+
+- `graphics_interposer_test`, arm64 and x86_64, `MTL_DEBUG_LAYER` 0 and 1:
+  PASS.
+- ctest (rpc_serialization, rpc_transport, graphics_interposer,
+  native_capability, tcp_auth): 5/5 PASS.
+- Selection with `MWXR_GRAPHICS_BACKEND=d3dmetal` on DXMT: clean
+  `E_NOINTERFACE`. With an invalid value: clean `E_INVALIDARG`.
+
+Not run: PS VR2 hardware, the Meta runtime, real games on D3DMetal, the
+`d3dmetal-copy` fallback, and proxy/native-host end-to-end runs (no code there
 changed; their native targets build and their ctest suites pass).
 
 How copies are detected: DXMT retains the exact object. D3DMetal substitution
-returns the exact armed pointer, which the interposer test proves with plain
-Metal. The probe's native readback then sees D3D11 writes in the runtime
-object without any bridge blit. For a Metal GPU capture, set
+returns the exact armed pointer (asserted by the interposer test, and logged
+as `substituted`). The pixel probes then see D3D11 writes in the runtime's own
+objects. A bridge copy can only come from `fallback=explicit-gpu-blit`, which
+is logged per swapchain. For a Metal GPU capture, set
 `MTL_CAPTURE_ENABLED=1`. A zero-copy run contains no bridge blit encoder; the
-only blits come from the probe's own readback (`verify`) or from
-`fallback=explicit-gpu-blit`.
+only blits are the probes' own readbacks.
+
+## Building the GPTK runtime
+
+```zsh
+# CrossOver FOSS source, x86_64 Wine (needs bison >= 3: brew install bison).
+# Use a macOS 26 SDK on macOS 26: with the 27.0 SDK configure enables pipe2(),
+# which macOS 26 lacks, and wineserver startup crashes in init_thread_pipe.
+export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk
+arch -x86_64 env BISON=/opt/homebrew/opt/bison/bin/bison CC="clang -arch x86_64" \
+  CXX="clang++ -arch x86_64" ../sources/wine/configure --prefix=$PWD/../install \
+  --enable-archs=x86_64 --disable-tests --without-x --without-freetype --without-gnutls \
+  --without-gstreamer --without-sdl --without-cups --without-sane --without-usb \
+  --without-v4l2 --without-pcap --without-krb5 --without-gphoto --without-capi \
+  --without-netapi --without-opencl --without-ffmpeg
+# CrossOver HACK 25909 in win32u/vulkan.c needs SONAME_LIBVULKAN even when no
+# x86_64 Vulkan was found; define it in the generated include/config.h:
+printf '#ifndef SONAME_LIBVULKAN\n#define SONAME_LIBVULKAN "libvulkan.1.dylib"\n#endif\n' >> include/config.h
+arch -x86_64 make -j && arch -x86_64 make install
+
+MWXR_CROSSOVER_INSTALL=/path/to/install MWXR_GPTK_LIB=/path/to/redist/lib \
+MWXR_GPTK_RUNTIME=/path/to/runtime-gptk scripts/install-gptk-runtime.zsh
+```
+
+Build `wineopenxr` and the probes against the CrossOver SDK. Set
+`MWXR_WINE_SDK` to the install, `MWXR_WINE_SOURCE` to `sources/wine` and
+`MWXR_WINE_RUNTIME` to the GPTK runtime, with a separate
+`MWXR_IN_PROCESS_BUILD`. The runners skip the Wine Mono/Gecko dialogs during
+`wineboot`.
 
 ## Commands
 
-The interop probe needs no OpenXR runtime:
-
 ```zsh
-export DXMT_SOURCE_DIR=... MWXR_WINE_SDK=... MWXR_WINE_SOURCE=...
 scripts/build-graphics-interop-probe.zsh
 scripts/run-graphics-interop-probe.zsh                     # DXMT runtime
-```
-
-On a Mac with GPTK, the Wine runtime must already carry the GPTK overlay
-(D3DMetal PE modules and the `libd3dshared` unix modules), for example a
-Silo/CrossOver runtime:
-
-```zsh
-MWXR_PROBE_WINE=/path/to/gptk-wine MWXR_PROBE_PREFIX=/path/to/new-prefix \
+MWXR_PROBE_WINE=/path/to/runtime-gptk MWXR_PROBE_PREFIX=/path/to/prefix-gptk \
 MWXR_GRAPHICS_BACKEND=d3dmetal scripts/run-graphics-interop-probe.zsh
-```
 
-Expected outcomes to record: the `d3dmetal device ...` line; the interposer
-hook count and heap-pool switch; the bind line, which gives the sync mode;
-for each case, `zero-copy=yes` with PASS, or `REFUSED` with the logged
-detail. The IOSurface case is expected to be REFUSED (`storage-...`). The
-`wineopenxr.so` and probe `.so` may need rebuilding against that Wine's
-headers. Then run `in_process_swapchain.exe` and `hello_xr` the same way with
-`MWXR_GRAPHICS_BACKEND=d3dmetal`. The runtime-image probe imports its own
-event through DXMT and must be adapted for D3DMetal first. Use `d3dmetal-copy`
-only as a labelled comparison.
+MWXR_IN_PROCESS_WINE=/path/to/runtime-gptk MWXR_IN_PROCESS_PREFIX=/path/to/prefix-gptk \
+MWXR_GRAPHICS_BACKEND=d3dmetal scripts/run-in-process-simulated.zsh app.exe ...
+```
 
 ## Status summary
 
-1. **Implemented and tested:** interface and selection; DXMT backend with no
-   behaviour change (OpenXR probe, hello_xr, interop probe); the native
-   interposer mechanism (plain-Metal test, both architectures); the
-   interop probe harness; backend selection errors.
-2. **Implemented, not runtime-tested:** the D3DMetal backend (identification,
-   device capture, image substitution, fence substitution, CPU-wait sync,
-   copy fallback and its release blit). No D3DMetal is available here.
-3. **Investigated, blocked:** no D3DMetal API to import external textures,
-   IOSurfaces or events, and sharing is stubbed in v3.0. IOSurface-backed,
-   heapless Shared runtime textures cannot be substituted safely into
-   D3DMetal ≤ 3.0. Zero copy with D3DMetal is not demonstrated.
-4. **Future:** run on a GPTK Mac; a shadow-heap shim for Shared/IOSurface
-   images; D3D12; a GPTK-Wine build recipe for `wineopenxr`; adapting the
-   runtime-image probe to the interop API.
+1. **Implemented and tested:**
+   - The interface and selection.
+   - The DXMT backend with no behaviour change.
+   - The D3DMetal backend with GPTK 4.0b2 on CrossOver 26.3, zero copy with
+     GPU shared-event synchronization: interop probe, runtime-image pixel
+     probe and `hello_xr` against simulated Monado.
+   - The native interposer (both architectures).
+   - The probes, and the reproducible GPTK runtime recipe.
+2. **Implemented, not runtime-tested:**
+   - The `d3dmetal-copy` fallback and its release blit.
+   - The `fence-cpu-wait` sync fallback.
+   - Native (non-PE) D3DMetal vtable identification.
+3. **Investigated, blocked or unsupported:**
+   - D3DMetal has no API to import external textures, IOSurfaces or events.
+   - IOSurface-backed (heapless Shared) runtime textures are refused, pending
+     a shadow-heap shim; the 4.0b2 behaviour there is untested.
+4. **Future:**
+   - PS VR2 hardware and real-game runs on D3DMetal; Game Mode / client
+     compositor runs.
+   - The shadow-heap shim.
+   - D3D12.
+   - Checking new GPTK releases against the diagnostics table.
