@@ -9,7 +9,8 @@
 #include <dxgi1_2.h>
 #include <stdio.h>
 #include "graphics_interop.h"
-struct SwapState { wine_XrSwapchain *wrapper; GraphicsImage *images; XrSwapchainImageMetalKHR *metal; uint32_t count; SwapState *next; };
+struct SwapState { wine_XrSwapchain *wrapper; GraphicsImage *images; XrSwapchainImageMetalKHR *metal; uint32_t count;
+    uint32_t *acquired, acquired_head, acquired_count; SwapState *next; };
 struct SessionState { ID3D11Device *device; GraphicsInterop *interop; SwapState *swapchains;
     CRITICAL_SECTION release_lock; };
 static wine_XrSession *active_session;
@@ -119,7 +120,8 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
         if (!capacity) { *count = state->count; return result; }
         auto *metal = (XrSwapchainImageMetalKHR *)calloc(state->count, sizeof(XrSwapchainImageMetalKHR));
         auto *images = (GraphicsImage *)calloc(state->count, sizeof(GraphicsImage));
-        if (!metal || !images) { free(metal); free(images); return XR_ERROR_OUT_OF_MEMORY; }
+        auto *acquired = (uint32_t *)calloc(state->count, sizeof(uint32_t));
+        if (!metal || !images || !acquired) { free(metal); free(images); free(acquired); return XR_ERROR_OUT_OF_MEMORY; }
         for (uint32_t i = 0; i < state->count; ++i) metal[i].type = XR_TYPE_SWAPCHAIN_IMAGE_METAL_KHR;
         params.imageCapacityInput = state->count; params.images = (XrSwapchainImageBaseHeader *)metal;
         status = UNIX_CALL(xrEnumerateSwapchainImages, &params); result = call_result(status, params.result);
@@ -142,7 +144,7 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
         }
         if (XR_FAILED(result)) {
             for (uint32_t i = 0; i < state->count; ++i) interop->release_image(&images[i]);
-            free(metal); free(images); return result;
+            free(metal); free(images); free(acquired); return result;
         }
         // One summary per swapchain; release paths never log per frame.
         fprintf(stderr, "wineopenxr: swapchain=%p backend=%s api=D3D11 images=%u %ux%u array=%u format=%u "
@@ -150,7 +152,7 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
                 state->count, desc.Width, desc.Height, desc.ArraySize, (unsigned)desc.Format, iosurface, state->count,
                 mw_graphics_sync_name(interop->sync()), zero_copy == state->count ? "yes" : "no",
                 zero_copy == state->count ? "" : " fallback=explicit-gpu-blit");
-        state->images = images; state->metal = metal;
+        state->images = images; state->metal = metal; state->acquired = acquired;
     }
     *count = state->count;
     if (!capacity) return XR_SUCCESS;
@@ -188,7 +190,7 @@ extern "C" XrResult WINAPI xrDestroySwapchain(XrSwapchain swapchain)
     while (*link && *link != state) link = &(*link)->next;
     if (*link) *link = state->next;
     for (uint32_t i = 0; state->images && i < state->count; ++i) parent->interop->release_image(&state->images[i]);
-    free(state->metal); free(state->images); free(state); free(wrapper);
+    free(state->metal); free(state->images); free(state->acquired); free(state); free(wrapper);
     return result;
 }
 extern "C" XrResult WINAPI xrDestroySession(XrSession session)
@@ -211,6 +213,19 @@ extern "C" XrResult mw_pe_cleanup_instance(wine_XrInstance *instance)
     if (active_session && active_session->instance == instance) return xrDestroySession((XrSession)active_session);
     return XR_SUCCESS;
 }
+// Acquired indices are released in FIFO order; only a copy fallback needs them.
+extern "C" XrResult WINAPI xrAcquireSwapchainImage(XrSwapchain swapchain, const XrSwapchainImageAcquireInfo *info,
+                                                   uint32_t *index)
+{
+    auto *wrapper = wine_swapchain_from_handle(swapchain);
+    auto *state = (SwapState *)wrapper->graphics;
+    struct xrAcquireSwapchainImage_params params = {swapchain, info, index};
+    NTSTATUS status = UNIX_CALL(xrAcquireSwapchainImage, &params);
+    XrResult result = call_result(status, params.result);
+    if (XR_SUCCEEDED(result) && state->acquired && state->acquired_count < state->count)
+        state->acquired[(state->acquired_head + state->acquired_count++) % state->count] = *index;
+    return result;
+}
 extern "C" XrResult WINAPI xrReleaseSwapchainImage(XrSwapchain swapchain, const XrSwapchainImageReleaseInfo *info)
 {
     auto *wrapper = wine_swapchain_from_handle(swapchain);
@@ -222,9 +237,22 @@ extern "C" XrResult WINAPI xrReleaseSwapchainImage(XrSwapchain swapchain, const 
         fprintf(stderr, "wineopenxr: ERROR %s producer completion signal failed hr=%#lx\n", state->interop->name(), hr);
         return XR_ERROR_RUNTIME_FAILURE;
     }
+    auto *swap = (SwapState *)wrapper->graphics;
+    if (swap->acquired && swap->acquired_count) {
+        uint32_t index = swap->acquired[swap->acquired_head];
+        if (swap->images[index].copy_source) {
+            wrapper->copy_source = swap->images[index].copy_source;
+            wrapper->copy_target = swap->metal[index].texture;
+        }
+    }
     struct xrReleaseSwapchainImage_params params = {swapchain, info};
     NTSTATUS status = UNIX_CALL(xrReleaseSwapchainImage, &params);
     XrResult result = call_result(status, params.result);
+    wrapper->copy_source = wrapper->copy_target = nullptr;
+    if (XR_SUCCEEDED(result) && swap->acquired_count) {
+        swap->acquired_head = (swap->acquired_head + 1) % swap->count;
+        --swap->acquired_count;
+    }
     LeaveCriticalSection(&state->release_lock);
     return result;
 }

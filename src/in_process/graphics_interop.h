@@ -58,10 +58,13 @@ public:
     virtual void flush() = 0;
 };
 
-// MWXR_GRAPHICS_BACKEND=auto (default) or dxmt.
+// MWXR_GRAPHICS_BACKEND=auto (default), dxmt, d3dmetal or d3dmetal-copy.
+// Only d3dmetal-copy may select a copy; auto never does.
 HRESULT mw_graphics_interop_open(ID3D11Device *device, const GraphicsNativeHost &host, GraphicsInterop **out);
 const char *mw_graphics_sync_name(GraphicsSync sync);
 void mw_graphics_format_caps(uint32_t caps, char *buffer, size_t size);
 
 // Backend factories: S_FALSE when the device belongs to another backend.
 HRESULT mw_graphics_open_dxmt(ID3D11Device *device, const GraphicsNativeHost &host, GraphicsInterop **out);
+HRESULT mw_graphics_open_d3dmetal(ID3D11Device *device, const GraphicsNativeHost &host, bool allow_copy,
+                                  GraphicsInterop **out);

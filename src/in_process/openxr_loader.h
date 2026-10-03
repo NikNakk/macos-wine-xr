@@ -48,8 +48,10 @@ typedef struct { XrInstance host_instance; void *required_metal_device; uint32_t
 typedef struct { XrSession host_session; wine_XrInstance *instance; void *metal_device;
     void *metal_queue; void *metal_event; uint64_t fence_value; void *graphics;
 } wine_XrSession;
+// copy_source/copy_target are set only for the duration of a release that
+// uses an explicit graphics copy fallback (native MTLTexture objects).
 typedef struct { XrSwapchain host_swapchain; wine_XrSession *session; XrSwapchainCreateInfo info;
-    void *graphics;
+    void *graphics; void *copy_source, *copy_target;
 } wine_XrSwapchain;
 static inline wine_XrInstance *wine_instance_from_handle(XrInstance h) { return (wine_XrInstance *)h; }
 static inline wine_XrSession *wine_session_from_handle(XrSession h) { return (wine_XrSession *)h; }
