@@ -59,7 +59,10 @@ int main()
     XR(xrBeginSession(session,&begin));
     for (unsigned arrays=1;arrays<=2;++arrays) {
         XrSwapchainCreateInfo swapinfo={XR_TYPE_SWAPCHAIN_CREATE_INFO};
-        swapinfo.usageFlags=XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT|XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+        // Include OpenComposite's requested usage; verify the same runtime
+        // image identity and GPU pixels for both 2D and array swapchains.
+        swapinfo.usageFlags=XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT|XR_SWAPCHAIN_USAGE_SAMPLED_BIT|
+                            XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT;
         swapinfo.format=DXGI_FORMAT_R8G8B8A8_UNORM; swapinfo.sampleCount=1; swapinfo.width=swapinfo.height=8;
         swapinfo.faceCount=swapinfo.mipCount=1; swapinfo.arraySize=arrays;
         XrSwapchain swapchain; XR(xrCreateSwapchain(session,&swapinfo,&swapchain));

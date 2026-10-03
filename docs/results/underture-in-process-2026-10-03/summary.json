@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-03",
+  "service_and_client_version": "v25.1.0-2073-g2276cfba9",
+  "source": "Current Monado workspace including existing uncommitted changes, matching installed service build; no Monado source edits made for this fix.",
+  "ipc_protocol_sha256": "1fc0439adc286fb7f50ba0b9d962f6af862dae22c44e922188136e8566a509dc",
+  "old_client_version": "v25.1.0-2051-g7fd7f2835",
+  "old_client_result": "xrCreateInstance XR_ERROR_RUNTIME_UNAVAILABLE (-51), then OpenComposite error-symbol Stub",
+  "matched_gate_exit": 0,
+  "transfer_usage_gpu_probe_exit": 0,
+  "gpu_probe_checks": 9,
+  "swapchain_image_count": 3,
+  "underture_bounded_run_seconds": 40,
+  "underture_result": "Still running at timeout; terminated by diagnostic harness. Two eye swapchains imported, session FOCUSED. No startup crash or fatal OpenComposite abort after fix.",
+  "metal_validation": true,
+  "minimum_frame_period_hint": "unset in client",
+  "visual_confirmation": "pending",
+  "zero_copy_scope": "DXMT wrapper uses exact runtime-owned Metal image. OpenComposite still copies/shader-draws the OpenVR app textures into OpenXR images upstream of this bridge; end-to-end OpenVR zero copy is not achieved."
+}

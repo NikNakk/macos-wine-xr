@@ -106,8 +106,16 @@ XrResult wine_xrCreateSwapchain(XrSession session, const XrSwapchainCreateInfo *
     native.format = map_format(info->format, 1);
     if (!native.format) return XR_ERROR_SWAPCHAIN_FORMAT_UNSUPPORTED;
     if (info->next || info->faceCount != 1 || info->sampleCount != 1 || info->mipCount != 1 || !info->arraySize ||
-        (info->usageFlags & ~(XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT)))
+        (info->usageFlags & ~(XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
+                             XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT))) {
+        fprintf(stderr, "wineopenxr: unsupported color swapchain next=%p faces=%u samples=%u mips=%u array=%u usage=0x%llx\n",
+                info->next, info->faceCount, info->sampleCount, info->mipCount, info->arraySize,
+                (unsigned long long)info->usageFlags);
         return XR_ERROR_FEATURE_UNSUPPORTED;
+    }
+    // OpenComposite requests transfer-destination usage for its OpenVR submit
+    // operation. Preserve the flag; importing these runtime-owned images still
+    // introduces no copy in the D3D11-to-Metal runtime bridge.
     return g_xr_host_instance_dispatch_table.p_xrCreateSwapchain(wine_session_from_handle(session)->host_session, &native, swapchain);
 }
 XrResult wine_xrReleaseSwapchainImage(XrSwapchain swapchain, const XrSwapchainImageReleaseInfo *info)

@@ -774,6 +774,64 @@ build-in-process/display-refresh-arm64
 build-in-process/display-refresh-x64
 ```
 
+### Underture startup repair, 2026-10-03
+
+The user's black-screen / "Stub" / crash sequence occurred before rendering:
+OpenComposite's log reported `xrCreateInstance = -51`. A core-gate reproduction
+identified an IPC revision mismatch: the previous x64 native client was
+`v25.1.0-2051-g7fd7f2835`, but the updated ARM64 service was
+`v25.1.0-2073-g2276cfba9`. Rebuilt only the x64 native client from the current
+Monado workspace (including its existing worktree changes), into
+`.build/in-process-native-hardware-current/monado-x64`. The client and installed
+service's generated IPC protocol headers have the same SHA-256:
+`1fc0439adc286fb7f50ba0b9d962f6af862dae22c44e922188136e8566a509dc`.
+The core gate then passed creation, HMD discovery, destruction and recreation.
+No IPC version bypass or Monado source change was used.
+
+That exposed a second failure: OpenComposite requests
+`COLOR_ATTACHMENT | SAMPLED | TRANSFER_DST` for its eye swapchains, but the
+prototype's subset rejected `TRANSFER_DST` with `XR_ERROR_FEATURE_UNSUPPORTED`
+(-8). Permit that flag and preserve it in the native call. Unsupported
+swapchain shapes/usages now log the rejected parameters. Updated the GPU probe
+to request the same flags: all nine checks passed (three 2D images and three
+2-slice array images) with Metal validation enabled. Image counts are supplied
+by the runtime, not fixed by the bridge.
+
+After both fixes, a bounded 40-second Underture run reached OpenVR initialization,
+created both 2800x2856 eye swapchains, imported every runtime-owned Metal image,
+and reached OpenXR FOCUSED. It remained running until the harness ended it.
+No fatal OpenComposite abort or startup crash was reproduced. A non-fatal
+unknown tracked-device string property 1001 warning remains. Visual confirmation,
+longer gameplay, controller compatibility and matched performance measurements
+are still pending; the compositor's CADisplayLink cadence is not an app FPS
+measurement.
+
+The zero-copy guarantee applies to the D3D11/Metal runtime boundary. This version
+of [OpenComposite's D3D11 compositor](https://gitlab.com/znixian/OpenOVR/-/blob/a27e7e6a64bdcd1eff6b7fba1ea2ea34bcf1273d/OpenOVR/Compositor/dx11compositor.cpp)
+copies or shader-draws the original OpenVR textures into the OpenXR swapchains.
+Allowing transfer usage inserts no extra bridge copy, but this legacy OpenVR
+application does not satisfy an end-to-end no-copy/no-blit requirement. That
+would require a separate OpenVR submission adaptation.
+
+Current local launch command (also selects the matching client for InMind):
+
+```sh
+bridge=/Users/nickkennedy/Code/monado-2/.build/in-process-openxr-study
+export MWXR_NATIVE_RUNTIME_JSON=/Users/nickkennedy/Code/monado-2/.build/in-process-native-hardware-current/monado-x64/openxr_monado-dev.json
+export MWXR_IN_PROCESS_PREFIX="$bridge/build-in-process/prefix-core"
+export XRT_MACOS_CLIENT_COMPOSITOR=1
+export MTL_DEBUG_LAYER=1
+unset XR_RUNTIME_JSON XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR U_PACING_APP_USE_MIN_FRAME_PERIOD IPC_IGNORE_VERSION
+cd "$bridge/build-in-process/games/Underture"
+"$bridge/scripts/run-in-process-openxr.zsh" "$PWD/Underture.exe" -force-d3d11 -logFile 'C:\openxr\underture.log' > "$bridge/build-in-process/underture-native.log" 2>&1
+```
+
+Rebuild the native x64 client whenever the service's source/protocol changes;
+the manifest path above identifies a local build, not a permanently compatible
+client. Original proxy/native-host prefixes and installed ARM64 service were
+not modified. [Captured logs and summary](results/underture-in-process-2026-10-03/summary.json)
+record the failures and successful initialization.
+
 ### Next blocking acceptance requirement
 
 AlphaBlend against the simulated HMD needs a small, opt-in simulated-driver
