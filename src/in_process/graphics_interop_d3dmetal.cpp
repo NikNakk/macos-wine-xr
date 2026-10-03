@@ -17,7 +17,7 @@ const char *detail_name(uint32_t detail)
 {
     static const char *names[] = {"not-reached", "substituted", "captured", "device-mismatch",
         "descriptor-mismatch", "usage-not-subset", "storage-mismatch-or-heapless-shared",
-        "heap-suballocation", "private-mtlevent", "interposer-unavailable"};
+        "heap-suballocation", "interposer-unavailable"};
     return detail < sizeof(names) / sizeof(names[0]) ? names[detail] : "unknown";
 }
 
@@ -99,7 +99,12 @@ public:
         host.call(&p);
         if (FAILED(hr)) return hr;
         session_event = (uint64_t)event;
-        if (p.detail == MW_GFX_NATIVE_SUBSTITUTED) { sync_mode = GraphicsSync::SharedEventGpu; return S_OK; }
+        if (p.detail == MW_GFX_NATIVE_SUBSTITUTED) {
+            fprintf(stderr, "wineopenxr: d3dmetal fence uses the session MTLSharedEvent (via %s)\n",
+                    p.value ? "newEvent" : "newSharedEvent");
+            sync_mode = GraphicsSync::SharedEventGpu;
+            return S_OK;
+        }
         // D3DMetal's fence is not the session event: wait for its completion on
         // the CPU and then signal the event, so the native queue wait still holds.
         fprintf(stderr, "wineopenxr: d3dmetal fence is not the session MTLSharedEvent (%s); using CPU completion wait\n",
@@ -110,6 +115,9 @@ public:
         return S_OK;
     }
     GraphicsSync sync() const override { return sync_mode; }
+    // D3DMetal 4.0b2 requests MTLTextureUsagePixelFormatView for every
+    // DEFAULT texture; XR_SWAPCHAIN_USAGE_MUTABLE_FORMAT_BIT asks the runtime for it.
+    uint64_t extra_swapchain_usage() const override { return 0x00000040; }
     HRESULT import_image(void *texture, const D3D11_TEXTURE2D_DESC &desc, GraphicsImage *image) override
     {
         mw_gfx_native_params p = arm_and_create((uint64_t)texture, desc, &image->texture);

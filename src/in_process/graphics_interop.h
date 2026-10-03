@@ -49,6 +49,8 @@ public:
     // Bind the session's MTLSharedEvent as the producer completion primitive.
     virtual HRESULT bind_completion_event(void *metal_shared_event) = 0;
     virtual GraphicsSync sync() const = 0;
+    // XrSwapchainUsageFlags the backend needs on native images beyond the app's.
+    virtual uint64_t extra_swapchain_usage() const { return 0; }
     // Expose one runtime-owned native image to the application as D3D11.
     virtual HRESULT import_image(void *metal_texture, const D3D11_TEXTURE2D_DESC &desc, GraphicsImage *image) = 0;
     virtual void release_image(GraphicsImage *image) = 0;

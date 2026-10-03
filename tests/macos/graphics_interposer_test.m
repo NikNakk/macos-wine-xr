@@ -88,13 +88,18 @@ int main(void)
         t = allocate(device, runtime2d, request, &detail);
         CHECK(t && t != runtime2d && detail == MW_GFX_NATIVE_MISMATCH_USAGE);
         [t release];
-        t = allocate(device, runtime2d, descriptor(MTLStorageModeShared, 1), &detail);
-        CHECK(t && t != runtime2d && detail == MW_GFX_NATIVE_MISMATCH_STORAGE);
-        [t release];
         t = allocate(device, runtime_iosurface, descriptor(MTLStorageModeShared, 1), &detail);
         CHECK(t && t != runtime_iosurface && detail == MW_GFX_NATIVE_MISMATCH_STORAGE);
         [t release];
+        t = allocate(device, runtime_iosurface, descriptor(MTLStorageModePrivate, 1), &detail);
+        CHECK(t && t != runtime_iosurface && detail == MW_GFX_NATIVE_MISMATCH_STORAGE);
+        [t release];
         printf("PASS incompatible descriptor, usage and heapless Shared/IOSurface storage are refused\n");
+        // D3DMetal 4.0b2 requests Shared for DEFAULT textures; a Private runtime image serves it.
+        t = allocate(device, runtime2d, descriptor(MTLStorageModeShared, 1), &detail);
+        CHECK(t == runtime2d && detail == MW_GFX_NATIVE_SUBSTITUTED);
+        [t release];
+        printf("PASS Private runtime image substitutes for a Shared request\n");
 
         t = allocate(device, nil, descriptor(MTLStorageModePrivate, 1), &detail);
         CHECK(t && detail == MW_GFX_NATIVE_CAPTURED);
@@ -132,13 +137,16 @@ int main(void)
         call(MW_GFX_NATIVE_ARM_EVENT, runtime_event);
         id<MTLEvent> private_event = [device newEvent];
         p = call(MW_GFX_NATIVE_DISARM_EVENT, nil);
-        CHECK(private_event && p.detail == MW_GFX_NATIVE_PRIVATE_EVENT);
+        CHECK(private_event == runtime_event && p.detail == MW_GFX_NATIVE_SUBSTITUTED && p.value == 1);
+        [private_event release];
+        private_event = [device newEvent];
+        CHECK(private_event && private_event != runtime_event);
         [private_event release];
         p = (struct mw_gfx_native_params){MW_GFX_NATIVE_SIGNAL_EVENT};
         p.object = (uint64_t)runtime_event; p.value = 7;
         mw_graphics_native_call(&p);
         CHECK(p.status == 0 && runtime_event.signaledValue == 7);
-        printf("PASS shared-event substitution, private-event report and CPU signal\n");
+        printf("PASS shared-event substitution via newSharedEvent and newEvent, and CPU signal\n");
 
         p = call(MW_GFX_NATIVE_TEXTURE_INFO, runtime_iosurface);
         CHECK(p.status == 0 && p.iosurface && p.actual.width == 8 && p.actual.storage_mode == MTLStorageModeShared);
