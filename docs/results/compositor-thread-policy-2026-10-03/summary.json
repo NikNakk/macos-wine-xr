@@ -1,0 +1,20 @@
+{
+  "commit": "1b400a8e7",
+  "branch": "codex/macos-shared-tracking",
+  "version": "v25.1.0-2074-g1b400a8e7",
+  "workspace": "Includes existing unrelated worktree changes; commit contains only the approved scheduling/diagnostic correction and its note.",
+  "arm64_build": "/Users/nickkennedy/Code/monado-2/.build/in-process-native-hardware-current/monado-arm64",
+  "arm64_targets": [
+    "monado-service",
+    "openxr_monado"
+  ],
+  "x86_64_build": "/Users/nickkennedy/Code/monado-2/.build/in-process-native-hardware-current/monado-x64",
+  "x86_64_targets": [
+    "openxr_monado"
+  ],
+  "build_result": "All three targets compiled and architectures checked. Both clients and ARM64 service have matching generated git version tags and IPC protocol headers.",
+  "ipc_protocol_sha256": "1fc0439adc286fb7f50ba0b9d962f6af862dae22c44e922188136e8566a509dc",
+  "probe_result": "ARM64 and x86-64 real Mach policy checks pass across three sequential replacement threads. Same-period repeat calls apply once per thread. Old global-cache negative control fails on second replacement.",
+  "deployment": "No service installed or restarted; LaunchAgent still uses build-wine. New matching service must be selected before running the rebuilt clients.",
+  "hardware_performance_validation": "Pending"
+}

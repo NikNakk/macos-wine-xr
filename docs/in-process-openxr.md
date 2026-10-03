@@ -959,6 +959,38 @@ physical cadence and pose-target delay before considering a separate presentatio
 or prediction change. Application rendering/DXMT completion can still limit app
 FPS independently of compositor scheduling.
 
+### Approved compositor thread-policy build, 2026-10-03
+
+The user approved applying the proposed Monado patch and compiling the native
+service/client and x86-64 client. Applied and committed the scheduling cache and
+realtime diagnostic state correction as Monado `1b400a8e7` on the current
+`codex/macos-shared-tracking` branch. Only those two headers and a new dedicated
+build note were included; unrelated workspace changes remain separate.
+
+Built `monado-service` and `openxr_monado` in
+`.build/in-process-native-hardware-current/monado-arm64`, with ARM64 explicit and
+PS VR2/PS Sense enabled. Built `openxr_monado` in
+`.build/in-process-native-hardware-current/monado-x64`. Both use the current source,
+including existing worktree changes; the x64 client picks up the current renderer
+fix as well. After committing, regenerated/rebuilt both so all artifacts report
+`v25.1.0-2074-g1b400a8e7`. Binary architectures and generated IPC-header hashes
+match their intended configurations.
+
+An extracted-source Mach policy probe passes on both ARM64 and translated x64:
+three sequential replacement threads each apply a non-default time-constraint
+policy once at the same refresh period. The old process-global-cache negative
+control fails on its second thread with default policy and period zero. This is
+initialization verification, not a new performance or motion-smoothness result.
+[Build logs and probe evidence](results/compositor-thread-policy-2026-10-03/summary.json)
+are archived; Monado's `doc/macos-compositor-thread-policy.md` describes the change.
+
+No service installation/restart or hardware test was requested in this step.
+The installed LaunchAgent still points to the older `build-wine` service. Select
+the matching newly built ARM64 service before using either rebuilt client; do not
+bypass the IPC revision check. The existing native manifests remain at their
+respective `monado-arm64/openxr_monado-dev.json` and
+`monado-x64/openxr_monado-dev.json` build paths.
+
 ### Next blocking acceptance requirement
 
 AlphaBlend against the simulated HMD needs a small, opt-in simulated-driver
