@@ -63,7 +63,7 @@ XrResult wine_xrCreateSession(XrInstance instance, const XrSessionCreateInfo *in
         wrapper->metal_queue = queue;
         wrapper->metal_event = event;
         active_session = wrapper;
-        fprintf(stderr, "wineopenxr: selected direct-object zero-copy Metal/DXMT, queue=%p event=%p\n", queue, event);
+        fprintf(stderr, "wineopenxr: native Metal session queue=%p completion-event=%p\n", queue, event);
         return result;
     }
 }
