@@ -897,6 +897,68 @@ prove that every image matches its submitted render pose or identify the user's
 subjective alternating backward step. Further analysis can start from these
 existing traces; no fresh run is required just to establish the cadence failure.
 
+### Underture lifecycle and scheduler diagnosis, 2026-10-03
+
+Joined all 3,746 physical frames in the existing user-run measurement window.
+[The lifecycle analysis](results/underture-in-process-2026-10-03/user-run/lifecycle-summary.json)
+and compressed joined CSV are reproducible with `user-run/analyze-lifecycle.py`.
+The 7,178 CA callbacks have interval median/p95 8.342/8.377 ms: the major display
+cadence loss is later than these regular callbacks.
+
+| Stage | Median / p95 (ms) |
+| --- | --- |
+| Renderer CPU entry to return | 0.806 / 1.389 |
+| Present enqueue to worker start | 2.903 / 7.970 |
+| Worker start to Metal commit | 0.129 / 0.283 |
+| Metal commit to scheduled callback | 0.130 / 1.824 |
+| Metal commit to completion callback | 1.431 / 3.435 |
+| Completion callback to physical output | 38.354 / 57.426 |
+| Drawable prefetch wait | 16.099 / 30.453 |
+| Application semaphore readiness wait | 14.692 / 16.925 |
+
+The app's reported GPU estimate median/p95 15.498/18.240 ms includes completion
+and readiness latency; it is not an isolated hardware GPU execution measurement.
+Drawable acquisition and after-completion display delay dominate this trace,
+but waiting on drawables can also reflect earlier queued presentation work.
+The timestamps do not prove which WindowServer/layer/presentation setting caused
+the delay. These stage medians overlap and must not be added as a serial budget.
+
+A concrete lifecycle problem is also visible. The first 33 scheduler samples
+use time-constraint policy 2 / priority 97. At session recreation, compositor
+frame ID resets to 1, and the remaining 7,674 samples use ordinary policy 1 /
+priority 31 (all 7,186 steady-window samples). OpenComposite's user-run log at
+21:41:03.602 explicitly recreates the session for the application graphics API;
+the replacement session starts at 21:41:03.856. Monado creates a fresh multi-system
+compositor thread for each replacement hosted compositor, but
+`comp_multi_system_macos_trace.h` caches the configured display period in a
+process-global static. The unchanged 8.341708 ms period skips applying Mach
+policy on the replacement thread. The realtime trace's cached thread ID and
+previous CPU/policy samples are also global, so the logged repeated thread ID
+cannot establish thread continuity. Archived both original headers as evidence.
+
+This is a specific correctness defect and strong performance candidate, not
+proof that fixing it resolves all judder. Compositor/source IDs, compositor pose
+target times and application predicted display times all remain monotonic in
+physical order. New-source versus reused-source pose-target lateness medians are
+10.191 versus 9.324 ms, so the trace does not establish a deterministic alternating
+old/new timing split. Destination warp poses, sensor samples, service scheduling
+policy and image/pose pixel correspondence were not captured in this client set.
+
+Prepared an **unapplied**
+[Monado compositor thread-policy patch](proposals/monado-compositor-thread-policy.patch):
+make the scheduler period cache and per-thread realtime diagnostic state thread
+local, and collect initial details for every new thread. Trace-file ownership and
+row count remain process-global. `git apply --check` passes against the current
+workspace. No Monado source modification or policy override was made. Under the
+user's explicit Monado-change constraint, stop here for approval before applying.
+
+After approval, build the x64 native client and ARM64 service targets without
+replacing the installed service first; check session recreation retains policy
+2 / priority 97, then perform the same bounded Underture trace comparison. Retest
+physical cadence and pose-target delay before considering a separate presentation
+or prediction change. Application rendering/DXMT completion can still limit app
+FPS independently of compositor scheduling.
+
 ### Next blocking acceptance requirement
 
 AlphaBlend against the simulated HMD needs a small, opt-in simulated-driver

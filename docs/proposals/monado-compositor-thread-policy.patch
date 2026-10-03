@@ -1,0 +1,59 @@
+--- a/src/xrt/compositor/multi/comp_multi_system_macos_trace.h
++++ b/src/xrt/compositor/multi/comp_multi_system_macos_trace.h
+@@ -43,7 +43,9 @@
+ static bool g_macos_client_frame_trace_have_last[MULTI_MAX_CLIENTS];
+ static int64_t g_macos_client_frame_trace_last_frame[MULTI_MAX_CLIENTS];
+ static uint32_t g_macos_client_frame_trace_source_use_ordinal[MULTI_MAX_CLIENTS];
+-static int64_t g_macos_compositor_time_constraint_period_ns = 0;
++// Mach scheduling policy belongs to each compositor thread. A replacement
++// hosted compositor must apply it even when the display period is unchanged.
++static _Thread_local int64_t g_macos_compositor_time_constraint_period_ns = 0;
+ 
+ /* Elastic minimum-hold state, indexed by multi-system client slot. */
+ static bool g_macos_client_frame_hold_initialized[MULTI_MAX_CLIENTS];
+--- a/src/xrt/compositor/multi/comp_multi_system_macos_compositor_rt.h
++++ b/src/xrt/compositor/multi/comp_multi_system_macos_compositor_rt.h
+@@ -31,20 +31,20 @@
+ static bool g_macos_compositor_rt_trace_failed = false;
+ static bool g_macos_compositor_rt_trace_atexit_registered = false;
+ static uint64_t g_macos_compositor_rt_trace_rows = 0;
+-static uint64_t g_macos_compositor_rt_last_cpu_ns = 0;
+-static uint64_t g_macos_compositor_rt_last_sample_ns = 0;
+-static uint64_t g_macos_compositor_rt_thread_id = 0;
+-static int g_macos_compositor_rt_last_observed_basic_policy = -1;
+-static int g_macos_compositor_rt_last_policy_get_kr = -1;
+-static int g_macos_compositor_rt_last_policy_default = -1;
+-static uint32_t g_macos_compositor_rt_last_period_ticks = 0;
+-static uint32_t g_macos_compositor_rt_last_computation_ticks = 0;
+-static uint32_t g_macos_compositor_rt_last_constraint_ticks = 0;
+-static int g_macos_compositor_rt_last_extended_kr = -1;
+-static int g_macos_compositor_rt_last_extended_policy = -1;
+-static int g_macos_compositor_rt_last_curpri = -1;
+-static int g_macos_compositor_rt_last_priority = -1;
+-static int g_macos_compositor_rt_last_maxpriority = -1;
++static _Thread_local uint64_t g_macos_compositor_rt_last_cpu_ns = 0;
++static _Thread_local uint64_t g_macos_compositor_rt_last_sample_ns = 0;
++static _Thread_local uint64_t g_macos_compositor_rt_thread_id = 0;
++static _Thread_local int g_macos_compositor_rt_last_observed_basic_policy = -1;
++static _Thread_local int g_macos_compositor_rt_last_policy_get_kr = -1;
++static _Thread_local int g_macos_compositor_rt_last_policy_default = -1;
++static _Thread_local uint32_t g_macos_compositor_rt_last_period_ticks = 0;
++static _Thread_local uint32_t g_macos_compositor_rt_last_computation_ticks = 0;
++static _Thread_local uint32_t g_macos_compositor_rt_last_constraint_ticks = 0;
++static _Thread_local int g_macos_compositor_rt_last_extended_kr = -1;
++static _Thread_local int g_macos_compositor_rt_last_extended_policy = -1;
++static _Thread_local int g_macos_compositor_rt_last_curpri = -1;
++static _Thread_local int g_macos_compositor_rt_last_priority = -1;
++static _Thread_local int g_macos_compositor_rt_last_maxpriority = -1;
+ 
+ static void
+ macos_compositor_rt_trace_close(void)
+@@ -180,7 +180,7 @@
+ 	g_macos_compositor_rt_last_observed_basic_policy = basic_policy;
+ 
+ 	g_macos_compositor_rt_trace_rows++;
+-	bool detail_sampled = g_macos_compositor_rt_trace_rows == 1 || (g_macos_compositor_rt_trace_rows % 60) == 0 ||
++	bool detail_sampled = g_macos_compositor_rt_thread_id == 0 || (g_macos_compositor_rt_trace_rows % 60) == 0 ||
+ 	                      over_budget || policy_transition;
+ 	if (detail_sampled) {
+ 		macos_compositor_rt_sample_details(thread);
