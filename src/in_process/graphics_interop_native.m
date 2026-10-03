@@ -69,7 +69,7 @@ static void identify(struct mw_gfx_native_params *p)
 // Per-thread arm state. Objects are borrowed from the PE caller for the
 // duration of one arm/allocate/disarm sequence on this thread.
 static __thread struct {
-    int texture_armed, event_armed;
+    int texture_armed, event_armed, event_via_private;
     id<MTLTexture> texture;   // nil: capture the runtime's own allocation
     id<MTLSharedEvent> event;
     id device, captured;      // captured is retained
@@ -126,7 +126,11 @@ static uint32_t check_substitute(id device, MTLTextureDescriptor *request, id<MT
     if (request.usage & ~texture.usage) return MW_GFX_NATIVE_MISMATCH_USAGE;
     // d3dmetal-native found D3DMetal 3.0 zero-fills new Shared-storage textures
     // through -[texture heap]; a heapless runtime texture would crash it.
-    if (request.storageMode != texture.storageMode ||
+    // D3DMetal 4.0b2 requests Shared for DEFAULT textures but only uses them on
+    // the GPU; a Private runtime texture serves that request (verified under
+    // Metal validation, which would assert on any CPU access).
+    BOOL private_for_shared = request.storageMode == MTLStorageModeShared && texture.storageMode == MTLStorageModePrivate;
+    if ((request.storageMode != texture.storageMode && !private_for_shared) ||
         (texture.storageMode == MTLStorageModeShared && !texture.heap))
         return MW_GFX_NATIVE_MISMATCH_STORAGE;
     return MW_GFX_NATIVE_SUBSTITUTED;
@@ -193,7 +197,15 @@ static id hook_device_shared_event(id self, SEL selector)
 
 static id hook_device_event(id self, SEL selector)
 {
-    if (arm.event_armed) { arm.event_armed = 0; arm.event_detail = MW_GFX_NATIVE_PRIVATE_EVENT; }
+    // D3DMetal 4.0b2 backs ID3D11Fence with a plain MTLEvent. An MTLSharedEvent
+    // is an MTLEvent, so the fence's GPU signals land on the session event.
+    if (arm.event_armed) {
+        arm.event_armed = 0;
+        arm.device = self;
+        arm.event_detail = MW_GFX_NATIVE_SUBSTITUTED;
+        arm.event_via_private = 1;
+        return [arm.event retain];
+    }
     return ((id (*)(id, SEL))original(self, selector))(self, selector);
 }
 
@@ -263,6 +275,7 @@ int32_t mw_graphics_native_call(void *args)
         case MW_GFX_NATIVE_ARM_TEXTURE: arm_texture(p); break;
         case MW_GFX_NATIVE_DISARM_TEXTURE: disarm_texture(p); break;
         case MW_GFX_NATIVE_ARM_EVENT:
+            arm.event_via_private = 0;
             arm.event = (id<MTLSharedEvent>)p->object;
             arm.event_detail = hook_count ? MW_GFX_NATIVE_NOT_REACHED : MW_GFX_NATIVE_UNSUPPORTED;
             arm.event_armed = hook_count && arm.event;
@@ -270,6 +283,7 @@ int32_t mw_graphics_native_call(void *args)
         case MW_GFX_NATIVE_DISARM_EVENT:
             arm.event_armed = 0; arm.event = nil;
             p->detail = arm.event_detail;
+            p->value = arm.event_via_private;  // substituted through newEvent
             p->device = (uint64_t)arm.device;
             break;
         case MW_GFX_NATIVE_SIGNAL_EVENT: {

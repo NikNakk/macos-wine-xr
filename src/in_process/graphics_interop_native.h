@@ -12,8 +12,8 @@ enum mw_gfx_native_op {
     MW_GFX_NATIVE_INTERPOSE,      // install the allocation interposer -> value: hooks, detail: heap-pool switch
     MW_GFX_NATIVE_ARM_TEXTURE,    // object: MTLTexture to hand out, or 0 to capture only
     MW_GFX_NATIVE_DISARM_TEXTURE, // -> detail, device; object: captured texture (+1) when capture only
-    MW_GFX_NATIVE_ARM_EVENT,      // object: MTLSharedEvent to hand out
-    MW_GFX_NATIVE_DISARM_EVENT,   // -> detail
+    MW_GFX_NATIVE_ARM_EVENT,      // object: MTLSharedEvent to hand out from newSharedEvent or newEvent
+    MW_GFX_NATIVE_DISARM_EVENT,   // -> detail, value: 1 if handed out from newEvent
     MW_GFX_NATIVE_SIGNAL_EVENT,   // object: MTLSharedEvent, value: CPU signal after completion
     MW_GFX_NATIVE_RELEASE,        // object: release one reference
 };
@@ -35,7 +35,6 @@ enum mw_gfx_native_detail {
     MW_GFX_NATIVE_MISMATCH_USAGE,
     MW_GFX_NATIVE_MISMATCH_STORAGE,
     MW_GFX_NATIVE_HEAP_PLACEMENT,     // reached through an MTLHeap suballocation; never substituted
-    MW_GFX_NATIVE_PRIVATE_EVENT,      // the D3D runtime made a non-shareable MTLEvent instead
     MW_GFX_NATIVE_UNSUPPORTED,        // interposer unavailable
 };
 

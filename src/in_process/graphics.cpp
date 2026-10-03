@@ -74,8 +74,12 @@ extern "C" XrResult WINAPI xrCreateSession(XrInstance instance, const XrSessionC
     if (XR_SUCCEEDED(result)) {
         hr = state->interop->bind_completion_event(wrapper->metal_event);
         if (SUCCEEDED(hr))
-            fprintf(stderr, "wineopenxr: session backend=%s api=D3D11 sync=%s\n", state->interop->name(),
-                    mw_graphics_sync_name(state->interop->sync()));
+        {
+            char caps[256];
+            mw_graphics_format_caps(state->interop->capabilities(), caps, sizeof(caps));
+            fprintf(stderr, "wineopenxr: session backend=%s api=D3D11 sync=%s caps=%s\n", state->interop->name(),
+                    mw_graphics_sync_name(state->interop->sync()), caps);
+        }
         else {
             fprintf(stderr, "wineopenxr: ERROR %s completion-event binding failed hr=%#lx\n", state->interop->name(), hr);
             struct xrDestroySession_params rollback = {(XrSession)wrapper};
@@ -95,7 +99,10 @@ extern "C" XrResult WINAPI xrCreateSwapchain(XrSession session, const XrSwapchai
     auto *state = (SwapState *)calloc(1, sizeof(SwapState));
     if (!wrapper || !state) { free(wrapper); free(state); return XR_ERROR_OUT_OF_MEMORY; }
     wrapper->session = wine_session_from_handle(session); wrapper->info = *info; wrapper->graphics = state; state->wrapper = wrapper;
-    struct xrCreateSwapchain_params params = {session, info, &wrapper->host_swapchain};
+    // The app keeps its own create info; native images may need backend usage.
+    XrSwapchainCreateInfo native = *info;
+    native.usageFlags |= ((SessionState *)wrapper->session->graphics)->interop->extra_swapchain_usage();
+    struct xrCreateSwapchain_params params = {session, &native, &wrapper->host_swapchain};
     NTSTATUS status = UNIX_CALL(xrCreateSwapchain, &params);
     XrResult result = call_result(status, params.result);
     if (XR_FAILED(result)) { free(state); free(wrapper); return result; }
