@@ -991,6 +991,66 @@ bypass the IPC revision check. The existing native manifests remain at their
 respective `monado-arm64/openxr_monado-dev.json` and
 `monado-x64/openxr_monado-dev.json` build paths.
 
+### Desktop mirror launch options, 2026-10-03
+
+The user confirms Underture and InMind run reasonably well and that the separately
+corrected scanout-target pose bug noticeably improves motion. They requested
+launching without each game's main-display mirror window.
+
+Unity's [2018.3 player command-line reference](https://docs.unity3d.com/kr/2018.3/Manual/CommandLineArguments.html)
+documents `-batchmode` for headless operation. In a bounded Underture run,
+`-force-d3d11 -batchmode` retains D3D11, initializes OpenVR, creates both eye
+swapchains and imports all their runtime-owned Metal images. InMind's older
+Unity 5.3 player instead selects `NullGfxDevice` in batch mode, even with
+`-force-d3d11`, and logs "VR rendering requires Direct3D11". Do not recommend
+batch mode for InMind or add `-nographics` to either game's VR launch.
+
+For InMind, `MWXR_DESKTOP_MIRROR=offscreen` enables a small Windows child-process
+launcher. It polls only the game's `UnityWndClass` windows and moves them
+outside desktop bounds, preserving their visible state and D3D11 initialization.
+It forces windowed mode and focuses the game; unrelated dialogs and native
+Monado headset windows are not moved. A kill-on-close Windows job and Ctrl+C
+handler stop the game with the launcher. The executable is built by
+`build-in-process-gate.zsh`; without the opt-in, the original runner path is
+unchanged. `MWXR_DESKTOP_MIRROR=window` explicitly selects that default path.
+
+Verified the public runner with InMind: after an acknowledged trace flush,
+1,353 compositor rows have valid sources, with 556 distinct application source
+frames. macOS reports the InMind window at X=-16000, Y=-16032, outside the
+connected displays. A separate off-screen Underture run also submitted 835
+source frames. All diagnostic game/helper processes were stopped. These are
+initialization/submission checks, not visual or performance comparisons.
+
+Off-screen mode still renders the desktop mirror and can briefly show its window
+before the launcher moves it. It is not a zero-cost mirror-disable option. Native
+batch mode is preferable for Underture; the off-screen workaround is optional
+for InMind. The legacy Alyx runner already uses `-nowindow`, but that is a Source 2
+argument; no prior Unity no-window solution was found in the bridge scripts/notes.
+[Logs and source-frame evidence](results/unity-desktop-mirror-2026-10-03/summary.json)
+are archived.
+
+Use the existing matching service/client builds and private prefix:
+
+```sh
+bridge=/Users/nickkennedy/Code/monado-2/.build/in-process-openxr-study
+export MWXR_NATIVE_RUNTIME_JSON=/Users/nickkennedy/Code/monado-2/.build/in-process-native-hardware-current/monado-x64/openxr_monado-dev.json
+export MWXR_IN_PROCESS_PREFIX="$bridge/build-in-process/prefix-core"
+export XRT_MACOS_CLIENT_COMPOSITOR=1
+unset XR_RUNTIME_JSON XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR IPC_IGNORE_VERSION
+
+# Underture: native Unity headless mode, keeping D3D11.
+cd "$bridge/build-in-process/games/Underture"
+MWXR_DESKTOP_MIRROR=window "$bridge/scripts/run-in-process-openxr.zsh" "$PWD/Underture.exe" -force-d3d11 -batchmode -logFile 'C:\openxr\underture-batchmode.log'
+
+# InMind: preserve graphics while moving the mirror off-screen.
+cd "$bridge/build-in-process/games/InMind"
+MWXR_DESKTOP_MIRROR=offscreen "$bridge/scripts/run-in-process-openxr.zsh" "$PWD/InMind.exe" -force-d3d11 -logFile 'C:\openxr\inmind-offscreen.log'
+```
+
+Removing `-batchmode` for Underture or choosing `MWXR_DESKTOP_MIRROR=window`
+for InMind restores the previous desktop-window launch. No Monado source or
+Wine/DXMT modification was needed.
+
 ### Next blocking acceptance requirement
 
 AlphaBlend against the simulated HMD needs a small, opt-in simulated-driver

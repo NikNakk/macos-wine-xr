@@ -40,3 +40,5 @@ print "Built experimental D3D11/Metal runtime at ${root}."
 
 x86_64-w64-mingw32-gcc -I"${OPENXR_SOURCE_DIR}/include" \
  "${repo}/tests/windows/in_process_gate.c" -o "${root}/in_process_gate.exe"
+x86_64-w64-mingw32-gcc -std=c11 -municode -static \
+ "${repo}/src/windows/offscreen_unity_window.c" -luser32 -o "${root}/offscreen_unity_window.exe"
