@@ -26,4 +26,16 @@ cat > "${WINEPREFIX}/drive_c/openxr/wineopenxr64.json" <<'JSON'
 JSON
 "${wine_root}/bin/wine" reg add 'HKLM\Software\Khronos\OpenXR\1' /v ActiveRuntime /t REG_SZ \
  /d 'C:\openxr\wineopenxr64.json' /f
-exec "${wine_root}/bin/wine" "$@"
+case ${MWXR_DESKTOP_MIRROR:-window} in
+ window) exec "${wine_root}/bin/wine" "$@" ;;
+ offscreen)
+  [[ -f ${root}/offscreen_unity_window.exe ]] || {
+   print -u2 'Rebuild scripts/build-in-process-gate.zsh for the off-screen Unity launcher'; exit 1
+  }
+  game=$("${wine_root}/bin/wine" winepath -w "$1")
+  game=${game//$'\r'/}
+  shift
+  exec "${wine_root}/bin/wine" "${root}/offscreen_unity_window.exe" "$game" -screen-fullscreen 0 "$@"
+  ;;
+ *) print -u2 'MWXR_DESKTOP_MIRROR must be window or offscreen'; exit 2 ;;
+esac
