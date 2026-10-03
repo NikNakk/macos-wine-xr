@@ -7,9 +7,9 @@
 #include <stdint.h>
 
 enum mw_gfx_native_op {
-    MW_GFX_NATIVE_IDENTIFY = 1,   // object: COM vtable address -> kind, text = owning Mach-O image
+    MW_GFX_NATIVE_IDENTIFY = 1,   // object: COM vtable address -> kind, text = D3DMetal or owning Mach-O image
     MW_GFX_NATIVE_TEXTURE_INFO,   // object: MTLTexture -> desc, iosurface
-    MW_GFX_NATIVE_INTERPOSE,      // install the Metal allocation interposer (idempotent)
+    MW_GFX_NATIVE_INTERPOSE,      // install the allocation interposer -> value: hooks, detail: heap-pool switch
     MW_GFX_NATIVE_ARM_TEXTURE,    // object: MTLTexture to hand out, or 0 to capture only
     MW_GFX_NATIVE_DISARM_TEXTURE, // -> detail, device; object: captured texture (+1) when capture only
     MW_GFX_NATIVE_ARM_EVENT,      // object: MTLSharedEvent to hand out
@@ -18,7 +18,11 @@ enum mw_gfx_native_op {
     MW_GFX_NATIVE_RELEASE,        // object: release one reference
 };
 
-enum mw_gfx_native_kind { MW_GFX_NATIVE_KIND_UNKNOWN, MW_GFX_NATIVE_KIND_D3DMETAL };
+enum mw_gfx_native_kind {
+    MW_GFX_NATIVE_KIND_UNKNOWN,
+    MW_GFX_NATIVE_KIND_D3DMETAL,         // the vtable is inside D3DMetal.framework
+    MW_GFX_NATIVE_KIND_D3DMETAL_LOADED,  // vtable not in a Mach-O image, D3DMetal.framework is loaded
+};
 
 // DISARM results. Anything other than SUBSTITUTED/CAPTURED means the D3D
 // object does not refer to the requested native allocation.
@@ -31,6 +35,7 @@ enum mw_gfx_native_detail {
     MW_GFX_NATIVE_MISMATCH_USAGE,
     MW_GFX_NATIVE_MISMATCH_STORAGE,
     MW_GFX_NATIVE_HEAP_PLACEMENT,     // reached through an MTLHeap suballocation; never substituted
+    MW_GFX_NATIVE_PRIVATE_EVENT,      // the D3D runtime made a non-shareable MTLEvent instead
     MW_GFX_NATIVE_UNSUPPORTED,        // interposer unavailable
 };
 
