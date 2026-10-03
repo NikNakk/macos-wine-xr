@@ -53,3 +53,17 @@ for name, method in [
         method(f)
 with (out / 'openxr_thunks.h').open('w') as f:
     generator.generate_thunks_h(f, 'wine_')
+
+# One extra unix entry, after the generated OpenXR thunks, for the
+# renderer-neutral graphics interop helper (graphics_interop_native.h).
+def patch(name, old, new, count):
+    path = out / name
+    text = path.read_text()
+    if text.count(old) != count:
+        raise SystemExit(f'{name}: expected {count} unix-call table anchor(s)')
+    path.write_text(text.replace(old, new))
+patch('loader_thunks.h', '    unix_count,\n', '    unix_mw_graphics_native,\n    unix_count,\n', 1)
+patch('openxr_thunks.c', '};\nC_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == unix_count);',
+      '    (unixlib_entry_t)mw_graphics_native_call,\n};\nC_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == unix_count);', 1)
+patch('openxr_thunks.c', 'const unixlib_entry_t __wine_unix_call_funcs[] =',
+      'extern int mw_graphics_native_call(void *params);\nconst unixlib_entry_t __wine_unix_call_funcs[] =', 1)

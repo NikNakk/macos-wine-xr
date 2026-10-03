@@ -31,6 +31,7 @@ x86_64-w64-mingw32-gcc -shared -D__WINESRC__ -D_WIN64 -DWINE_NO_LONG_TYPES "${in
 "${MWXR_WINE_SDK}/bin/winebuild" --builtin "${root}/x86_64-windows/wineopenxr.dll"
 clang -arch x86_64 -shared -D__WINESRC__ -D_WIN64 -DWINE_NO_LONG_TYPES -DWINE_UNIX_LIB "${inc[@]}" \
  "${repo}/src/in_process/openxr.c" "${root}/generated/openxr_thunks.c" "${repo}/src/in_process/graphics_native.m" \
+ "${repo}/src/in_process/graphics_interop_native.m" \
  -framework Metal -framework Foundation \
  "${MWXR_NATIVE_LOADER}" "${MWXR_WINE_RUNTIME}/lib/wine/x86_64-unix/ntdll.so" \
  -Wl,-install_name,@rpath/wineopenxr.so -Wl,-rpath,"${MWXR_NATIVE_LOADER:h}" \
