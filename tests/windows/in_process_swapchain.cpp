@@ -9,7 +9,6 @@
 #include <openxr/openxr_platform.h>
 #include <cstdio>
 #include <vector>
-#include "dxmt_native_interop.h"
 #include "../in_process/metal_probe.h"
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr,"FAILED line %d: %s\n",__LINE__,#x); return 1; } } while (0)
 #define XR(x) do { XrResult check_result=(x); if (XR_FAILED(check_result)) { std::fprintf(stderr,"FAILED line %d: %s = %d\n",__LINE__,#x,check_result); return 1; } } while (0)
@@ -40,8 +39,9 @@ int main()
     XR(xrGetD3D11GraphicsRequirementsKHR(instance,system,&requirements));
     ID3D11Device *device=nullptr; ID3D11DeviceContext *context=nullptr;
     CHECK(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
-    IDXMTNativeDevice2 *native=nullptr; ID3D11DeviceContext4 *context4=nullptr;
-    CHECK(SUCCEEDED(device->QueryInterface(DXMT_IID_NATIVE_DEVICE2,(void **)&native)));
+    // Backend-neutral: readback ordering uses a plain D3D11 fence completed on the CPU.
+    ID3D11Device5 *device5=nullptr; ID3D11DeviceContext4 *context4=nullptr;
+    CHECK(SUCCEEDED(device->QueryInterface(__uuidof(ID3D11Device5),(void **)&device5)));
     CHECK(SUCCEEDED(context->QueryInterface(__uuidof(ID3D11DeviceContext4),(void **)&context4)));
     XrGraphicsBindingD3D11KHR binding={XR_TYPE_GRAPHICS_BINDING_D3D11_KHR}; binding.device=device;
     XrSessionCreateInfo sci={XR_TYPE_SESSION_CREATE_INFO}; sci.next=&binding; sci.systemId=system;
@@ -73,7 +73,8 @@ int main()
         metal_probe_params p={};
         UINT64 texture=0; XR(image_object(swapchain,0,&p.device,&texture));
         CHECK(probe(3,&p)==0 && p.status==0);
-        ID3D11Fence *fence=nullptr; CHECK(SUCCEEDED(native->ImportMetalSharedEvent(p.event,&fence)));
+        ID3D11Fence *fence=nullptr; CHECK(SUCCEEDED(device5->CreateFence(0,D3D11_FENCE_FLAG_NONE,__uuidof(ID3D11Fence),(void **)&fence)));
+        UINT64 fence_value=0;
         for (unsigned iteration=0;iteration<count*8 && remaining;++iteration) {
             XrFrameWaitInfo wi={XR_TYPE_FRAME_WAIT_INFO}; XrFrameState fs={XR_TYPE_FRAME_STATE}; XR(xrWaitFrame(session,&wi,&fs));
             XrFrameBeginInfo bi={XR_TYPE_FRAME_BEGIN_INFO}; XR(xrBeginFrame(session,&bi));
@@ -90,7 +91,9 @@ int main()
                 float color[4]={slice ? 0.f:1.f,slice ? 1.f:0.f,index&1 ? 1.f:0.f,1.f};
                 context->ClearRenderTargetView(rtv,color); rtv->Release();
             }
-            CHECK(SUCCEEDED(context4->Signal(fence,++p.value))); context->Flush();
+            CHECK(SUCCEEDED(context4->Signal(fence,++fence_value))); context->Flush();
+            for (unsigned wait=0;fence->GetCompletedValue()<fence_value && wait<5000;++wait) Sleep(1);
+            CHECK(fence->GetCompletedValue()>=fence_value); p.value=0;
             for (unsigned slice=0;slice<arrays;++slice) {
                 p.slice=slice; p.timeout_ms=5000; p.expected_pixel=0xff000000u|((index&1)?0xff0000u:0)| (slice?0xff00u:0xffu);
                 CHECK(probe(1,&p)==0 && p.status==0);
@@ -104,7 +107,7 @@ int main()
         CHECK(remaining==0); fence->Release(); CHECK(probe(4,&p)==0); XR(xrDestroySwapchain(swapchain));
     }
     XR(xrDestroySession(session)); XR(xrDestroyInstance(instance));
-    context4->Release(); native->Release(); context->Release(); device->Release();
+    context4->Release(); device5->Release(); context->Release(); device->Release();
     std::puts("PASS all runtime-owned 2D and array images/slices");
     return 0;
 }

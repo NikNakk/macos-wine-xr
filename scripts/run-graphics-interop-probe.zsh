@@ -17,6 +17,7 @@ unset WINEDLLOVERRIDES
 [[ -x ${wine_root}/bin/wine && -f ${root}/graphics_interop_probe.exe ]] || {
  print -u2 'Build the probe (scripts/build-graphics-interop-probe.zsh) and a Wine runtime first'; exit 1
 }
-"${wine_root}/bin/wine" wineboot -u
+# The probe needs neither .NET nor HTML; skip the Mono/Gecko install dialogs.
+WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine_root}/bin/wine" wineboot -u
 cp "${root}/x86_64-windows/mwxr_graphics_probe.dll" "${WINEPREFIX}/drive_c/windows/system32/"
 "${wine_root}/bin/wine" "${root}/graphics_interop_probe.exe"
