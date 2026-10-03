@@ -5,6 +5,10 @@ Date: 2026-10-02. Phase 0 study followed by the authorized x86_64 prototype.
 Monado swapchain validation and Phase 2 are blocked by XPC test isolation.**
 The proxy and native-host implementations remain available and unchanged.
 
+Graphics adaptation now goes through the renderer-neutral `GraphicsInterop`
+layer (DXMT and experimental D3DMetal backends); see
+[graphics-interop.md](graphics-interop.md).
+
 ## Finding
 
 Proton is a suitable structural base: a Windows builtin runtime DLL, generated
