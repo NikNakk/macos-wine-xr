@@ -210,7 +210,8 @@ Diagnostics for runs on other GPTK/Wine versions:
   as DXMT: `Signal`, `Flush`, native `encodeWaitForEvent`
   (`shared-event-gpu-wait`). If no substitution happens, the fallback is
   `fence-cpu-wait`: `Signal`, `SetEventOnCompletion`, `Flush`, wait for the
-  Win32 event (5 s limit), then set the session event from the CPU. That is a
+  Win32 event, rechecking the fence value after every wake (5 s total limit),
+  then set the session event from the CPU. That is a
   CPU stall on the app thread, logged at session creation. It is not used with
   GPTK 4.0b2.
 
@@ -331,3 +332,47 @@ MWXR_GRAPHICS_BACKEND=d3dmetal scripts/run-in-process-simulated.zsh app.exe ...
    - The shadow-heap shim.
    - D3D12.
    - Checking new GPTK releases against the diagnostics table.
+
+
+## Review corrections
+
+Three correctness defects found during review are corrected:
+
+- CPU fence completion treats the Win32 event as a wake-up notification, not
+  proof of completion. A stale signal cannot advance the session Metal event;
+  each wake rechecks the producer fence and shares one five-second deadline.
+- Each Objective-C hook captures the original IMP of the specific method it
+  replaces. A hooked subclass calling a hooked superclass now reaches the
+  superclass implementation instead of recursively redispatching the subclass.
+- The GPTK heap switch has a mutex-protected active-import count. The first
+  active import saves and disables it; the last restores the original value.
+  Both overlapping completion orders and an initially disabled switch are
+  covered. Per-thread ownership prevents an extra disarm from decrementing
+  another import's count.
+
+The heap switch remains a **private, process-wide GPTK setting**. While any
+import is active, unrelated D3DMetal allocations can also bypass internal heap
+pools. Only object substitution is thread-local. This remains a limitation of
+this experimental backend; the bridge does not claim isolation from ordinary
+D3DMetal allocations or compatibility with untested GPTK versions.
+
+Validation for these corrections:
+
+- Native CMake build: PASS. CTest: five PASS, one GPU test initially SKIPPED
+  in the sandbox. The skipped test was then run with GPU access and passed.
+- New GPU-independent `graphics_interposer_control_test`: PASS on ARM64 and
+  x86_64/Rosetta; covers superclass forwarding for all three hook signatures,
+  descriptor/offset argument forwarding, both overlap completion orders,
+  original heap setting preservation and repeated disarm.
+- New portable `fence_wait_test`: PASS; covers stale notification followed by
+  actual completion, already completed fence, repeated notifications hitting
+  the total deadline and failed wait. The real D3DMetal CPU-fallback path is
+  still untested end to end.
+- Existing Metal image/event interposer test: PASS on ARM64 with validation
+  disabled and enabled, and x86_64 with validation enabled. No validation
+  assertions.
+- Full `wineopenxr.dll`/`wineopenxr.so` and gate executable builds: PASS with
+  the Wine 11.10/DXMT SDK and CrossOver 26.3/GPTK runtime respectively, in
+  `build-in-process/gate` and `build-in-process/interop-gptk`.
+- No Monado changes or headset runs. Game and full OpenXR measurements from
+  the earlier results table were not repeated for these corrections.

@@ -9,6 +9,7 @@
 // import is verified; a refused or unreached substitution is an error unless
 // the explicit copy mode was selected, which is then logged as a copy.
 #include "graphics_interop.h"
+#include "fence_wait.h"
 #include "graphics_interop_native.h"
 #include <stdio.h>
 
@@ -149,7 +150,10 @@ public:
         hr = fence->SetEventOnCompletion(value, completion);
         context->Flush();
         if (FAILED(hr)) return hr;
-        if (fence->GetCompletedValue() < value && WaitForSingleObject(completion, 5000) != WAIT_OBJECT_0) {
+        if (!mw_wait_for_fence(value, 5000,
+                [&] { return fence->GetCompletedValue(); },
+                [&](uint32_t remaining) { return WaitForSingleObject(completion, remaining) == WAIT_OBJECT_0; },
+                [] { return GetTickCount64(); })) {
             fprintf(stderr, "wineopenxr: ERROR d3dmetal fence value %llu did not complete\n", (unsigned long long)value);
             return E_FAIL;
         }

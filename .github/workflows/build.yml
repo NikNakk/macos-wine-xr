@@ -29,7 +29,7 @@ jobs:
           cmake --build build --target native_metal_sharing_probe tcp_auth_test
           native_capability_test native_openxr_backend_probe native_openxr_blit_probe
           dxmt_reverse_import_probe macos_wine_xr_host rpc_serialization_test rpc_transport_test
-          graphics_interposer_test --parallel
+          graphics_interposer_test graphics_interposer_control_test fence_wait_test --parallel
       - name: Test authentication and native capability lifetime
         run: ctest --test-dir build --output-on-failure
 
