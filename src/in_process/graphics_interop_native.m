@@ -9,7 +9,8 @@
 // the armed runtime-owned object (if its descriptor is compatible), so the D3D
 // resource created by that call refers to the same allocation. The technique
 // follows utmapp/d3dmetal-native (MIT): no code or Apple binaries are copied.
-// Unarmed threads and other processes are unaffected.
+// Substitution is thread-local. GPTK's heap-allocation switch is process-wide
+// while imports are active; ordinary allocations may also bypass its pools.
 #if 0
 #pragma makedep unix
 #endif
@@ -69,7 +70,7 @@ static void identify(struct mw_gfx_native_params *p)
 // Per-thread arm state. Objects are borrowed from the PE caller for the
 // duration of one arm/allocate/disarm sequence on this thread.
 static __thread struct {
-    int texture_armed, event_armed, event_via_private;
+    int texture_armed, event_armed, event_via_private, heap_override;
     id<MTLTexture> texture;   // nil: capture the runtime's own allocation
     id<MTLSharedEvent> event;
     id device, captured;      // captured is retained
@@ -77,28 +78,18 @@ static __thread struct {
     struct mw_gfx_native_desc requested;
 } arm;
 
-struct hook { Method method; IMP original; };
+struct hook { Method method; };
 static struct hook hooks[32];
 static unsigned hook_count;
 static pthread_mutex_t hook_mutex = PTHREAD_MUTEX_INITIALIZER;
 static unsigned char *internal_heaps;  // D3DMDevice::UseInternalHeaps (GPTK 4), if exported
 static unsigned char saved_internal_heaps;
 
-// The nearest hooked implementation in self's class chain. A class that
-// overrides the method and calls super reaches the hook with its own class.
-static IMP original(id self, SEL selector)
-{
-    IMP result = NULL;
-    pthread_mutex_lock(&hook_mutex);
-    for (Class cls = object_getClass(self); cls && !result; cls = class_getSuperclass(cls)) {
-        Method method = class_getInstanceMethod(cls, selector);
-        for (unsigned i = 0; i < hook_count && !result; ++i)
-            if (hooks[i].method == method) result = hooks[i].original;
-    }
-    pthread_mutex_unlock(&hook_mutex);
-    return result;
-}
+static pthread_mutex_t heap_mutex = PTHREAD_MUTEX_INITIALIZER;
+static unsigned heap_users;
 
+// Each installed IMP captures its own predecessor. Looking it up from self's
+// dynamic class loses the superclass implementation when an override calls super.
 static void install(Class cls, SEL selector, IMP replacement)
 {
     Method method = class_getInstanceMethod(cls, selector);
@@ -106,10 +97,31 @@ static void install(Class cls, SEL selector, IMP replacement)
     pthread_mutex_lock(&hook_mutex);
     int present = 0;
     for (unsigned i = 0; i < hook_count; ++i) present |= hooks[i].method == method;
-    if (!present && hook_count < sizeof(hooks) / sizeof(hooks[0]) && method_getImplementation(method) != replacement) {
-        hooks[hook_count].method = method;
-        hooks[hook_count].original = method_setImplementation(method, replacement);
-        ++hook_count;
+    if (!present && hook_count < sizeof(hooks) / sizeof(hooks[0])) {
+        IMP next = method_getImplementation(method);
+        IMP wrapper = NULL;
+        switch (method_getNumberOfArguments(method)) {
+        case 2:
+            wrapper = imp_implementationWithBlock(^id(id self) {
+                return ((id (*)(id, SEL, IMP))replacement)(self, selector, next);
+            });
+            break;
+        case 3:
+            wrapper = imp_implementationWithBlock(^id(id self, id descriptor) {
+                return ((id (*)(id, SEL, id, IMP))replacement)(self, selector, descriptor, next);
+            });
+            break;
+        case 4:
+            wrapper = imp_implementationWithBlock(^id(id self, id descriptor, NSUInteger offset) {
+                return ((id (*)(id, SEL, id, NSUInteger, IMP))replacement)(self, selector, descriptor, offset, next);
+            });
+            break;
+        }
+        if (wrapper) {
+            hooks[hook_count].method = method;
+            method_setImplementation(method, wrapper);
+            ++hook_count;
+        }
     }
     pthread_mutex_unlock(&hook_mutex);
 }
@@ -136,9 +148,8 @@ static uint32_t check_substitute(id device, MTLTextureDescriptor *request, id<MT
     return MW_GFX_NATIVE_SUBSTITUTED;
 }
 
-static id hook_device_texture(id self, SEL selector, MTLTextureDescriptor *request)
+static id hook_device_texture(id self, SEL selector, MTLTextureDescriptor *request, IMP next)
 {
-    IMP next = original(self, selector);
     if (arm.texture_armed) {
         arm.texture_armed = 0;
         arm.device = self;
@@ -157,21 +168,21 @@ static id hook_device_texture(id self, SEL selector, MTLTextureDescriptor *reque
     return ((id (*)(id, SEL, MTLTextureDescriptor *))next)(self, selector, request);
 }
 
-static id hook_heap_texture(id self, SEL selector, MTLTextureDescriptor *request)
+static id hook_heap_texture(id self, SEL selector, MTLTextureDescriptor *request, IMP next)
 {
     if (arm.texture_armed) { arm.texture_armed = 0; arm.texture_detail = MW_GFX_NATIVE_HEAP_PLACEMENT; }
-    return ((id (*)(id, SEL, MTLTextureDescriptor *))original(self, selector))(self, selector, request);
+    return ((id (*)(id, SEL, MTLTextureDescriptor *))next)(self, selector, request);
 }
 
-static id hook_heap_texture_offset(id self, SEL selector, MTLTextureDescriptor *request, NSUInteger offset)
+static id hook_heap_texture_offset(id self, SEL selector, MTLTextureDescriptor *request, NSUInteger offset, IMP next)
 {
     if (arm.texture_armed) { arm.texture_armed = 0; arm.texture_detail = MW_GFX_NATIVE_HEAP_PLACEMENT; }
-    return ((id (*)(id, SEL, MTLTextureDescriptor *, NSUInteger))original(self, selector))(self, selector, request, offset);
+    return ((id (*)(id, SEL, MTLTextureDescriptor *, NSUInteger))next)(self, selector, request, offset);
 }
 
-static id hook_device_heap(id self, SEL selector, MTLHeapDescriptor *request)
+static id hook_device_heap(id self, SEL selector, MTLHeapDescriptor *request, IMP next)
 {
-    id heap = ((id (*)(id, SEL, MTLHeapDescriptor *))original(self, selector))(self, selector, request);
+    id heap = ((id (*)(id, SEL, MTLHeapDescriptor *))next)(self, selector, request);
     if (heap) {
         install(object_getClass(heap), @selector(newTextureWithDescriptor:), (IMP)hook_heap_texture);
         install(object_getClass(heap), @selector(newTextureWithDescriptor:offset:), (IMP)hook_heap_texture_offset);
@@ -179,7 +190,7 @@ static id hook_device_heap(id self, SEL selector, MTLHeapDescriptor *request)
     return heap;
 }
 
-static id hook_device_shared_event(id self, SEL selector)
+static id hook_device_shared_event(id self, SEL selector, IMP next)
 {
     if (arm.event_armed) {
         arm.event_armed = 0;
@@ -192,10 +203,10 @@ static id hook_device_shared_event(id self, SEL selector)
         }
         arm.event_detail = MW_GFX_NATIVE_MISMATCH_DEVICE;
     }
-    return ((id (*)(id, SEL))original(self, selector))(self, selector);
+    return ((id (*)(id, SEL))next)(self, selector);
 }
 
-static id hook_device_event(id self, SEL selector)
+static id hook_device_event(id self, SEL selector, IMP next)
 {
     // D3DMetal 4.0b2 backs ID3D11Fence with a plain MTLEvent. An MTLSharedEvent
     // is an MTLEvent, so the fence's GPU signals land on the session event.
@@ -206,7 +217,7 @@ static id hook_device_event(id self, SEL selector)
         arm.event_via_private = 1;
         return [arm.event retain];
     }
-    return ((id (*)(id, SEL))original(self, selector))(self, selector);
+    return ((id (*)(id, SEL))next)(self, selector);
 }
 
 static void interpose(struct mw_gfx_native_params *p)
@@ -223,12 +234,17 @@ static void interpose(struct mw_gfx_native_params *p)
         install(cls, @selector(newEvent), (IMP)hook_device_event);
     }
     [devices release]; [preferred release];
+    pthread_mutex_lock(&heap_mutex);
     if (d3dmetal_image[0] && !internal_heaps) {
         void *image = dlopen(d3dmetal_image, RTLD_LAZY | RTLD_NOLOAD);
-        if (image) internal_heaps = dlsym(image, "_ZN10D3DMDevice16UseInternalHeapsE");
+        if (image) {
+            internal_heaps = dlsym(image, "_ZN10D3DMDevice16UseInternalHeapsE");
+            dlclose(image);
+        }
     }
     p->value = hook_count;
     p->detail = internal_heaps != NULL;  // whether the GPTK 4 heap-pool switch exists
+    pthread_mutex_unlock(&heap_mutex);
     if (!hook_count) p->status = -1;
 }
 
@@ -241,12 +257,22 @@ static void arm_texture(struct mw_gfx_native_params *p)
     arm.texture_detail = hook_count ? MW_GFX_NATIVE_NOT_REACHED : MW_GFX_NATIVE_UNSUPPORTED;
     arm.texture_armed = hook_count != 0;
     // GPTK 4 suballocates from internal heaps; request a dedicated allocation.
-    if (internal_heaps) { saved_internal_heaps = *internal_heaps; *internal_heaps = 0; }
+    pthread_mutex_lock(&heap_mutex);
+    if (internal_heaps && !arm.heap_override) {
+        if (!heap_users++) { saved_internal_heaps = *internal_heaps; *internal_heaps = 0; }
+        arm.heap_override = 1;
+    }
+    pthread_mutex_unlock(&heap_mutex);
 }
 
 static void disarm_texture(struct mw_gfx_native_params *p)
 {
-    if (internal_heaps) *internal_heaps = saved_internal_heaps;
+    pthread_mutex_lock(&heap_mutex);
+    if (arm.heap_override) {
+        if (!--heap_users) *internal_heaps = saved_internal_heaps;
+        arm.heap_override = 0;
+    }
+    pthread_mutex_unlock(&heap_mutex);
     arm.texture_armed = 0;
     p->detail = arm.texture_detail;
     p->device = (uint64_t)arm.device;

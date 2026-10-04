@@ -23,6 +23,9 @@ add_executable(rpc_serialization_test tests/rpc/serialization_test.c "${MWXR_RPC
  if(NOT WIN32)
  add_test(NAME rpc_serialization COMMAND rpc_serialization_test)
  endif()
+add_executable(fence_wait_test tests/in_process/fence_wait_test.cpp)
+add_test(NAME fence_wait COMMAND fence_wait_test)
+
 if(WIN32)
  target_link_libraries(macos_wine_xr_rpc PUBLIC ws2_32 bcrypt)
 endif()
@@ -87,6 +90,10 @@ if(APPLE)
  target_link_libraries(rpc_transport_test PRIVATE macos_wine_xr_rpc)
  add_test(NAME rpc_transport COMMAND rpc_transport_test)
  set_tests_properties(rpc_transport PROPERTIES TIMEOUT 10)
+	add_executable(graphics_interposer_control_test tests/macos/graphics_interposer_control_test.m)
+	target_link_libraries(graphics_interposer_control_test PRIVATE "-framework Metal" "-framework Foundation")
+	add_test(NAME graphics_interposer_control COMMAND graphics_interposer_control_test)
+	set_tests_properties(graphics_interposer_control PROPERTIES TIMEOUT 10)
 	# In-process graphics interop allocation interposer; needs only Metal.
 	add_executable(graphics_interposer_test
 		tests/macos/graphics_interposer_test.m src/in_process/graphics_interop_native.m)
