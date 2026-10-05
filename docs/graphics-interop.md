@@ -287,10 +287,19 @@ compositor.
   output in both eyes with working PS VR2 6DoF tracking.
   [Log](results/psvr2-d3dmetal-2026-10-05/hello-xr-service-compositor.log).
 
+- `hello_xr` with `XRT_MACOS_CLIENT_COMPOSITOR=1` (Game Mode path): the
+  compositor ran inside the Wine process and presented through the service's
+  headset window (CAContext). Both eye swapchains (3 images each in this mode)
+  were `zero-copy=yes` with `shared-event-gpu-wait`, and there were no
+  validation assertions. The hosted front end measured the display with
+  CADisplayLink at 8.342 ms (119.88 Hz), with steady callbacks, so the 60 Hz
+  CVDisplayLink behaviour under Rosetta recorded in in-process-openxr.md does
+  not occur with this Monado revision. The user reported smooth motion.
+  [Log](results/psvr2-d3dmetal-2026-10-05/hello-xr-client-compositor.log).
+
 The client must be rebuilt whenever the service is. The service had been
 rebuilt twice during this work; a mismatched client fails `xrCreateInstance`
-with -51. Not yet run on hardware: the client compositor
-(`XRT_MACOS_CLIENT_COMPOSITOR=1`) and real games.
+with -51. Not yet run on hardware: real games.
 
 ## Building the GPTK runtime
 
@@ -340,8 +349,8 @@ MWXR_GRAPHICS_BACKEND=d3dmetal scripts/run-in-process-simulated.zsh app.exe ...
    - The D3DMetal backend with GPTK 4.0b2 on CrossOver 26.3, zero copy with
      GPU shared-event synchronization: interop probe, runtime-image pixel
      probe and `hello_xr` against simulated Monado, and the pixel probe and
-     `hello_xr` on PS VR2 hardware with the service compositor (user-confirmed
-     visuals and 6DoF tracking).
+     `hello_xr` on PS VR2 hardware with the service and client compositors
+     (user-confirmed visuals, 6DoF tracking and smooth motion at 120 Hz).
    - The native interposer (both architectures).
    - The probes, and the reproducible GPTK runtime recipe.
 2. **Implemented, not runtime-tested:**
@@ -353,8 +362,7 @@ MWXR_GRAPHICS_BACKEND=d3dmetal scripts/run-in-process-simulated.zsh app.exe ...
    - IOSurface-backed (heapless Shared) runtime textures are refused, pending
      a shadow-heap shim; the 4.0b2 behaviour there is untested.
 4. **Future:**
-   - Real-game runs on D3DMetal; client compositor (Game Mode) runs on
-     hardware.
+   - Real-game runs on D3DMetal; matched timing comparisons against DXMT.
    - The shadow-heap shim.
    - D3D12.
    - Checking new GPTK releases against the diagnostics table.
