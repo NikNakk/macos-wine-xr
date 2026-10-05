@@ -268,6 +268,30 @@ is logged per swapchain. For a Metal GPU capture, set
 `MTL_CAPTURE_ENABLED=1`. A zero-copy run contains no bridge blit encoder; the
 only blits are the probes' own readbacks.
 
+### PS VR2 hardware run, 2026-10-05
+
+The user ran this with the PS VR2 connected. The installed ARM64 service and
+the x86_64 in-process client were both built from Monado `619b57c84`
+(`v25.1.0-2137-g619b57c84`, IPC protocol SHA-256 `1fc0439a…09dc`). The bridge
+was this branch. The D3D stack was D3DMetal 4.0b2 on CrossOver 26.3 with
+`MWXR_GRAPHICS_BACKEND=d3dmetal`, Metal validation enabled, and the service
+compositor.
+
+- `in_process_swapchain.exe`: launchd cold-activated the service, which
+  selected `PS VR2 HMD`. All 12 runtime-image pixel checks passed (four 2D
+  images, plus both slices of four array images); every image was
+  `zero-copy=yes` with `shared-event-gpu-wait`.
+- Khronos `hello_xr` D3D11, Opaque: both 2800×2856 eye swapchains were
+  `zero-copy=yes` with `shared-event-gpu-wait`, the session reached FOCUSED,
+  and there were no Metal validation assertions. The user confirmed correct
+  output in both eyes with working PS VR2 6DoF tracking.
+  [Log](results/psvr2-d3dmetal-2026-10-05/hello-xr-service-compositor.log).
+
+The client must be rebuilt whenever the service is. The service had been
+rebuilt twice during this work; a mismatched client fails `xrCreateInstance`
+with -51. Not yet run on hardware: the client compositor
+(`XRT_MACOS_CLIENT_COMPOSITOR=1`) and real games.
+
 ## Building the GPTK runtime
 
 ```zsh
@@ -315,7 +339,9 @@ MWXR_GRAPHICS_BACKEND=d3dmetal scripts/run-in-process-simulated.zsh app.exe ...
    - The DXMT backend with no behaviour change.
    - The D3DMetal backend with GPTK 4.0b2 on CrossOver 26.3, zero copy with
      GPU shared-event synchronization: interop probe, runtime-image pixel
-     probe and `hello_xr` against simulated Monado.
+     probe and `hello_xr` against simulated Monado, and the pixel probe and
+     `hello_xr` on PS VR2 hardware with the service compositor (user-confirmed
+     visuals and 6DoF tracking).
    - The native interposer (both architectures).
    - The probes, and the reproducible GPTK runtime recipe.
 2. **Implemented, not runtime-tested:**
@@ -327,8 +353,8 @@ MWXR_GRAPHICS_BACKEND=d3dmetal scripts/run-in-process-simulated.zsh app.exe ...
    - IOSurface-backed (heapless Shared) runtime textures are refused, pending
      a shadow-heap shim; the 4.0b2 behaviour there is untested.
 4. **Future:**
-   - PS VR2 hardware and real-game runs on D3DMetal; Game Mode / client
-     compositor runs.
+   - Real-game runs on D3DMetal; client compositor (Game Mode) runs on
+     hardware.
    - The shadow-heap shim.
    - D3D12.
    - Checking new GPTK releases against the diagnostics table.
