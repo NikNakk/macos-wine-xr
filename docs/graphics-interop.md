@@ -297,6 +297,26 @@ compositor.
   not occur with this Monado revision. The user reported smooth motion.
   [Log](results/psvr2-d3dmetal-2026-10-05/hello-xr-client-compositor.log).
 
+### Underture on D3DMetal (PS VR2), 2026-10-05/06
+
+The user ran Underture (Unity, OpenVR through OpenComposite, `-force-d3d11`)
+on D3DMetal 4.0b2 with the client compositor. It ran and looked correct.
+User observations:
+
+- Motion was still a little juddery, more so than native OpenXR apps, but
+  possibly better than the earlier DXMT runs. Not measured.
+- `MWXR_DESKTOP_MIRROR=offscreen` (the existing off-screen Unity mirror
+  launch) gave noticeably better performance.
+- With Monado floor calibration (`monado-ctl --floor-eye-height`, Monado branch
+  `claude/stage-floor-calibration`), the floor was correct. Without it, the
+  default managed STAGE put the user under the floor. That is a runtime
+  issue, not a bridge one.
+
+OpenComposite copies the game's eye textures into the OpenXR swapchains, so
+this title is not zero-copy end to end even though the bridge is. A judder
+comparison against DXMT needs matched traces (same service flags, mirror mode
+and duration) before drawing conclusions.
+
 The client must be rebuilt whenever the service is. The service had been
 rebuilt twice during this work; a mismatched client fails `xrCreateInstance`
 with -51. Not yet run on hardware: real games.
