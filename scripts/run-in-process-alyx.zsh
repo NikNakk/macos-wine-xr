@@ -34,6 +34,7 @@ wine=${MWXR_IN_PROCESS_WINE}/bin/wine
 export WINEPREFIX=${MWXR_IN_PROCESS_PREFIX}
 export WINEARCH=win64
 export WINEDEBUG=${WINEDEBUG:--all}
+export DYLD_FALLBACK_LIBRARY_PATH=${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-unix:${MWXR_IN_PROCESS_WINE}/lib
 
 if [[ ${ALYX_START_STEAM:-1} == 1 ]]; then
  WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine}" wineboot -u

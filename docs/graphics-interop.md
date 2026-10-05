@@ -343,6 +343,14 @@ MWXR_CROSSOVER_INSTALL=/path/to/install MWXR_GPTK_LIB=/path/to/redist/lib \
 MWXR_GPTK_RUNTIME=/path/to/runtime-gptk scripts/install-gptk-runtime.zsh
 ```
 
+Steam (needed by Alyx) requires GnuTLS and FreeType: configure with
+`--with-gnutls --with-freetype`, compiling against Homebrew headers and
+linking x86_64 dylibs copied from the Wine 11.10 bundle's `lib`. Set
+`SONAME_LIBGNUTLS`/`SONAME_LIBFREETYPE` in the generated config.h to
+`libgnutls.30.dylib`/`libfreetype.6.dylib`, give the copied FreeType an
+absolute install name for the build-time `sfnt2fon` tool, and copy the dylibs
+into the install's `lib`. The runners add that `lib` to the library path.
+
 Build `wineopenxr` and the probes against the CrossOver SDK. Set
 `MWXR_WINE_SDK` to the install, `MWXR_WINE_SOURCE` to `sources/wine` and
 `MWXR_WINE_RUNTIME` to the GPTK runtime, with a separate
