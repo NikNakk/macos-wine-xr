@@ -13,7 +13,8 @@ export WINEPREFIX=${MWXR_IN_PROCESS_PREFIX:-${repo}/build-in-process/prefix-open
 export WINEARCH=win64
 export WINEDEBUG=${WINEDEBUG:--all}
 export WINEDLLPATH=${root}
-export DYLD_FALLBACK_LIBRARY_PATH=${wine_root}/lib/wine/x86_64-unix
+# Wine loads GnuTLS, FreeType and friends by name from the runtime's lib.
+export DYLD_FALLBACK_LIBRARY_PATH=${wine_root}/lib/wine/x86_64-unix:${wine_root}/lib
 export MWXR_NATIVE_RUNTIME_JSON
 unset XR_RUNTIME_JSON WINEDLLOVERRIDES
 [[ -x ${wine_root}/bin/wine && -f ${root}/x86_64-unix/wineopenxr.so ]] || {
