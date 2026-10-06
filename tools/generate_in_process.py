@@ -21,13 +21,17 @@ g.LOGGER.setLevel(logging.WARNING)
 g.WINE_XR_VERSION = (1, 0)
 g.NOT_OUR_FUNCTIONS = g.NOT_OUR_FUNCTIONS + ["xrCreateApiLayerInstance"]
 # Generate Windows D3D11 and internal native Metal structures. Only D3D11
-# is advertised; native Metal entry points are hidden from Windows GIPA.
-g.XrRegistry._is_extension_supported = lambda self, name: name in {'XR_KHR_D3D11_enable', 'XR_KHR_metal_enable'}
+# and Win32 time conversion are advertised; native Metal entry points are
+# hidden from Windows GIPA.
+g.XrRegistry._is_extension_supported = lambda self, name: name in {
+    'XR_KHR_D3D11_enable', 'XR_KHR_metal_enable', 'XR_KHR_win32_convert_performance_counter_time'}
 g.MANUAL_UNIX_THUNKS = {'xrCreateInstance', 'xrEnumerateInstanceExtensionProperties', 'xrEnumerateApiLayerProperties',
                         'xrCreateSession', 'xrCreateSwapchain', 'xrDestroyInstance', 'xrDestroySession',
-    'xrGetD3D11GraphicsRequirementsKHR', 'xrEnumerateSwapchainFormats', 'xrReleaseSwapchainImage'}
+    'xrGetD3D11GraphicsRequirementsKHR', 'xrEnumerateSwapchainFormats', 'xrReleaseSwapchainImage',
+    'xrConvertWin32PerformanceCounterToTimeKHR', 'xrConvertTimeToWin32PerformanceCounterKHR'}
 g.FUNCTION_OVERRIDES = {name: {'dispatch': name not in
-    {'xrCreateInstance', 'xrEnumerateInstanceExtensionProperties', 'xrEnumerateApiLayerProperties', 'xrGetInstanceProcAddr', 'xrGetD3D11GraphicsRequirementsKHR'}}
+    {'xrCreateInstance', 'xrEnumerateInstanceExtensionProperties', 'xrEnumerateApiLayerProperties', 'xrGetInstanceProcAddr', 'xrGetD3D11GraphicsRequirementsKHR',
+     'xrConvertWin32PerformanceCounterToTimeKHR', 'xrConvertTimeToWin32PerformanceCounterKHR'}}
     for name in g.MANUAL_UNIX_THUNKS | {'xrGetInstanceProcAddr'}}
 g.MANUAL_LOADER_FUNCTIONS = {'xrGetInstanceProcAddr', 'xrNegotiateLoaderRuntimeInterface',
     'xrCreateApiLayerInstance', 'xrNegotiateLoaderApiLayerInterface'}
