@@ -37,7 +37,8 @@ endif()
 
 add_library(driver_mwxr SHARED driver.cpp xr_backend.cpp)
 set_target_properties(driver_mwxr PROPERTIES PREFIX "")
-target_include_directories(driver_mwxr PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+# .. for in_process/mndx_display_distortion.h (Monado's experimental extension).
+target_include_directories(driver_mwxr PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
 target_link_libraries(driver_mwxr PRIVATE openxr_loader d3d11 dxgi)
 
 # Zero-copy swap texture sets need DXMT's IDXMTNativeDevice3; without its

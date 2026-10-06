@@ -46,10 +46,16 @@ XrBackend::Init(std::string &error)
 		return false;
 	}
 	// Optional: without it, the current XrTime is estimated from the frame loop.
-	const char *required[2] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
+	const char *required[3] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
 	uint32_t enabledCount = 1;
-	if (HasExtension(extensions, XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME)) {
+	bool timeConversion = HasExtension(extensions, XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME);
+	if (timeConversion) {
 		required[enabledCount++] = XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME;
+	}
+	// Optional: only SteamVR's virtual-display mode needs it.
+	hasDisplayDistortion = HasExtension(extensions, XR_MNDX_DISPLAY_DISTORTION_EXTENSION_NAME);
+	if (hasDisplayDistortion) {
+		required[enabledCount++] = XR_MNDX_DISPLAY_DISTORTION_EXTENSION_NAME;
 	}
 
 	XrInstanceCreateInfo instanceInfo = {XR_TYPE_INSTANCE_CREATE_INFO};
@@ -63,7 +69,7 @@ XrBackend::Init(std::string &error)
 	XrInstanceProperties instanceProperties = {XR_TYPE_INSTANCE_PROPERTIES};
 	XR_CHECK(xrGetInstanceProperties(instance_, &instanceProperties));
 	runtimeName = instanceProperties.runtimeName;
-	if (enabledCount > 1) {
+	if (timeConversion) {
 		XR_CHECK(xrGetInstanceProcAddr(instance_, "xrConvertWin32PerformanceCounterToTimeKHR",
 		                               (PFN_xrVoidFunction *)&qpcToTime_));
 		XR_CHECK(xrGetInstanceProcAddr(instance_, "xrConvertTimeToWin32PerformanceCounterKHR",
@@ -78,6 +84,16 @@ XrBackend::Init(std::string &error)
 	XrSystemProperties systemProperties = {XR_TYPE_SYSTEM_PROPERTIES};
 	XR_CHECK(xrGetSystemProperties(instance_, system_, &systemProperties));
 	systemName = systemProperties.systemName;
+	if (hasDisplayDistortion) {
+		PFN_xrGetDisplayDistortionPropertiesMNDX getDisplay = nullptr;
+		xrGetInstanceProcAddr(instance_, "xrGetDisplayDistortionPropertiesMNDX", (PFN_xrVoidFunction *)&getDisplay);
+		xrGetInstanceProcAddr(instance_, "xrComputeDisplayDistortionMNDX", (PFN_xrVoidFunction *)&computeDistortion_);
+		XrResult result = getDisplay && computeDistortion_ ? getDisplay(instance_, system_, &display)
+		                                                   : XR_ERROR_FUNCTION_UNSUPPORTED;
+		hasDisplayDistortion = XR_SUCCEEDED(result) && display.viewCount == 2;
+		Log("Display distortion: %s (%d), display %dx%d, %.2f Hz\n", hasDisplayDistortion ? "available" : "unusable",
+		    result, display.displaySize.width, display.displaySize.height, display.nominalRefreshRate);
+	}
 
 	uint32_t viewCount = 0;
 	XR_CHECK(xrEnumerateViewConfigurationViews(instance_, system_, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0,
@@ -454,6 +470,14 @@ XrBackend::Shutdown()
 		device->Release();
 		device = nullptr;
 	}
+}
+
+bool
+XrBackend::ComputeDisplayDistortion(uint32_t view, float u, float v, XrVector2f out[3])
+{
+	XrVector2f point = {u, v};
+	return hasDisplayDistortion &&
+	       XR_SUCCEEDED(computeDistortion_(instance_, system_, view, 1, &point, &out[0], &out[1], &out[2]));
 }
 
 XrTime

@@ -345,6 +345,68 @@ PS VR2 (installed service v25.1.0-2146, `XRT_MACOS_CLIENT_COMPOSITOR=1`):
   `monado-service`. Not yet measured.
 - No skeletal input, battery or proximity.
 
+### Virtual-display mode (stage 1: SteamVR as the only compositor), 2026-10-06
+
+Goal: one compositor for the SteamVR path. SteamVR's compositor produces the
+panel-ready image; Monado only owns the device and display, the timing and the
+final Metal present. Direct mode cannot provide this: its resolve textures are
+undistorted by contract. `IVRVirtualDisplay` can, because SteamVR's compositor
+then distorts with the driver's `ComputeDistortion` and hands over "the final
+backbuffer for display".
+
+Stage 1 (this section) proves the SteamVR side. Presenting the backbuffer
+through Monado's macOS presenter is stage 2.
+
+- **Distortion from the runtime.** Monado's new experimental
+  `XR_MNDX_display_distortion` (worktree `.build/monado-display-distortion`,
+  branch `claude/display-distortion-mndx`, `f34bb674b`; off by default,
+  `-DXRT_FEATURE_OPENXR_MNDX_DISPLAY_DISTORTION=ON`) exposes the display
+  size, each view's viewport and distortion FOV, and batched per-channel
+  distortion evaluation through `xrt_device_compute_distortion`. It is the
+  same mapping as SteamVR's `ComputeDistortion`; the PS VR2 function
+  (`psvr2_compute_distortion_asymmetric(eEye, fU, fV)`) already has that
+  shape. IPC clients use the existing device call, so the service is
+  unchanged. The in-process runtime passes it through
+  (`mndx_display_distortion.h`, one extra unix entry).
+- **Driver.** `driver_mwxr.displayMode` = `virtual` (default `direct`)
+  presents `IVRVirtualDisplay` instead of the direct-mode component when the
+  runtime has the extension. The window bounds are the display, the eye
+  viewports and FOVs come from the extension, and `ComputeDistortion`
+  evaluates it exactly. `WaitForPresent` currently paces with an empty OpenXR
+  frame (the headset shows nothing yet), and `GetTimeSinceLastVsync` derives
+  from it. `virtualDisplayDumpDir` writes presents 300 and 1200 as PPM.
+- **DXMT fix.** The backbuffers are `MISC_SHARED_KEYEDMUTEX`, and the
+  compositor acquires and releases them on different threads. Wine's server
+  ties keyed-mutex ownership to the thread and rejected the releases
+  (diagnostic: acquired on thread 3472, released on 4148,
+  `STATUS_INVALID_PARAMETER`), so every later `AcquireSync` failed (about 15
+  a second). DXMT now runs each mutex's D3DKMT acquire and release on one
+  owner thread (`0249f5b`).
+
+Against simulated Monado (new x86_64 client from the worktree, tag still
+v25.1.0-2146): SteamVR's compositor started in virtual-display mode with three
+backbuffers at the display size (1280 x 720), `R8G8B8A8_UNORM` (28),
+render-target and shader-resource bindings, `MISC_SHARED_KEYEDMUTEX`. With the
+DXMT fix there were no keyed-mutex failures. The dumps are the full display,
+side-by-side eyes, undistorted because the simulated HMD's distortion is
+identity. PS VR2 distortion parity (UV conventions, chromatic aberration, mesh
+resolution) needs the headset: its calibration comes from the device.
+
+Findings for stage 2:
+
+- Sync is the backbuffer's keyed mutex, which DXMT backs with an
+  `MTLSharedEvent`, so the presenter can wait for it GPU-side.
+- The format is RGBA8. The 8-bit `CAMetalLayer` formats are BGRA, so the
+  final copy into the drawable must swizzle: a small draw rather than a blit.
+- Monado's presenter already ends every frame with a blit from an
+  IOSurface-backed image into the drawable (`comp_window_macos.m`), so a
+  precomposited frame costs no more than today's final step.
+
+Version note: the client must match the service's git tag. The worktree
+build was configured before the commit, so it still reports 2146. A fresh
+configure reports a new tag and needs `IPC_IGNORE_VERSION=1` until the
+service is rebuilt (the IPC protocol is unchanged).
+
 ### Next steps
 
 - PS VR2 check of the zero-copy path.

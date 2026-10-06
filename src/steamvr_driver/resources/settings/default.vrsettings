@@ -3,6 +3,8 @@
 		"enable": true,
 		"displayFrequency": 90.0,
 		"poseRateHz": 500,
-		"zeroCopy": true
+		"zeroCopy": true,
+		"displayMode": "direct",
+		"virtualDisplayDumpDir": ""
 	}
 }

@@ -303,10 +303,22 @@ IsCompositorProcess(uint32_t pid)
 
 class HmdDevice : public TrackedDeviceServerDriverAbi,
                   public DisplayComponentAbi,
-                  public vr::IVRDriverDirectModeComponent
+                  public vr::IVRDriverDirectModeComponent,
+                  public vr::IVRVirtualDisplay
 {
 public:
-	HmdDevice(XrBackend &xr, ControllerDevice *left, ControllerDevice *right) : xr_(xr), controllers_{left, right} {}
+	HmdDevice(XrBackend &xr, ControllerDevice *left, ControllerDevice *right) : xr_(xr), controllers_{left, right}
+	{
+		// "virtual": SteamVR's compositor distorts with the runtime's distortion
+		// and presents through IVRVirtualDisplay (XR_MNDX_display_distortion).
+		char mode[32] = {};
+		vr::VRSettings()->GetString(kSettingsSection, "displayMode", mode, sizeof(mode));
+		virtualDisplay_ = !strcmp(mode, "virtual") && xr_.hasDisplayDistortion;
+		vr::VRSettings()->GetString(kSettingsSection, "virtualDisplayDumpDir", dumpDir_, sizeof(dumpDir_));
+		Log("Display mode: %s%s\n", virtualDisplay_ ? "virtual display" : "direct",
+		    !strcmp(mode, "virtual") && !virtualDisplay_ ? " (virtual requested, runtime lacks display distortion)"
+		                                                : "");
+	}
 
 	// ITrackedDeviceServerDriver
 	vr::EVRInitError
@@ -370,8 +382,11 @@ public:
 		if (!strcmp(name, vr::IVRDisplayComponent_Version)) {
 			return static_cast<DisplayComponentAbi *>(this);
 		}
-		if (!strcmp(name, vr::IVRDriverDirectModeComponent_Version)) {
+		if (!virtualDisplay_ && !strcmp(name, vr::IVRDriverDirectModeComponent_Version)) {
 			return static_cast<vr::IVRDriverDirectModeComponent *>(this);
+		}
+		if (virtualDisplay_ && !strcmp(name, vr::IVRVirtualDisplay_Version)) {
+			return static_cast<vr::IVRVirtualDisplay *>(this);
 		}
 		return nullptr;
 	}
@@ -396,6 +411,11 @@ public:
 	GetWindowBounds(int32_t *x, int32_t *y, uint32_t *width, uint32_t *height) override
 	{
 		*x = *y = 0;
+		if (virtualDisplay_) {
+			*width = xr_.display.displaySize.width;
+			*height = xr_.display.displaySize.height;
+			return;
+		}
 		*width = xr_.recommendedWidth * 2;
 		*height = xr_.recommendedHeight;
 	}
@@ -418,6 +438,14 @@ public:
 	void
 	GetEyeOutputViewport(vr::EVREye eye, uint32_t *x, uint32_t *y, uint32_t *width, uint32_t *height) override
 	{
+		if (virtualDisplay_) {
+			const XrRect2Di &viewport = xr_.display.views[eye].viewport;
+			*x = viewport.offset.x;
+			*y = viewport.offset.y;
+			*width = viewport.extent.width;
+			*height = viewport.extent.height;
+			return;
+		}
 		*x = eye == vr::Eye_Left ? 0 : xr_.recommendedWidth;
 		*y = 0;
 		*width = xr_.recommendedWidth;
@@ -426,16 +454,22 @@ public:
 	void
 	GetProjectionRaw(vr::EVREye eye, float *left, float *right, float *top, float *bottom) override
 	{
-		const XrFovf &fov = xr_.fov[eye];
+		// In virtual-display mode the distortion samples an image rendered with its own FOV.
+		const XrFovf &fov = virtualDisplay_ ? xr_.display.views[eye].fov : xr_.fov[eye];
 		*left = tanf(fov.angleLeft);
 		*right = tanf(fov.angleRight);
 		*top = tanf(-fov.angleUp);
 		*bottom = tanf(-fov.angleDown);
 	}
 	vr::DistortionCoordinates_t *
-	ComputeDistortion(vr::DistortionCoordinates_t *result, vr::EVREye, float u, float v) override
+	ComputeDistortion(vr::DistortionCoordinates_t *result, vr::EVREye eye, float u, float v) override
 	{
-		*result = {{u, v}, {u, v}, {u, v}};
+		XrVector2f rgb[3];
+		if (virtualDisplay_ && xr_.ComputeDisplayDistortion(eye, u, v, rgb)) {
+			*result = {{rgb[0].x, rgb[0].y}, {rgb[1].x, rgb[1].y}, {rgb[2].x, rgb[2].y}};
+		} else {
+			*result = {{u, v}, {u, v}, {u, v}};
+		}
 		return result;
 	}
 	bool
@@ -677,7 +711,128 @@ public:
 		vr::VRServerDriverHost()->VsyncEvent(vsyncOffset);
 	}
 
+	// IVRVirtualDisplay. Validation stage: SteamVR's final, distorted backbuffer
+	// is inspected (and optionally dumped); the OpenXR frame loop only paces.
+	void
+	Present(const vr::PresentInfo_t *info, uint32_t size) override
+	{
+		if (!info || size < sizeof(vr::PresentInfo_t)) {
+			return;
+		}
+		++presentCount_;
+		ID3D11Texture2D *backbuffer = Backbuffer(info->backbufferTextureHandle);
+		if (!backbuffer) {
+			return;
+		}
+		if (dumpDir_[0] && (presentCount_ == 300 || presentCount_ == 1200)) {
+			DumpBackbuffer(backbuffer, info->nFrameId);
+		}
+	}
+
+	void
+	WaitForPresent() override
+	{
+		double vsyncOffset = 0, period = 0;
+		if (xr_.WaitAndBeginFrame(vsyncOffset, period)) {
+			xr_.Present({}); // no layers yet: presentation is the next stage
+			LARGE_INTEGER now, frequency;
+			QueryPerformanceCounter(&now);
+			QueryPerformanceFrequency(&frequency);
+			lastVsync_ = now.QuadPart + (LONGLONG)(vsyncOffset * frequency.QuadPart);
+			++vsyncCount_;
+		}
+	}
+
+	bool
+	GetTimeSinceLastVsync(float *secondsSinceLastVsync, uint64_t *frameCounter) override
+	{
+		if (!lastVsync_) {
+			return false;
+		}
+		LARGE_INTEGER now, frequency;
+		QueryPerformanceCounter(&now);
+		QueryPerformanceFrequency(&frequency);
+		*secondsSinceLastVsync = (float)(now.QuadPart - lastVsync_) / (float)frequency.QuadPart;
+		*frameCounter = vsyncCount_;
+		return true;
+	}
+
 private:
+	ID3D11Texture2D *
+	Backbuffer(vr::SharedTextureHandle_t handle)
+	{
+		for (auto &entry : backbuffers_) {
+			if (entry.first == handle) {
+				return entry.second;
+			}
+		}
+		ID3D11Texture2D *texture = nullptr;
+		if (FAILED(xr_.device->OpenSharedResource((HANDLE)handle, __uuidof(ID3D11Texture2D), (void **)&texture))) {
+			Log("Virtual display: OpenSharedResource(%p) failed\n", (void *)handle);
+			return nullptr;
+		}
+		D3D11_TEXTURE2D_DESC desc;
+		texture->GetDesc(&desc);
+		Log("Virtual display backbuffer %zu: %ux%u format %d samples %u bind 0x%x misc 0x%x\n", backbuffers_.size(),
+		    desc.Width, desc.Height, desc.Format, desc.SampleDesc.Count, desc.BindFlags, desc.MiscFlags);
+		backbuffers_.push_back({handle, texture});
+		return texture;
+	}
+
+	// Writes the backbuffer as a binary PPM (RGB, top row first).
+	void
+	DumpBackbuffer(ID3D11Texture2D *backbuffer, uint64_t frameId)
+	{
+		D3D11_TEXTURE2D_DESC desc;
+		backbuffer->GetDesc(&desc);
+		desc.Usage = D3D11_USAGE_STAGING;
+		desc.BindFlags = 0;
+		desc.MiscFlags = 0;
+		desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+		ID3D11Texture2D *staging = nullptr;
+		ID3D11DeviceContext *context = nullptr;
+		xr_.device->GetImmediateContext(&context);
+		IDXGIKeyedMutex *mutex = nullptr;
+		backbuffer->QueryInterface(__uuidof(IDXGIKeyedMutex), (void **)&mutex);
+		bool locked = mutex && mutex->AcquireSync(0, 100) == S_OK;
+		if (SUCCEEDED(xr_.device->CreateTexture2D(&desc, nullptr, &staging))) {
+			context->CopyResource(staging, backbuffer);
+			D3D11_MAPPED_SUBRESOURCE map;
+			if (SUCCEEDED(context->Map(staging, 0, D3D11_MAP_READ, 0, &map))) {
+				char path[600];
+				snprintf(path, sizeof(path), "%s\\virtual-display-%llu.ppm", dumpDir_, (unsigned long long)frameId);
+				FILE *f = fopen(path, "wb");
+				bool bgra = desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM || desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+				            desc.Format == DXGI_FORMAT_B8G8R8A8_TYPELESS;
+				if (f) {
+					fprintf(f, "P6\n%u %u\n255\n", desc.Width, desc.Height);
+					std::vector<unsigned char> row(desc.Width * 3);
+					for (uint32_t y = 0; y < desc.Height; ++y) {
+						const unsigned char *src = (const unsigned char *)map.pData + (size_t)y * map.RowPitch;
+						for (uint32_t x = 0; x < desc.Width; ++x) {
+							row[x * 3 + 0] = src[x * 4 + (bgra ? 2 : 0)];
+							row[x * 3 + 1] = src[x * 4 + 1];
+							row[x * 3 + 2] = src[x * 4 + (bgra ? 0 : 2)];
+						}
+						fwrite(row.data(), 1, row.size(), f);
+					}
+					fclose(f);
+					Log("Virtual display: dumped frame %llu (format %d, keyed mutex %d) to %s\n",
+					    (unsigned long long)frameId, desc.Format, locked, path);
+				}
+				context->Unmap(staging, 0);
+			}
+			staging->Release();
+		}
+		if (locked) {
+			mutex->ReleaseSync(0);
+		}
+		if (mutex) {
+			mutex->Release();
+		}
+		context->Release();
+	}
+
 	// A standing universe at the reference space origin, so SteamVR does not
 	// require room setup. The runtime's STAGE is already floor-level.
 	void
@@ -859,6 +1014,12 @@ private:
 	std::vector<LayerSubmit> pending_;
 	std::vector<std::shared_ptr<TextureSet>> submittedSets_;
 	bool zeroCopy_ = true;
+
+	bool virtualDisplay_ = false;
+	char dumpDir_[512] = {};
+	std::vector<std::pair<vr::SharedTextureHandle_t, ID3D11Texture2D *>> backbuffers_;
+	uint64_t presentCount_ = 0, vsyncCount_ = 0;
+	LONGLONG lastVsync_ = 0;
 
 	float lastPrediction_ = 0;
 	XrQuaternionf lastRenderHead_ = {0, 0, 0, 1};
