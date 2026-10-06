@@ -384,6 +384,18 @@ main(int argc, char **argv)
 		for (int o = 0; o < 3; ++o) {
 			system->GetDeviceToAbsoluteTrackingPose(origins[o], 0, spaces[o], 3);
 		}
+		// HMD validity across prediction times, to see whether a compositor
+		// asking for a time outside the pose history would get an invalid pose.
+		const float offsets[] = {-0.5f, -0.2f, -0.1f, -0.05f, 0.0f, 0.05f, 0.1f, 0.2f, 0.5f, 1.0f};
+		char predictions[256] = {};
+		size_t used = 0;
+		for (float offset : offsets) {
+			vr::TrackedDevicePose_t p = {};
+			system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, offset, &p, 1);
+			used += snprintf(predictions + used, sizeof(predictions) - used, " %+.2fs:%d/%d", offset, p.bPoseIsValid,
+			                 p.eTrackingResult);
+		}
+		Log("  hmd by prediction time:%s\n", predictions);
 		vr::IVRChaperone *chaperone = vr::VRChaperone();
 		Log("  validity (valid/result) standing hmd %d/%d left %d/%d right %d/%d; seated hmd %d/%d; raw hmd %d/%d; "
 		    "chaperone calibration %d\n",
