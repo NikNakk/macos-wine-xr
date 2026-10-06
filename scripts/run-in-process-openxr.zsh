@@ -29,7 +29,11 @@ JSON
 "${wine_root}/bin/wine" reg add 'HKLM\Software\Khronos\OpenXR\1' /v ActiveRuntime /t REG_SZ \
  /d 'C:\openxr\wineopenxr64.json' /f
 case ${MWXR_DESKTOP_MIRROR:-window} in
- window) exec "${wine_root}/bin/wine" "$@" ;;
+ window)
+  # MWXR_WINEDLLOVERRIDES applies to the application and its children, for
+  # example "gameoverlayrenderer64=" to keep Steam's overlay out.
+  [[ -n ${MWXR_WINEDLLOVERRIDES:-} ]] && export WINEDLLOVERRIDES=${MWXR_WINEDLLOVERRIDES}
+  exec "${wine_root}/bin/wine" "$@" ;;
  offscreen)
   [[ -f ${root}/offscreen_unity_window.exe ]] || {
    print -u2 'Rebuild scripts/build-in-process-gate.zsh for the off-screen Unity launcher'; exit 1
