@@ -1057,6 +1057,11 @@ private:
 			out.result = vr::TrackingResult_Running_OutOfRange;
 		}
 		lastPose_ = out;
+		// Worn while the session runs; repeated because SteamVR may not be
+		// listening yet when the HMD activates.
+		if (proximity_ != vr::k_ulInvalidInputComponentHandle) {
+			vr::VRDriverInput()->UpdateBooleanComponent(proximity_, true, 0);
+		}
 		auto now = std::chrono::steady_clock::now();
 		if (now - lastPoseLog_ > std::chrono::seconds(5)) {
 			lastPoseLog_ = now;
