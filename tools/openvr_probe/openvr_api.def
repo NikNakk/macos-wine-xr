@@ -1,0 +1,13 @@
+; Exports of Valve's openvr_api.dll used by openvr.h's inline VR_Init and
+; interface accessors; dlltool builds the MinGW import library from this.
+LIBRARY openvr_api.dll
+EXPORTS
+VR_InitInternal2
+VR_ShutdownInternal
+VR_GetGenericInterface
+VR_IsInterfaceVersionValid
+VR_GetInitToken
+VR_IsHmdPresent
+VR_IsRuntimeInstalled
+VR_GetVRInitErrorAsSymbol
+VR_GetVRInitErrorAsEnglishDescription
