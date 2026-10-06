@@ -555,6 +555,42 @@ when running under Wine, inside a closed binary. Options are a client-side
 workaround for apps that respect the flag (Source 2: Home, probably Alyx),
 or reverse engineering vrcompositor.
 
+### Home: frames stop after the first, 2026-10-06 (continued)
+
+The pose flag above turned out not to be what stops Home. Measured inside
+Home with `tools/openvr_shim` (installed beside Home by the launcher; it
+logs to the run's `openvr-shim.log`), with the HMD pose marked valid
+(`MWXR_OPENVR_SHIM_FIX_POSE=1`) or not:
+
+- Home called WaitGetPoses at up to about 30 per second, but submitted
+  only about 6 frames per eye in 5 s, with gaps of 2 s and more. In other
+  5 s windows it made almost no calls at all (gaps of 6 to 13 s).
+- Submit itself takes 4 ms on average (16 ms at most), without errors;
+  one shared texture is used for both eyes.
+- Marking the HMD pose valid changed nothing.
+
+What the user sees: one real frame, then a frozen scene. SteamVR
+re-projects that frame, which explains the fade and the unresponsive
+controls. The frame-timing graph shows every frame reprojected.
+
+State of the frozen process:
+- `sample`: every thread is waiting in Windows waits. None is in Metal,
+  and DXMT's encode and finish threads are idle.
+- winedbg: the D3D11 render thread (`rendersystemdx11`) waits with no
+  timeout for work.
+- Home's developer console (port 29009, `-vconport`) logs "Submitting
+  first frame to the compositor", Panorama event backlogs of about 900,
+  and then nothing new.
+- Tracing (`WINEDEBUG='-all,steamtours.exe:+seh,steamtours.exe:+thread,...'`)
+  showed no fault exceptions. The main thread stayed alive, and
+  repeatedly enumerated all threads (`NtGetNextThread`, about 900 times).
+
+`Steam/dumps` holds many Home assert dumps from earlier in the day. They
+are Steam networking asserts: lock-wait warnings and GetAdaptersAddresses.
+The two latest sessions wrote none, so the dumps do not explain the
+freeze. Still open: what Home's main loop waits for after its first
+frame.
+
 ### Next steps
 
 - PS VR2 run of virtual mode. It needs Monado built from
