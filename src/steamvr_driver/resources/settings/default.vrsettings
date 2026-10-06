@@ -5,6 +5,7 @@
 		"poseRateHz": 500,
 		"zeroCopy": true,
 		"displayMode": "direct",
-		"virtualDisplayDumpDir": ""
+		"virtualDisplayDumpDir": "",
+		"playAreaSize": 0.0
 	}
 }
