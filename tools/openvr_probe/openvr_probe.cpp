@@ -59,11 +59,11 @@ float4 ps(V i) : SV_Target
 	if (w.y < -1e-3) {
 		float t = -eye.y / w.y;
 		float3 p = eye + t * w;
-		float3 line = float3(0.1, 0.9, 0.2);
-		if (abs(p.z) < 0.03) line = float3(1, 0.15, 0.15);
-		if (abs(p.x) < 0.03) line = float3(0.2, 0.4, 1);
+		float3 ink = float3(0.1, 0.9, 0.2);
+		if (abs(p.z) < 0.03) ink = float3(1, 0.15, 0.15);
+		if (abs(p.x) < 0.03) ink = float3(0.2, 0.4, 1);
 		float lines = max(grid(p.x, 0.02), grid(p.z, 0.02)) * saturate(6 / t);
-		c = lerp(float3(0.07, 0.06, 0.05), line, lines);
+		c = lerp(float3(0.07, 0.06, 0.05), ink, lines);
 	}
 	return float4(c, 1);
 }
