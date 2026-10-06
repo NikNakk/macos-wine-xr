@@ -520,6 +520,41 @@ Later PS VR2 runs, 2026-10-06:
   proximity sensor that reads as worn. The tutorial's desktop window always
   says "Put on your headset", so that text is not itself an error.
 
+### Home: the HMD render pose is invalid under Wine, 2026-10-06
+
+`tools/openvr_probe` (run with `scripts/run-openvr-probe.zsh` while SteamVR is
+up) showed why Home misbehaves while the Unity tutorial works:
+
+- `WaitGetPoses` returns the HMD with `bPoseIsValid = false` and
+  `TrackingResult_Uninitialized` on every frame the application keeps up,
+  while the pose values are live. It is valid on frames where the
+  application is late, when the client computes poses itself. Home
+  respects the flag and keeps its last good view. SteamVR's compositor then
+  re-projects Home's frames until they no longer cover the view, which is
+  the fade at a fixed head angle, the vanishing cabin after recentring, and
+  probably the dead controls. Unity's tutorial ignores the flag.
+- The same happens with SteamVR's own null driver, so it is not
+  driver_mwxr.
+- Ruled out:
+  - **Tracking space:** standing, seated and raw are all invalid; the
+    chaperone calibration state is OK.
+  - **HMD activity:** the HMD reports user interaction.
+  - **Display timing:** the vsync counter base, and the vsync timing in
+    both modes.
+  - **Prediction time:** client queries are valid from -1 day to +1 day;
+    SteamVR clamps.
+  - **Compositor clock:** its frame time counts from SteamVR's start.
+  - **`forceSystemLayerUseAppPoses = false`:** tried and reverted.
+  - **Focus, frame drops and reprojection:** none were seen.
+- Client queries (`GetDeviceToAbsoluteTrackingPose`) are valid in every
+  space. The controllers' render poses are valid. The compositor's
+  vsync signal thread runs.
+
+The fault is in how SteamVR's compositor produces the HMD's render pose
+when running under Wine, inside a closed binary. Options are a client-side
+workaround for apps that respect the flag (Source 2: Home, probably Alyx),
+or reverse engineering vrcompositor.
+
 ### Next steps
 
 - PS VR2 run of virtual mode. It needs Monado built from
