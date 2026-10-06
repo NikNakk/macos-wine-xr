@@ -366,8 +366,11 @@ main(int argc, char **argv)
 		    cycleNames[space], render.m[0][3], render.m[1][3], render.m[2][3], YawDegrees(render), PitchDegrees(render), head.bPoseIsValid,
 		    head.eTrackingResult, system->IsInputAvailable(), system->ShouldApplicationPause(),
 		    compositor->CanRenderScene());
-		Log("  render poses: left valid %d result %d, right valid %d result %d\n", poses[1].bPoseIsValid,
-		    poses[1].eTrackingResult, poses[2].bPoseIsValid, poses[2].eTrackingResult);
+		Log("  render poses: left valid %d result %d, right valid %d result %d; activity hmd %d left %d right %d "
+		    "(-1 unknown, 0 idle, 1 interaction, 2 interaction timeout, 3 standby, 4 idle timeout)\n",
+		    poses[1].bPoseIsValid, poses[1].eTrackingResult, poses[2].bPoseIsValid, poses[2].eTrackingResult,
+		    system->GetTrackedDeviceActivityLevel(0), system->GetTrackedDeviceActivityLevel(1),
+		    system->GetTrackedDeviceActivityLevel(2));
 		Log("  vsync: %s since %.2f ms, counter %llu, %.1f Hz, to photons %.2f ms -> predict %.2f ms; "
 		    "render vs predicted %.1f deg %.3f m, render vs now %.1f deg %.3f m\n",
 		    haveVsync ? "ok" : "unavailable", sinceVsync * 1000, (unsigned long long)vsyncCounter, hz,
