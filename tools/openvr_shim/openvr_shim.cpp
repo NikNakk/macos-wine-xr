@@ -10,11 +10,15 @@
 //
 // Every export forwards to Valve's DLL, renamed openvr_api_valve.dll beside
 // this one (openvr_api.def), except VR_GetGenericInterface. For
-// IVRCompositor_* it patches the returned interface's WaitGetPoses,
-// GetLastPoses and GetLastPoseForTrackedDeviceIndex (vtable slots 2 to 4
-// from IVRCompositor_022 on). After Valve's call, an HMD pose that is
-// "uninitialised" but has a proper rotation is marked valid and running.
-// Nothing else changes.
+// IVRCompositor_022 to _025 it patches the returned interface's
+// WaitGetPoses, GetLastPoses and GetLastPoseForTrackedDeviceIndex (vtable
+// slots 2 to 4) and Submit (slot 5; later versions insert GetSubmitTexture
+// before it), and logs the application's frame loop every 5 s to
+// MWXR_OPENVR_SHIM_LOG.
+//
+// With MWXR_OPENVR_SHIM_FIX_POSE=1 it also marks an HMD pose that is
+// "uninitialised" but has a proper rotation valid and running. That did not
+// change SteamVR Home, so it is off by default.
 #include <windows.h>
 
 #include <cmath>
@@ -34,10 +38,13 @@ using PosesFn = vr::EVRCompositorError (*)(void *, vr::TrackedDevicePose_t *, ui
                                            uint32_t);
 using PoseForDeviceFn = vr::EVRCompositorError (*)(void *, vr::TrackedDeviceIndex_t, vr::TrackedDevicePose_t *,
                                                    vr::TrackedDevicePose_t *);
+using SubmitFn = vr::EVRCompositorError (*)(void *, vr::EVREye, const vr::Texture_t *, const vr::VRTextureBounds_t *,
+                                            vr::EVRSubmitFlags);
 
 constexpr int kWaitGetPosesSlot = 2;
 constexpr int kGetLastPosesSlot = 3;
 constexpr int kGetLastPoseForDeviceSlot = 4;
+constexpr int kSubmitSlot = 5;
 
 // One entry per patched vtable: interface versions have their own vtables.
 struct Patched
@@ -46,6 +53,7 @@ struct Patched
 	PosesFn waitGetPoses;
 	PosesFn getLastPoses;
 	PoseForDeviceFn getLastPoseForDevice;
+	SubmitFn submit;
 };
 
 SRWLOCK g_lock = SRWLOCK_INIT;
@@ -61,6 +69,9 @@ struct Stats
 	SRWLOCK lock = SRWLOCK_INIT;
 	LONGLONG windowStart = 0;
 	uint32_t calls = 0, errors = 0, lastError = 0, invalidHmd = 0, fixed = 0;
+	uint32_t submits[2] = {}, submitErrors = 0, lastSubmitError = 0, lastType = 0, lastColorSpace = 0,
+	         lastFlags = 0, distinctHandles = 0;
+	void *handles[8] = {};
 	double waitTotalMs = 0, waitMaxMs = 0, intervalMaxMs = 0;
 	LONGLONG lastReturn = 0;
 } g_stats;
@@ -124,7 +135,11 @@ Plausible(const vr::HmdMatrix34_t &m)
 bool
 FixHmd(vr::TrackedDevicePose_t *pose)
 {
-	if (!pose || pose->bPoseIsValid || pose->eTrackingResult != vr::TrackingResult_Uninitialized ||
+	static const bool enabled = [] {
+		const char *value = getenv("MWXR_OPENVR_SHIM_FIX_POSE");
+		return value && value[0] == '1';
+	}();
+	if (!enabled || !pose || pose->bPoseIsValid || pose->eTrackingResult != vr::TrackingResult_Uninitialized ||
 	    !Plausible(pose->mDeviceToAbsoluteTracking)) {
 		return false;
 	}
@@ -171,8 +186,14 @@ Record(LONGLONG begin, LONGLONG end, vr::EVRCompositorError error, const vr::Tra
 		    "HMD invalid %u, marked valid %u\n",
 		    s.calls * 1000.0 / windowMs, s.waitTotalMs / s.calls, s.waitMaxMs, s.intervalMaxMs, s.errors,
 		    s.lastError, s.invalidHmd, s.fixed);
+		Log("Submit: left %u right %u, errors %u (last %u), texture type %u colour space %u flags 0x%x, "
+		    "distinct handles %u\n",
+		    s.submits[0], s.submits[1], s.submitErrors, s.lastSubmitError, s.lastType, s.lastColorSpace,
+		    s.lastFlags, s.distinctHandles);
 		s.windowStart = end;
 		s.calls = s.errors = s.lastError = s.invalidHmd = s.fixed = 0;
+		s.submits[0] = s.submits[1] = s.submitErrors = s.lastSubmitError = s.distinctHandles = 0;
+		memset(s.handles, 0, sizeof(s.handles));
 		s.waitTotalMs = s.waitMaxMs = s.intervalMaxMs = 0;
 	}
 	ReleaseSRWLockExclusive(&g_stats.lock);
@@ -225,6 +246,41 @@ GetLastPoseForDeviceHook(void *self, vr::TrackedDeviceIndex_t device, vr::Tracke
 	return error;
 }
 
+// Arguments pass through unchanged, so a wrong slot would only log nonsense.
+vr::EVRCompositorError
+SubmitHook(void *self, vr::EVREye eye, const vr::Texture_t *texture, const vr::VRTextureBounds_t *bounds,
+           vr::EVRSubmitFlags flags)
+{
+	const Patched *p = Find(self);
+	vr::EVRCompositorError error = p->submit(self, eye, texture, bounds, flags);
+	AcquireSRWLockExclusive(&g_stats.lock);
+	Stats &s = g_stats;
+	if (eye == vr::Eye_Left || eye == vr::Eye_Right) {
+		++s.submits[eye];
+	}
+	if (error != vr::VRCompositorError_None) {
+		++s.submitErrors;
+		s.lastSubmitError = error;
+	}
+	if (texture) {
+		s.lastType = texture->eType;
+		s.lastColorSpace = texture->eColorSpace;
+		bool seen = false;
+		for (uint32_t i = 0; i < s.distinctHandles && i < 8; ++i) {
+			seen = seen || s.handles[i] == texture->handle;
+		}
+		if (!seen) {
+			if (s.distinctHandles < 8) {
+				s.handles[s.distinctHandles] = texture->handle;
+			}
+			++s.distinctHandles;
+		}
+	}
+	s.lastFlags = flags;
+	ReleaseSRWLockExclusive(&g_stats.lock);
+	return error;
+}
+
 void
 Patch(void *compositor, const char *version)
 {
@@ -245,12 +301,14 @@ Patch(void *compositor, const char *version)
 	p.waitGetPoses = reinterpret_cast<PosesFn>(vtable[kWaitGetPosesSlot]);
 	p.getLastPoses = reinterpret_cast<PosesFn>(vtable[kGetLastPosesSlot]);
 	p.getLastPoseForDevice = reinterpret_cast<PoseForDeviceFn>(vtable[kGetLastPoseForDeviceSlot]);
+	p.submit = reinterpret_cast<SubmitFn>(vtable[kSubmitSlot]);
 	DWORD old = 0;
-	if (VirtualProtect(&vtable[kWaitGetPosesSlot], 3 * sizeof(void *), PAGE_READWRITE, &old)) {
+	if (VirtualProtect(&vtable[kWaitGetPosesSlot], 4 * sizeof(void *), PAGE_READWRITE, &old)) {
 		vtable[kWaitGetPosesSlot] = reinterpret_cast<void *>(&WaitGetPosesHook);
 		vtable[kGetLastPosesSlot] = reinterpret_cast<void *>(&GetLastPosesHook);
 		vtable[kGetLastPoseForDeviceSlot] = reinterpret_cast<void *>(&GetLastPoseForDeviceHook);
-		VirtualProtect(&vtable[kWaitGetPosesSlot], 3 * sizeof(void *), old, &old);
+		vtable[kSubmitSlot] = reinterpret_cast<void *>(&SubmitHook);
+		VirtualProtect(&vtable[kWaitGetPosesSlot], 4 * sizeof(void *), old, &old);
 		++g_patchedCount;
 		Log("patched %s (vtable %p)\n", version, (void *)vtable);
 	} else {
@@ -282,8 +340,8 @@ VR_GetGenericInterface(const char *version, vr::EVRInitError *error)
 	}
 	void *result = g_getGenericInterface(version, error);
 	// Plain C++ interfaces only: "FnTable:" tables have a different layout.
-	if (result && version && !strncmp(version, "IVRCompositor_", 14) &&
-	    atoi(version + 14) >= 22) {
+	if (result && version && !strncmp(version, "IVRCompositor_", 14) && atoi(version + 14) >= 22 &&
+	    atoi(version + 14) <= 25) {
 		Patch(result, version);
 	}
 	return result;
