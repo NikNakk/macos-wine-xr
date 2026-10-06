@@ -700,12 +700,9 @@ public:
 		if (!xr_.WaitAndBeginFrame(vsyncOffset, period)) {
 			return;
 		}
-		if (AdoptPeriod(period)) {
-			auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId_);
-			vr::VRProperties()->SetFloatProperty(container, vr::Prop_SecondsFromVsyncToPhotons_Float,
-			                                      1.0f / frequency_);
-		}
-		vr::VRServerDriverHost()->VsyncEvent(vsyncOffset);
+		AdoptPeriod(period);
+		// The vsync that has just occurred, as an offset from now (<= 0).
+		vr::VRServerDriverHost()->VsyncEvent(-UpdateVsyncTiming(vsyncOffset, period));
 	}
 
 	// predictedDisplayPeriod becomes a multiple of the refresh when frames are
@@ -750,20 +747,25 @@ public:
 		xr_.PresentDisplayImage(backbuffer);
 	}
 
-	// SteamVR paces its compositor from the last vsync and expects a frame it
-	// starts after vsync V on screen at V + period + SecondsFromVsyncToPhotons.
-	// The runtime gives the display time of the frame just begun, which can be
-	// several refreshes ahead, so report the latest vsync that has already
-	// happened (display time minus whole periods) and put the rest of the
-	// pipeline into SecondsFromVsyncToPhotons.
 	void
 	WaitForPresent() override
 	{
 		double vsyncOffset = 0, period = 0;
-		if (!xr_.WaitAndBeginFrame(vsyncOffset, period)) {
-			return;
+		if (xr_.WaitAndBeginFrame(vsyncOffset, period)) {
+			AdoptPeriod(period);
+			UpdateVsyncTiming(vsyncOffset, period);
 		}
-		AdoptPeriod(period);
+	}
+
+	// SteamVR paces from the last vsync and expects a frame it starts after
+	// vsync V on screen at V + period + SecondsFromVsyncToPhotons. The runtime
+	// gives the display time of the frame just begun, which can be several
+	// refreshes ahead, so report the latest vsync that has already happened
+	// (display time minus whole periods) and put the rest of the pipeline into
+	// SecondsFromVsyncToPhotons. Returns the seconds since that vsync.
+	double
+	UpdateVsyncTiming(double vsyncOffset, double period)
+	{
 		double refresh = 1.0 / frequency_;
 		double toDisplay = vsyncOffset + period; // seconds from now to the predicted display time
 		double periods = ceil(toDisplay / refresh - 1e-3);
@@ -783,7 +785,7 @@ public:
 		// agreed with the current value; then use the median.
 		photonSamples_[photonSampleCount_++ % kPhotonSamples] = photons;
 		if (photonSampleCount_ % kPhotonSamples != 0 && vsyncToPhotons_ >= 0) {
-			return;
+			return sinceVsync;
 		}
 		size_t count = photonSampleCount_ < kPhotonSamples ? photonSampleCount_ : kPhotonSamples;
 		double sorted[kPhotonSamples];
@@ -791,7 +793,7 @@ public:
 		std::sort(sorted, sorted + count);
 		double tolerance = 0.25 * refresh;
 		if (vsyncToPhotons_ >= sorted[0] - tolerance && vsyncToPhotons_ <= sorted[count - 1] + tolerance) {
-			return;
+			return sinceVsync;
 		}
 		photons = sorted[count / 2];
 		periods = photons / refresh + 1;
@@ -800,9 +802,10 @@ public:
 			auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId_);
 			vr::VRProperties()->SetFloatProperty(container, vr::Prop_SecondsFromVsyncToPhotons_Float,
 			                                      (float)photons);
-			Log("Virtual display: vsync to photons now %.2f ms (%.0f refreshes ahead)\n", photons * 1000,
+			Log("Display timing: vsync to photons now %.2f ms (%.0f refreshes ahead)\n", photons * 1000,
 			    periods);
 		}
+		return sinceVsync;
 	}
 
 	bool
