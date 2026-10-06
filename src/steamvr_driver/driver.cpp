@@ -346,11 +346,16 @@ public:
 		props->SetFloatProperty(container, vr::Prop_SecondsFromVsyncToPhotons_Float, 1.0f / frequency_);
 		props->SetBoolProperty(container, vr::Prop_IsOnDesktop_Bool, false);
 		props->SetBoolProperty(container, vr::Prop_DriverDirectModeSendsVsyncEvents_Bool, true);
-		props->SetBoolProperty(container, vr::Prop_ContainsProximitySensor_Bool, false);
+		// SteamVR waits for the headset to be worn (for example "Put on your
+		// headset" and the tutorial). The runtime's user presence is not used
+		// yet: the headset is reported as worn while the session runs.
+		props->SetBoolProperty(container, vr::Prop_ContainsProximitySensor_Bool, true);
 		props->SetBoolProperty(container, vr::Prop_DeviceProvidesBatteryStatus_Bool, false);
 		props->SetBoolProperty(container, vr::Prop_HasCamera_Bool, false);
 		props->SetBoolProperty(container, vr::Prop_DisplayDebugMode_Bool, false);
 		SetPlayArea(container);
+		vr::VRDriverInput()->CreateBooleanComponent(container, "/proximity", &proximity_);
+		vr::VRDriverInput()->UpdateBooleanComponent(proximity_, true, 0);
 		vr::VRServerDriverHost()->SetDisplayEyeToHead(objectId, ToMatrix(xr_.eyeInHead[0]),
 		                                             ToMatrix(xr_.eyeInHead[1]));
 		Log("HMD '%s' active: IPD %.1f mm, %.0f Hz\n", xr_.systemName.c_str(), ipd * 1000, frequency_);
@@ -889,8 +894,12 @@ private:
 	void
 	SetPlayArea(vr::PropertyContainerHandle_t container)
 	{
-		float width = xr_.playAreaWidth > 0 ? xr_.playAreaWidth : 2.0f;
-		float depth = xr_.playAreaDepth > 0 ? xr_.playAreaDepth : 2.0f;
+		// driver_mwxr.playAreaSize (metres, square) overrides the runtime's
+		// STAGE bounds; without either, 2 x 2 m.
+		float size = vr::VRSettings()->GetFloat(kSettingsSection, "playAreaSize");
+		bool overridden = size > 0;
+		float width = overridden ? size : xr_.playAreaWidth > 0 ? xr_.playAreaWidth : 2.0f;
+		float depth = overridden ? size : xr_.playAreaDepth > 0 ? xr_.playAreaDepth : 2.0f;
 		float x = width / 2, z = depth / 2, h = 2.43f;
 		const uint64_t universe = 0x6d77787200000001ull; // "mwxr", 1
 		char json[2048];
@@ -910,7 +919,8 @@ private:
 		props->SetUint64Property(container, vr::Prop_CurrentUniverseId_Uint64, universe);
 		props->SetStringProperty(container, vr::Prop_DriverProvidedChaperoneJson_String, json);
 		props->SetBoolProperty(container, vr::Prop_DriverProvidedChaperoneVisibility_Bool, true);
-		Log("Play area %.2f x %.2f m (%s)\n", width, depth, xr_.playAreaWidth > 0 ? "runtime" : "default");
+		Log("Play area %.2f x %.2f m (%s)\n", width, depth,
+		    overridden ? "playAreaSize" : xr_.playAreaWidth > 0 ? "runtime" : "default");
 	}
 
 	struct TextureSet
@@ -1072,6 +1082,7 @@ private:
 	uint64_t presentCount_ = 0, vsyncCount_ = 0;
 	LONGLONG lastVsync_ = 0;
 	double vsyncToPhotons_ = -1;
+	vr::VRInputComponentHandle_t proximity_ = vr::k_ulInvalidInputComponentHandle;
 	static constexpr size_t kPhotonSamples = 60;
 	double photonSamples_[kPhotonSamples] = {};
 	size_t photonSampleCount_ = 0;
