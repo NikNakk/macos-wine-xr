@@ -1,0 +1,28 @@
+; openvr_api.dll exports: VR_GetGenericInterface is implemented here; every
+; other export forwards to Valve's DLL, renamed openvr_api_valve.dll.
+LIBRARY openvr_api.dll
+EXPORTS
+VR_GetGenericInterface
+LiquidVR = openvr_api_valve.LiquidVR
+VRCompositorSystemInternal = openvr_api_valve.VRCompositorSystemInternal
+VRControlPanel = openvr_api_valve.VRControlPanel
+VRDashboardManager = openvr_api_valve.VRDashboardManager
+VROculusDirect = openvr_api_valve.VROculusDirect
+VROverlayView = openvr_api_valve.VROverlayView
+VRPaths = openvr_api_valve.VRPaths
+VRRenderModelsInternal = openvr_api_valve.VRRenderModelsInternal
+VRSceneGraph = openvr_api_valve.VRSceneGraph
+VRTrackedCameraInternal = openvr_api_valve.VRTrackedCameraInternal
+VRVirtualDisplay = openvr_api_valve.VRVirtualDisplay
+VR_GetInitToken = openvr_api_valve.VR_GetInitToken
+VR_GetRuntimePath = openvr_api_valve.VR_GetRuntimePath
+VR_GetStringForHmdError = openvr_api_valve.VR_GetStringForHmdError
+VR_GetVRInitErrorAsEnglishDescription = openvr_api_valve.VR_GetVRInitErrorAsEnglishDescription
+VR_GetVRInitErrorAsSymbol = openvr_api_valve.VR_GetVRInitErrorAsSymbol
+VR_InitInternal = openvr_api_valve.VR_InitInternal
+VR_InitInternal2 = openvr_api_valve.VR_InitInternal2
+VR_IsHmdPresent = openvr_api_valve.VR_IsHmdPresent
+VR_IsInterfaceVersionValid = openvr_api_valve.VR_IsInterfaceVersionValid
+VR_IsRuntimeInstalled = openvr_api_valve.VR_IsRuntimeInstalled
+VR_RuntimePath = openvr_api_valve.VR_RuntimePath
+VR_ShutdownInternal = openvr_api_valve.VR_ShutdownInternal
