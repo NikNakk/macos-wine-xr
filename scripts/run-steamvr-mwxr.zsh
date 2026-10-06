@@ -13,6 +13,9 @@
 #                          installed LaunchAgent's environment; the agent itself
 #                          is left alone but must not be running (USB)
 #   APPID=<steam app id>   optionally launch a Steam app once SteamVR is up
+#   APP_ARGS='...'         extra arguments for that app, for example -nowindow
+#                          (no desktop companion window in Source 2 games)
+#   XRT_MACOS_REFRESH_RATE_HZ=90  PS VR2 refresh rate, passed to the service too
 #   MWXR_DISPLAY_MODE=direct|virtual  sets driver_mwxr.displayMode first
 #   MWXR_OPENVR_SHIM_INSTALL=0  do not install tools/openvr_shim beside SteamVR
 #                           Home (default 1; it logs Home's frame loop to the run's
@@ -86,7 +89,7 @@ print "Started Steam; waiting ${STEAM_WAIT_S:-40} s"; sleep ${STEAM_WAIT_S:-40}
 if [[ -n ${APPID:-} ]]; then
  ( sleep ${VR_WAIT_S:-60}
    WINEPREFIX=${prefix} WINEDEBUG=-all "${root}/bin/wine-current-dxmt" 'C:\Program Files (x86)\Steam\steam.exe' \
-    -applaunch "${APPID}" > "${logs}/applaunch.log" 2>&1
+    -applaunch "${APPID}" ${=APP_ARGS:-} > "${logs}/applaunch.log" 2>&1
    print "Requested launch of app ${APPID}" ) &
 fi
 
@@ -145,8 +148,9 @@ if simulated == '1':
     env.update(SIMULATED_ENABLE='1', XRT_COMPOSITOR_NULL='0')
     # Simulated controllers: SIMULATED_LEFT/RIGHT=simple|wmr|ml2.
     env.update({k: os.environ[k] for k in ('SIMULATED_LEFT', 'SIMULATED_RIGHT') if os.environ.get(k)})
-# Log levels, for example XRT_COMPOSITOR_LOG=info.
-env.update({k: v for k, v in os.environ.items() if k.startswith('XRT_') and k.endswith('_LOG')})
+# Log levels (for example XRT_COMPOSITOR_LOG=info) and the refresh rate.
+env.update({k: v for k, v in os.environ.items()
+            if k.startswith('XRT_') and (k.endswith('_LOG') or k == 'XRT_MACOS_REFRESH_RATE_HZ')})
 plist = dict(Label=label, ProgramArguments=[service], RunAtLoad=False, ProcessType='Interactive',
     MachServices={env['XRT_MACOS_METAL_IPC_SERVICE_NAME']: True}, EnvironmentVariables=env,
     StandardOutPath=root + '/service.out.log', StandardErrorPath=root + '/service.err.log')
