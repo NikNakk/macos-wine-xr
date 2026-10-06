@@ -6,6 +6,7 @@
 # wineopenxr runtime. See docs/steamvr-home.md.
 #
 #   MWXR_MONADO=simulated  an isolated simulated-only Monado service
+#                          (SIMULATED_LEFT/RIGHT=wmr adds simulated controllers)
 #   MWXR_MONADO=hardware   the installed Monado LaunchAgent (PS VR2)
 #   APPID=<steam app id>   optionally launch a Steam app once SteamVR is up
 #
@@ -96,6 +97,8 @@ root, label, service, icd = sys.argv[1:]
 env = dict(PATH='/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin', SIMULATED_ENABLE='1', XRT_COMPOSITOR_NULL='0',
     XRT_NO_STDIN='1', XDG_RUNTIME_DIR=os.environ['XDG_RUNTIME_DIR'],
     XRT_MACOS_METAL_IPC_SERVICE_NAME=os.environ['XRT_MACOS_METAL_IPC_SERVICE_NAME'], VK_ICD_FILENAMES=icd)
+# Simulated controllers: SIMULATED_LEFT/RIGHT=simple|wmr|ml2.
+env.update({k: os.environ[k] for k in ('SIMULATED_LEFT', 'SIMULATED_RIGHT') if os.environ.get(k)})
 plist = dict(Label=label, ProgramArguments=[service], RunAtLoad=False,
     MachServices={env['XRT_MACOS_METAL_IPC_SERVICE_NAME']: True}, EnvironmentVariables=env,
     StandardOutPath=root + '/service.out.log', StandardErrorPath=root + '/service.err.log')
