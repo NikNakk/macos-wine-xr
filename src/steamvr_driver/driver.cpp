@@ -777,8 +777,10 @@ public:
 		QueryPerformanceFrequency(&frequency);
 		lastVsync_ = now.QuadPart - (LONGLONG)(sinceVsync * frequency.QuadPart);
 		vsyncCount_ = (uint64_t)llround((double)lastVsync_ / ((double)frequency.QuadPart * refresh));
-		// The prediction moves by a refresh from frame to frame, so SteamVR's
-		// property follows the median of the last half second instead.
+		// The prediction moves by a refresh from frame to frame, and each change
+		// of SteamVR's property shifts its pose prediction by a refresh. Check
+		// every half second, and only change it when no frame in that time
+		// agreed with the current value; then use the median.
 		photonSamples_[photonSampleCount_++ % kPhotonSamples] = photons;
 		if (photonSampleCount_ % kPhotonSamples != 0 && vsyncToPhotons_ >= 0) {
 			return;
@@ -786,10 +788,14 @@ public:
 		size_t count = photonSampleCount_ < kPhotonSamples ? photonSampleCount_ : kPhotonSamples;
 		double sorted[kPhotonSamples];
 		std::copy(photonSamples_, photonSamples_ + count, sorted);
-		std::nth_element(sorted, sorted + count / 2, sorted + count);
+		std::sort(sorted, sorted + count);
+		double tolerance = 0.25 * refresh;
+		if (vsyncToPhotons_ >= sorted[0] - tolerance && vsyncToPhotons_ <= sorted[count - 1] + tolerance) {
+			return;
+		}
 		photons = sorted[count / 2];
 		periods = photons / refresh + 1;
-		if (fabs(photons - vsyncToPhotons_) > 0.25 * refresh && objectId_ != vr::k_unTrackedDeviceIndexInvalid) {
+		if (fabs(photons - vsyncToPhotons_) > tolerance && objectId_ != vr::k_unTrackedDeviceIndexInvalid) {
 			vsyncToPhotons_ = photons;
 			auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId_);
 			vr::VRProperties()->SetFloatProperty(container, vr::Prop_SecondsFromVsyncToPhotons_Float,
@@ -918,7 +924,8 @@ private:
 		auto *props = vr::VRProperties();
 		props->SetUint64Property(container, vr::Prop_CurrentUniverseId_Uint64, universe);
 		props->SetStringProperty(container, vr::Prop_DriverProvidedChaperoneJson_String, json);
-		props->SetBoolProperty(container, vr::Prop_DriverProvidedChaperoneVisibility_Bool, true);
+		// SteamVR decides when to show the boundary: the driver never does.
+		props->SetBoolProperty(container, vr::Prop_DriverProvidedChaperoneVisibility_Bool, false);
 		Log("Play area %.2f x %.2f m (%s)\n", width, depth,
 		    overridden ? "playAreaSize" : xr_.playAreaWidth > 0 ? "runtime" : "default");
 	}

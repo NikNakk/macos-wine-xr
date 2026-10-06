@@ -496,8 +496,29 @@ still to do.
 
 In that run, `SecondsFromVsyncToPhotons` changed nearly every frame,
 alternating between 4 and 5 refreshes (25 / 33 ms), and reaching 9 during
-start-up. It now follows the median of the last 60 frames, updated every 60
-frames. That change is not yet tested on hardware.
+start-up. Each change shifts SteamVR's pose prediction by a refresh, which
+shows as the world (not the compositor-drawn controllers) jumping.
+
+Taking the median of 60 frames still switched every few seconds. The driver
+now checks every 60 frames, and changes the value, to that median, only when
+none of those frames agreed with the current one. That change is not yet
+tested on hardware.
+
+Later PS VR2 runs, 2026-10-06:
+
+- Home renders properly in virtual mode, at normal height.
+- SteamVR's frame-timing graph showed 4 to 5 ms at 120 Hz. Home itself
+  dropped 699 of 6,760 frames (10%, 550 during start-up). That is why the
+  world felt less smooth than the controllers, which the compositor draws.
+- A fade to SteamVR's grid at a fixed head angle (independent of turn
+  speed) happens in both display modes. It is not a frozen frame (Home
+  and the tutorial animate) and not the play-area size (4 x 4 m via
+  `playAreaSize` made no difference). As a next check, the driver no longer
+  claims `DriverProvidedChaperoneVisibility`, so SteamVR manages the boundary
+  itself.
+- SteamVR waited for the headset to be worn. The driver now reports a
+  proximity sensor that reads as worn. The tutorial's desktop window always
+  says "Put on your headset", so that text is not itself an error.
 
 ### Next steps
 
