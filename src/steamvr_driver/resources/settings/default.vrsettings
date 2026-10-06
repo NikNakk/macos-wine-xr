@@ -6,6 +6,7 @@
 		"zeroCopy": true,
 		"displayMode": "direct",
 		"virtualDisplayDumpDir": "",
-		"playAreaSize": 0.0
+		"playAreaSize": 0.0,
+		"forceSystemLayerUseAppPoses": false
 	}
 }
