@@ -20,6 +20,8 @@ pgrep -f 'vrserver.exe' >/dev/null || { print -u2 "Start SteamVR first (run-stea
 cp "${steamvr}/bin/win64/openvr_api.dll" "${probe_dir}/"
 log=${root}/openvr-probe-$(date +%Y%m%d-%H%M%S).log
 print "Log: ${log}"
+# MoltenVK warnings and errors only.
+export MVK_CONFIG_LOG_LEVEL=${MVK_CONFIG_LOG_LEVEL:-2}
 export DXMT_LOG_PATH=${DXMT_LOG_PATH:-Z:${root}/dxmt-logs}
 WINEPREFIX=${root}/prefix WINEDEBUG=-all "${root}/bin/wine-current-dxmt" "${probe_dir}/openvr_probe.exe" \
   --log "Z:${log//\//\\}" "$@"
