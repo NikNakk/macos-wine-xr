@@ -54,6 +54,27 @@ int g_patchedCount = 0;
 GetGenericInterfaceFn g_getGenericInterface = nullptr;
 volatile LONG g_fixes = 0;
 
+// WaitGetPoses statistics, logged every 5 s: the application's own view of
+// its frame loop.
+struct Stats
+{
+	SRWLOCK lock = SRWLOCK_INIT;
+	LONGLONG windowStart = 0;
+	uint32_t calls = 0, errors = 0, lastError = 0, invalidHmd = 0, fixed = 0;
+	double waitTotalMs = 0, waitMaxMs = 0, intervalMaxMs = 0;
+	LONGLONG lastReturn = 0;
+} g_stats;
+
+double
+QpcMs(LONGLONG ticks)
+{
+	static LARGE_INTEGER frequency = {};
+	if (!frequency.QuadPart) {
+		QueryPerformanceFrequency(&frequency);
+	}
+	return (double)ticks * 1000.0 / (double)frequency.QuadPart;
+}
+
 void
 Log(const char *format, ...)
 {
@@ -99,19 +120,62 @@ Plausible(const vr::HmdMatrix34_t &m)
 	return std::isfinite(norm) && fabs(norm - 1.0) < 0.05;
 }
 
-void
+// Returns true when it marked the pose valid.
+bool
 FixHmd(vr::TrackedDevicePose_t *pose)
 {
 	if (!pose || pose->bPoseIsValid || pose->eTrackingResult != vr::TrackingResult_Uninitialized ||
 	    !Plausible(pose->mDeviceToAbsoluteTracking)) {
-		return;
+		return false;
 	}
 	pose->bPoseIsValid = true;
 	pose->eTrackingResult = vr::TrackingResult_Running_OK;
 	LONG fixes = InterlockedIncrement(&g_fixes);
-	if (fixes == 1 || fixes % 10000 == 0) {
-		Log("marked the HMD render pose valid (%ld times so far)\n", fixes);
+	if (fixes == 1) {
+		Log("marked the HMD render pose valid (first time)\n");
 	}
+	return true;
+}
+
+void
+Record(LONGLONG begin, LONGLONG end, vr::EVRCompositorError error, const vr::TrackedDevicePose_t *hmdBefore,
+       bool fixed)
+{
+	AcquireSRWLockExclusive(&g_stats.lock);
+	Stats &s = g_stats;
+	if (!s.windowStart) {
+		s.windowStart = begin;
+	}
+	++s.calls;
+	double waitMs = QpcMs(end - begin);
+	s.waitTotalMs += waitMs;
+	s.waitMaxMs = waitMs > s.waitMaxMs ? waitMs : s.waitMaxMs;
+	if (s.lastReturn) {
+		double intervalMs = QpcMs(end - s.lastReturn);
+		s.intervalMaxMs = intervalMs > s.intervalMaxMs ? intervalMs : s.intervalMaxMs;
+	}
+	s.lastReturn = end;
+	if (error != vr::VRCompositorError_None) {
+		++s.errors;
+		s.lastError = error;
+	}
+	if (hmdBefore && !hmdBefore->bPoseIsValid) {
+		++s.invalidHmd;
+	}
+	if (fixed) {
+		++s.fixed;
+	}
+	double windowMs = QpcMs(end - s.windowStart);
+	if (windowMs >= 5000.0) {
+		Log("WaitGetPoses: %.1f calls/s, wait avg %.2f max %.2f ms, longest gap %.1f ms, errors %u (last %u), "
+		    "HMD invalid %u, marked valid %u\n",
+		    s.calls * 1000.0 / windowMs, s.waitTotalMs / s.calls, s.waitMaxMs, s.intervalMaxMs, s.errors,
+		    s.lastError, s.invalidHmd, s.fixed);
+		s.windowStart = end;
+		s.calls = s.errors = s.lastError = s.invalidHmd = s.fixed = 0;
+		s.waitTotalMs = s.waitMaxMs = s.intervalMaxMs = 0;
+	}
+	ReleaseSRWLockExclusive(&g_stats.lock);
 }
 
 vr::EVRCompositorError
@@ -119,13 +183,17 @@ WaitGetPosesHook(void *self, vr::TrackedDevicePose_t *render, uint32_t renderCou
                  uint32_t gameCount)
 {
 	const Patched *p = Find(self);
+	LARGE_INTEGER begin, end;
+	QueryPerformanceCounter(&begin);
 	vr::EVRCompositorError error = p->waitGetPoses(self, render, renderCount, game, gameCount);
-	if (render && renderCount > vr::k_unTrackedDeviceIndex_Hmd) {
-		FixHmd(&render[vr::k_unTrackedDeviceIndex_Hmd]);
-	}
+	QueryPerformanceCounter(&end);
+	bool haveHmd = render && renderCount > vr::k_unTrackedDeviceIndex_Hmd;
+	vr::TrackedDevicePose_t before = haveHmd ? render[vr::k_unTrackedDeviceIndex_Hmd] : vr::TrackedDevicePose_t{};
+	bool fixed = haveHmd && FixHmd(&render[vr::k_unTrackedDeviceIndex_Hmd]);
 	if (game && gameCount > vr::k_unTrackedDeviceIndex_Hmd) {
 		FixHmd(&game[vr::k_unTrackedDeviceIndex_Hmd]);
 	}
+	Record(begin.QuadPart, end.QuadPart, error, haveHmd ? &before : nullptr, fixed);
 	return error;
 }
 
