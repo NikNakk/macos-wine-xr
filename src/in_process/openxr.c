@@ -32,6 +32,7 @@ NTSTATUS is_available_instance_function_openxr(void *args)
 
 static const char *const win32_time_extension = XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME;
 static const char *const native_timespec_extension = "XR_KHR_convert_timespec_time";
+static const char *const display_distortion_extension = XR_MNDX_DISPLAY_DISTORTION_EXTENSION_NAME;
 typedef XrResult (XRAPI_PTR *pfn_timespec_to_time)(XrInstance, const struct timespec *, XrTime *);
 typedef XrResult (XRAPI_PTR *pfn_time_to_timespec)(XrInstance, XrTime, struct timespec *);
 
@@ -67,15 +68,19 @@ XrResult wine_xrCreateInstance(const XrInstanceCreateInfo *info, XrInstance *ins
             wrapper->d3d11_enabled = 1;
         } else if (!strcmp(name, win32_time_extension) && native_extension_present(native_timespec_extension)) {
             wrapper->win32_time_enabled = 1;
+        } else if (!strcmp(name, display_distortion_extension) &&
+                   native_extension_present(display_distortion_extension)) {
+            wrapper->display_distortion_enabled = 1;
         } else {
             pthread_mutex_unlock(&instance_mutex);
             return XR_ERROR_EXTENSION_NOT_PRESENT;
         }
     }
-    const char *native_names[2];
+    const char *native_names[3];
     uint32_t native_count = 0;
     if (wrapper->d3d11_enabled) native_names[native_count++] = XR_KHR_METAL_ENABLE_EXTENSION_NAME;
     if (wrapper->win32_time_enabled) native_names[native_count++] = native_timespec_extension;
+    if (wrapper->display_distortion_enabled) native_names[native_count++] = display_distortion_extension;
     XrInstanceCreateInfo native_info = *info;
     native_info.enabledExtensionCount = native_count;
     native_info.enabledExtensionNames = native_count ? native_names : NULL;
@@ -101,8 +106,8 @@ XrResult wine_xrEnumerateInstanceExtensionProperties(const char *layer, uint32_t
 {
     if (!count) return XR_ERROR_VALIDATION_FAILURE;
     if (layer) return XR_ERROR_API_LAYER_NOT_PRESENT;
-    const char *names[2];
-    uint32_t versions[2], exposed = 0;
+    const char *names[3];
+    uint32_t versions[3], exposed = 0;
     if (native_extension_present(XR_KHR_METAL_ENABLE_EXTENSION_NAME)) {
         names[exposed] = XR_KHR_D3D11_ENABLE_EXTENSION_NAME;
         versions[exposed++] = XR_KHR_D3D11_enable_SPEC_VERSION;
@@ -110,6 +115,10 @@ XrResult wine_xrEnumerateInstanceExtensionProperties(const char *layer, uint32_t
     if (native_extension_present(native_timespec_extension)) {
         names[exposed] = win32_time_extension;
         versions[exposed++] = XR_KHR_win32_convert_performance_counter_time_SPEC_VERSION;
+    }
+    if (native_extension_present(display_distortion_extension)) {
+        names[exposed] = display_distortion_extension;
+        versions[exposed++] = XR_MNDX_display_distortion_SPEC_VERSION;
     }
     *count = exposed;
     if (!capacity) return XR_SUCCESS;
@@ -183,4 +192,29 @@ XrResult wine_xrEnumerateApiLayerProperties(uint32_t capacity, uint32_t *count, 
     if (!count) return XR_ERROR_VALIDATION_FAILURE;
     *count = 0;
     return XR_SUCCESS;
+}
+
+/* XR_MNDX_display_distortion: the structures are plain data with the same
+ * layout on both sides, so the native functions are called directly. */
+int32_t mw_display_distortion_call(void *args)
+{
+    struct mw_display_distortion_params *params = args;
+    wine_XrInstance *wrapper = params->instance ? wine_instance_from_handle(params->instance) : NULL;
+    params->result = XR_ERROR_FUNCTION_UNSUPPORTED;
+    if (!wrapper || !wrapper->display_distortion_enabled) return STATUS_SUCCESS;
+    if (params->op == MW_DISPLAY_DISTORTION_PROPERTIES) {
+        PFN_xrGetDisplayDistortionPropertiesMNDX get = NULL;
+        if (XR_SUCCEEDED(xrGetInstanceProcAddr(wrapper->host_instance, "xrGetDisplayDistortionPropertiesMNDX",
+                                               (PFN_xrVoidFunction *)&get)) && get)
+            params->result = get(wrapper->host_instance, params->system, params->properties);
+    } else if (params->op == MW_DISPLAY_DISTORTION_COMPUTE) {
+        PFN_xrComputeDisplayDistortionMNDX compute = NULL;
+        if (XR_SUCCEEDED(xrGetInstanceProcAddr(wrapper->host_instance, "xrComputeDisplayDistortionMNDX",
+                                               (PFN_xrVoidFunction *)&compute)) && compute)
+            params->result = compute(wrapper->host_instance, params->system, params->view_index,
+                                     params->point_count, params->points, params->red, params->green, params->blue);
+    } else {
+        params->result = XR_ERROR_VALIDATION_FAILURE;
+    }
+    return STATUS_SUCCESS;
 }

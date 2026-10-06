@@ -66,8 +66,13 @@ def patch(name, old, new, count):
     if text.count(old) != count:
         raise SystemExit(f'{name}: expected {count} unix-call table anchor(s)')
     path.write_text(text.replace(old, new))
-patch('loader_thunks.h', '    unix_count,\n', '    unix_mw_graphics_native,\n    unix_count,\n', 1)
+# A second one for XR_MNDX_display_distortion, which is not in the Khronos
+# registry (mndx_display_distortion.h).
+patch('loader_thunks.h', '    unix_count,\n',
+      '    unix_mw_graphics_native,\n    unix_mw_display_distortion,\n    unix_count,\n', 1)
 patch('openxr_thunks.c', '};\nC_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == unix_count);',
-      '    (unixlib_entry_t)mw_graphics_native_call,\n};\nC_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == unix_count);', 1)
+      '    (unixlib_entry_t)mw_graphics_native_call,\n    (unixlib_entry_t)mw_display_distortion_call,\n'
+      '};\nC_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == unix_count);', 1)
 patch('openxr_thunks.c', 'const unixlib_entry_t __wine_unix_call_funcs[] =',
-      'extern int mw_graphics_native_call(void *params);\nconst unixlib_entry_t __wine_unix_call_funcs[] =', 1)
+      'extern int mw_graphics_native_call(void *params);\nextern int mw_display_distortion_call(void *params);\n'
+      'const unixlib_entry_t __wine_unix_call_funcs[] =', 1)
