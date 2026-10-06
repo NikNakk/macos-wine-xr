@@ -14,6 +14,8 @@
 #                          is left alone but must not be running (USB)
 #   APPID=<steam app id>   optionally launch a Steam app once SteamVR is up
 #   MWXR_DISPLAY_MODE=direct|virtual  sets driver_mwxr.displayMode first
+#   MWXR_OPENVR_POSE_FIX=0  do not install tools/openvr_shim beside SteamVR Home
+#                           (default 1; Valve's openvr_api.dll is restored on exit)
 #
 # Required:
 #   MWXR_STEAMVR_ROOT        built by build-current-dxmt.zsh, with a prefix
@@ -93,7 +95,35 @@ fi
 # booted out again when this script exits. (The trap is set here: in zsh, an
 # EXIT trap set inside a function fires when the function returns.)
 isolated_label= isolated_dir=
-trap '[[ -n ${isolated_label} ]] && { launchctl bootout "gui/${UID}/${isolated_label}" || true; rm -rf "${isolated_dir}"; }' EXIT INT TERM
+# The OpenVR pose shim beside SteamVR Home: under Wine, SteamVR's compositor
+# marks the HMD render pose uninitialised, which Home respects (see
+# tools/openvr_shim). Valve's DLL is kept as openvr_api_valve.dll and put back
+# on exit.
+shim=${MWXR_OPENVR_SHIM:-${repo}/build-in-process/openvr-shim/openvr_api.dll}
+home_bin="${steam_dir}/steamapps/common/SteamVR/tools/steamvr_environments/game/bin/win64"
+shim_installed=0
+install_shim() {
+  [[ ${MWXR_OPENVR_POSE_FIX:-1} == 1 && -f ${shim} && -f ${home_bin}/openvr_api.dll ]] || return 0
+  # A file without the marker is Valve's (perhaps updated by Steam): keep it.
+  if ! /usr/bin/grep -q mwxr-openvr-shim "${home_bin}/openvr_api.dll"; then
+    mv -f "${home_bin}/openvr_api.dll" "${home_bin}/openvr_api_valve.dll"
+  fi
+  [[ -f ${home_bin}/openvr_api_valve.dll ]] || return 0
+  cp "${shim}" "${home_bin}/openvr_api.dll"
+  shim_installed=1
+  print "Installed the OpenVR pose shim beside SteamVR Home"
+}
+restore_shim() {
+  if [[ ${shim_installed} == 1 && -f ${home_bin}/openvr_api_valve.dll ]]; then
+    mv -f "${home_bin}/openvr_api_valve.dll" "${home_bin}/openvr_api.dll"
+  fi
+}
+cleanup() {
+  restore_shim
+  [[ -n ${isolated_label} ]] && { launchctl bootout "gui/${UID}/${isolated_label}" || true; rm -rf "${isolated_dir}"; }
+  return 0
+}
+trap cleanup EXIT INT TERM
 start_isolated_service() { # <service binary> <environment template plist or empty> <simulated 0|1>
   label=org.freedesktop.monado.mwxr-test.${UID}.$$
   export XRT_MACOS_METAL_IPC_SERVICE_NAME=org.freedesktop.monado.metal-ipc.mwxr-test.${UID}.$$
@@ -125,6 +155,9 @@ PY
   launchctl bootstrap "gui/${UID}" "${logs}/service.plist"
   isolated_label=${label} isolated_dir=${XDG_RUNTIME_DIR}
 }
+
+install_shim
+export MWXR_OPENVR_SHIM_LOG="Z:${logs//\//\\}\\openvr-shim.log"
 
 case ${mode} in
  simulated)
