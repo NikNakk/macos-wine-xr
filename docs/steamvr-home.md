@@ -144,3 +144,181 @@ contention. Alyx's own DXMT log was not written; Steam probably does not pass
 Not yet tested: opening the dashboard in VR, launching a game from inside Home
 or the dashboard (the null driver has no controllers), gameplay and pacing, and
 any PS VR2 or Monado connection.
+
+## The mwxr driver: SteamVR on an OpenXR runtime, 2026-10-06
+
+`src/steamvr_driver` builds `driver_mwxr.dll`, a generic SteamVR driver. It
+presents any OpenXR runtime's headset and controllers to Windows SteamVR. It is
+an ordinary OpenXR client inside `vrserver`. With the in-process wineopenxr
+runtime registered in the prefix, its calls go straight to native Monado.
+Nothing in it is specific to the PS VR2 or to Monado.
+
+```text
+game (OpenVR) -> renders into driver-owned D3D11 textures (vrclient)
+vrserver: driver_mwxr
+  Present:     keyed-mutex sync, one GPU copy per eye into an OpenXR swapchain,
+               xrEndFrame with projection layers posed from SteamVR's render pose
+  PostPresent: xrWaitFrame + xrBeginFrame (paces the compositor), VsyncEvent
+  pose thread: xrLocateSpace(VIEW) and both grip spaces at the current time,
+               xrSyncActions, 500 Hz
+  -> wineopenxr (in process) -> native Khronos loader -> Monado client -> service
+```
+
+The game's frames are not composited twice. With
+`IVRDriverDirectModeComponent` (the interface SteamVR's Oculus driver uses with
+LibOVR), applications render undistorted eyes into textures the driver
+allocates (`CreateSwapTextureSet` is called for the application's pid). The
+runtime does the only distortion and timewarp. SteamVR overlays arrive as
+further layers, which are submitted as alpha-blended projection layers. The
+remaining cost is one copy per eye per frame; see "Next steps".
+
+### What the driver presents
+
+- **HMD.** Resolution, FOV, eye-to-head poses and IPD come from the primary
+  stereo views, located in VIEW space right after `xrBeginSession` (Monado
+  locates views only in a begun session). The reference space is STAGE when
+  offered, otherwise LOCAL. Distortion is identity, and its inverse is left to
+  SteamVR (returning an identity inverse fails `BatchedComputeDistortion`). The
+  display frequency follows the shortest `predictedDisplayPeriod` seen, because
+  late frames report multiples of the refresh period.
+- **Controllers.** One action set with bindings suggested for
+  `oculus/touch_controller` (fallback `khr/simple_controller`); Monado binds
+  PS VR2 Sense controllers to Touch. Both hands are presented as
+  `oculus_touch`, with Valve's `{oculus}/input/touch_profile.json`, Quest 2
+  render models and the grip pose, so SteamVR's Touch bindings apply. The left
+  menu button is the system button. Haptics go to `xrApplyHapticFeedback`. There
+  is no skeletal input yet.
+- **Play area.** A standing universe at the reference-space origin, as
+  `Prop_DriverProvidedChaperoneJson_String` (key `jsonid`). It uses the STAGE
+  bounds when available, otherwise 2 x 2 m, so SteamVR does not require room
+  setup.
+- **Time.** `XR_KHR_win32_convert_performance_counter_time` when the runtime
+  has it (the in-process runtime maps it to native
+  `XR_KHR_convert_timespec_time`, as Proton does). Otherwise the time is
+  estimated from the frame loop, running ahead by the runtime's display lead.
+
+### MinGW and SteamVR's calling convention
+
+For a C++ member function that returns a struct by value, MSVC (SteamVR)
+passes `this` first and the hidden result pointer second; MinGW GCC 16 passes
+the result pointer first. `ITrackedDeviceServerDriver::GetPose` and
+`IVRDisplayComponent::ComputeDistortion` return structs. Implementing them
+directly made SteamVR read garbage distortion and fail with
+`VRInitError_Compositor_CreateDistortionSurfaces`. `openvr_abi.h` declares
+those two interfaces with an explicit result parameter, which has MSVC's layout
+under either compiler. Any further OpenVR interface method that returns a
+struct by value needs the same treatment.
+
+### Building
+
+```sh
+# In-process runtime with Win32 time conversion (separate from build-in-process/gate):
+MWXR_IN_PROCESS_BUILD=$PWD/build-in-process/gate-steamvr \
+DXMT_SOURCE_DIR=/path/to/dxmt MWXR_WINE_SDK=/path/to/wine-8.16-sdk \
+MWXR_WINE_SOURCE=/path/to/proton-wine MWXR_WINE_RUNTIME=/path/to/wine-11.10 \
+MWXR_NATIVE_LOADER=$PWD/build-in-process/openxr-loader-x64/src/loader/libopenxr_loader.dylib \
+OPENXR_SOURCE_DIR=/path/to/OpenXR-SDK scripts/build-in-process-gate.zsh
+
+# Driver (the Khronos loader and MinGW runtimes are linked statically):
+cmake -S src/steamvr_driver -B build-in-process/steamvr-driver -G Ninja \
+  -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+  -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build-in-process/steamvr-driver
+```
+
+The SteamVR side needs DXMT with both the in-process import interface and the
+SteamVR fixes (`NikNakk/dxmt` branch `steamvr-in-process`). It is installed
+into a Wine 11.10 root by `scripts/build-current-dxmt.zsh`, whose prefix holds
+Windows Steam and SteamVR.
+
+### Running
+
+```sh
+export MWXR_STEAMVR_ROOT=/path/to/steamvr-dxmt          # wine-11.10/, bin/, prefix/
+export MWXR_NATIVE_RUNTIME_JSON=/path/to/monado-x64/openxr_monado-dev.json
+MWXR_MONADO=hardware scripts/run-steamvr-mwxr.zsh          # installed Monado service, PS VR2
+MONADO_SIM_BUILD=/path/to/sim-service MWXR_MONADO=simulated scripts/run-steamvr-mwxr.zsh
+APPID=546560 MWXR_MONADO=hardware scripts/run-steamvr-mwxr.zsh   # then launch Half-Life: Alyx
+```
+
+The script registers the driver folder as an `external_drivers` entry in
+`openvrpaths.vrpath`. It sets `forcedDriver: mwxr`, disables the null driver and
+SteamVR safe mode, and applies the dashboard and power settings from spike 2.
+It starts Steam, then `vrstartup.exe` with the in-process runtime's
+environment, which `vrserver` inherits. The x86_64 Monado client must match the
+service's git tag. In simulated mode it starts an isolated simulated-only
+service under its own launchd label, and removes it when `vrserver` exits.
+
+Operational notes:
+
+- **Stop SteamVR by closing its status window** (or
+  `wine taskkill /im vrmonitor.exe`), not `wineserver -k`. A crash early in a
+  run sets `blocked_by_safe_mode`, and SteamVR re-applies it from a saved crash
+  record at the next start ("Not loading driver mwxr because it was blocked by
+  a previous safe mode event"). One clean run clears it.
+- Shutdown can hang at "Exiting" while SteamVR repeatedly kills a `steamtours`
+  process that no longer exists. Kill `vrserver`, `vrcompositor` and
+  `vrmonitor`.
+- Monado's macOS compositor presents only on the PS VR2 panel, so the
+  simulated service shows nothing on the desktop. Simulated runs are checked
+  through the driver's logs.
+- `vrstartup.exe` exits with status 3 even on success.
+
+### Diagnostics
+
+Every 5 s the driver logs to `vrserver.txt` (prefix `mwxr:`):
+
+- the head pose;
+- each submitted layer's texture region, pose and FOV;
+- SteamVR's prediction horizon (`flHmdPosePredictionTimeInSecondsFromNow`) and
+  the angle between the render pose and the current head pose;
+- each hand's action values.
+
+The startup line names the runtime, the system, the reference space and the
+time source.
+
+### Results
+
+Simulated Monado v25.1.0-2146: SteamVR loads the driver, the compositor starts
+on it, and Home renders into driver textures, submitted without `xrEndFrame`
+errors. The time estimate, with the extension hidden, gave valid poses and
+frames.
+
+PS VR2 (installed service v25.1.0-2146, `XRT_MACOS_CLIENT_COMPOSITOR=1`):
+
+- Home renders in stereo, distorted by Monado, at 1428-1440 x 1456-1468 per
+  eye (SteamVR's choice from Monado's recommended 2800 x 2856).
+- STAGE is used. The head is at 1.77-1.80 m while worn, after Monado's
+  automatic floor calibration (`XRT_FLOOR_EYE_HEIGHT_M=1.75`).
+- The render pose is within 0.06-0.13 deg of the head when still, and 1-3 deg
+  when turning. SteamVR predicts 41-45 ms ahead (about 9 ms against simulated
+  Monado).
+- Both hands bind Touch. SteamVR shows both controllers as tracking, and
+  trigger/squeeze values reach the driver.
+- Before the `jsonid` fix the play area was rejected ("Could not find
+  universe"). The view had a constant black lower region bounded by a straight
+  edge, and faded beyond about 30 deg of head turn. The likely cause is that,
+  with no standing universe, apps placed the eyes at floor height, so the
+  floor was seen edge-on. This is unconfirmed: the fixed build has not yet
+  been run on the headset.
+
+### Open issues
+
+- Controllers are not drawn in Home, and Home does not react to them, although
+  their values reach the driver. This may have the same cause as the missing
+  universe; recheck after the `jsonid` fix.
+- SteamVR's 41-45 ms prediction on the PS VR2 is long, and comes from the
+  vsync timing the driver reports. Worth tuning with real pacing data.
+- "WaitForAcquire timed out" appears occasionally during hitches.
+- Game Mode: frames now pass through `vrserver`, which macOS may throttle like
+  `monado-service`. Not yet measured.
+- No skeletal input, battery or proximity.
+
+### Next steps
+
+- Zero-copy: hand the OpenXR swapchain images to applications as the swap
+  texture set, which needs DXMT to share imported Metal textures across
+  processes.
+- Simulated controllers, to debug input without hardware.
+- Measure latency and Game Mode behaviour against the direct
+  OpenComposite/xrizer path before choosing defaults per game.
