@@ -44,7 +44,11 @@ struct is_available_instance_function_openxr_params {
     XrResult ret;
 };
 
-typedef struct { XrInstance host_instance; void *required_metal_device; uint32_t d3d11_enabled; } wine_XrInstance;
+// win32_time_enabled: XR_KHR_win32_convert_performance_counter_time, served
+// by the native XR_KHR_convert_timespec_time functions below.
+typedef struct { XrInstance host_instance; void *required_metal_device; uint32_t d3d11_enabled;
+    uint32_t win32_time_enabled; void *native_timespec_to_time; void *native_time_to_timespec;
+} wine_XrInstance;
 typedef struct { XrSession host_session; wine_XrInstance *instance; void *metal_device;
     void *metal_queue; void *metal_event; uint64_t fence_value; void *graphics;
 } wine_XrSession;

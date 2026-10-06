@@ -52,6 +52,13 @@ XrResult WINAPI xrGetInstanceProcAddr(XrInstance instance, const char *name, PFN
         *fn = (PFN_xrVoidFunction)xrGetD3D11GraphicsRequirementsKHR;
         return XR_SUCCESS;
     }
+    if (!strcmp(name, "xrConvertWin32PerformanceCounterToTimeKHR") ||
+        !strcmp(name, "xrConvertTimeToWin32PerformanceCounterKHR")) {
+        // Served natively through XR_KHR_convert_timespec_time.
+        if (!instance || !wine_instance_from_handle(instance)->win32_time_enabled) return XR_ERROR_FUNCTION_UNSUPPORTED;
+        *fn = wine_xr_get_instance_proc_addr(name);
+        return *fn ? XR_SUCCESS : XR_ERROR_FUNCTION_UNSUPPORTED;
+    }
     struct is_available_instance_function_openxr_params params = {.instance = instance, .name = name};
     if (UNIX_CALL(is_available_instance_function, &params)) return XR_ERROR_RUNTIME_FAILURE;
     if (XR_FAILED(params.ret)) return params.ret;
