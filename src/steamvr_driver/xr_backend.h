@@ -4,6 +4,7 @@
 // reports it, and composited frames submitted as projection layers.
 #pragma once
 
+#include <atomic>
 #include <d3d11.h>
 #include <mutex>
 #include <string>
@@ -107,6 +108,8 @@ private:
 	ChooseFormat(DXGI_FORMAT source);
 	XrTime
 	NowXrTime();
+	void
+	AnchorTime(XrTime predictedDisplayTime);
 
 	std::mutex mutex_; // session lifecycle and frame calls
 	XrInstance instance_ = XR_NULL_HANDLE;
@@ -131,6 +134,8 @@ private:
 	         thumbrestTouch_ = XR_NULL_HANDLE, haptic_ = XR_NULL_HANDLE;
 	XrSpace gripSpaces_[2] = {};
 
+	std::atomic<LONGLONG> anchorCounter_{0};
+	std::atomic<XrTime> anchorTime_{0};
 	PFN_xrConvertWin32PerformanceCounterToTimeKHR qpcToTime_ = nullptr;
 	PFN_xrConvertTimeToWin32PerformanceCounterKHR timeToQpc_ = nullptr;
 	PFN_xrGetD3D11GraphicsRequirementsKHR getRequirements_ = nullptr;

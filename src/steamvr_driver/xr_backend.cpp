@@ -35,30 +35,34 @@ XrBackend::Init(std::string &error)
 	XR_CHECK(xrEnumerateInstanceExtensionProperties(nullptr, 0, &count, nullptr));
 	std::vector<XrExtensionProperties> extensions(count, {XR_TYPE_EXTENSION_PROPERTIES});
 	XR_CHECK(xrEnumerateInstanceExtensionProperties(nullptr, count, &count, extensions.data()));
-	const char *required[] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME,
-	                          XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME};
-	for (const char *name : required) {
-		if (!HasExtension(extensions, name)) {
-			error = std::string("runtime lacks ") + name;
-			return false;
-		}
+	if (!HasExtension(extensions, XR_KHR_D3D11_ENABLE_EXTENSION_NAME)) {
+		error = "runtime lacks " XR_KHR_D3D11_ENABLE_EXTENSION_NAME;
+		return false;
+	}
+	// Optional: without it, the current XrTime is estimated from the frame loop.
+	const char *required[2] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
+	uint32_t enabledCount = 1;
+	if (HasExtension(extensions, XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME)) {
+		required[enabledCount++] = XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME;
 	}
 
 	XrInstanceCreateInfo instanceInfo = {XR_TYPE_INSTANCE_CREATE_INFO};
 	strcpy(instanceInfo.applicationInfo.applicationName, "SteamVR (macos-wine-xr driver)");
 	strcpy(instanceInfo.applicationInfo.engineName, "driver_mwxr");
 	instanceInfo.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
-	instanceInfo.enabledExtensionCount = 2;
+	instanceInfo.enabledExtensionCount = enabledCount;
 	instanceInfo.enabledExtensionNames = required;
 	XR_CHECK(xrCreateInstance(&instanceInfo, &instance_));
 
 	XrInstanceProperties instanceProperties = {XR_TYPE_INSTANCE_PROPERTIES};
 	XR_CHECK(xrGetInstanceProperties(instance_, &instanceProperties));
 	runtimeName = instanceProperties.runtimeName;
-	XR_CHECK(xrGetInstanceProcAddr(instance_, "xrConvertWin32PerformanceCounterToTimeKHR",
-	                               (PFN_xrVoidFunction *)&qpcToTime_));
-	XR_CHECK(xrGetInstanceProcAddr(instance_, "xrConvertTimeToWin32PerformanceCounterKHR",
-	                               (PFN_xrVoidFunction *)&timeToQpc_));
+	if (enabledCount > 1) {
+		XR_CHECK(xrGetInstanceProcAddr(instance_, "xrConvertWin32PerformanceCounterToTimeKHR",
+		                               (PFN_xrVoidFunction *)&qpcToTime_));
+		XR_CHECK(xrGetInstanceProcAddr(instance_, "xrConvertTimeToWin32PerformanceCounterKHR",
+		                               (PFN_xrVoidFunction *)&timeToQpc_));
+	}
 	XR_CHECK(xrGetInstanceProcAddr(instance_, "xrGetD3D11GraphicsRequirementsKHR",
 	                               (PFN_xrVoidFunction *)&getRequirements_));
 
@@ -178,6 +182,19 @@ XrBackend::Init(std::string &error)
 		return false;
 	}
 
+	if (!qpcToTime_) {
+		// One empty frame anchors the frame-loop time estimate before any
+		// view or pose is located.
+		XrFrameState state = {XR_TYPE_FRAME_STATE};
+		XR_CHECK(xrWaitFrame(session_, nullptr, &state));
+		AnchorTime(state.predictedDisplayTime);
+		XR_CHECK(xrBeginFrame(session_, nullptr));
+		XrFrameEndInfo endInfo = {XR_TYPE_FRAME_END_INFO};
+		endInfo.displayTime = state.predictedDisplayTime;
+		endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+		XR_CHECK(xrEndFrame(session_, &endInfo));
+	}
+
 	// Eye poses relative to the head and field of view, from the views now.
 	XrViewLocateInfo locateInfo = {XR_TYPE_VIEW_LOCATE_INFO};
 	locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -191,9 +208,10 @@ XrBackend::Init(std::string &error)
 		eyeInHead[eye] = located[eye].pose;
 	}
 
-	Log("OpenXR runtime '%s', system '%s', %ux%u per eye, %s space, %u swapchain formats\n", runtimeName.c_str(),
-	    systemName.c_str(), recommendedWidth, recommendedHeight,
-	    baseSpaceType_ == XR_REFERENCE_SPACE_TYPE_STAGE ? "STAGE" : "LOCAL", formatCount);
+	Log("OpenXR runtime '%s', system '%s', %ux%u per eye, %s space, %u swapchain formats, time %s\n",
+	    runtimeName.c_str(), systemName.c_str(), recommendedWidth, recommendedHeight,
+	    baseSpaceType_ == XR_REFERENCE_SPACE_TYPE_STAGE ? "STAGE" : "LOCAL", formatCount,
+	    qpcToTime_ ? "converted from QueryPerformanceCounter" : "estimated from the frame loop");
 	return true;
 }
 
@@ -437,9 +455,31 @@ XrBackend::NowXrTime()
 {
 	LARGE_INTEGER counter;
 	QueryPerformanceCounter(&counter);
-	XrTime time = 0;
-	qpcToTime_(instance_, &counter, &time);
-	return time;
+	if (qpcToTime_) {
+		XrTime time = 0;
+		qpcToTime_(instance_, &counter, &time);
+		return time;
+	}
+	// Estimate: the latest predicted display time, advanced by the counter
+	// since xrWaitFrame returned. It runs ahead by the runtime's display lead
+	// (a frame or two); timewarp absorbs that.
+	LONGLONG anchorCounter = anchorCounter_.load();
+	XrTime anchorTime = anchorTime_.load();
+	if (!anchorTime) {
+		return 0;
+	}
+	LARGE_INTEGER frequency;
+	QueryPerformanceFrequency(&frequency);
+	return anchorTime + (XrTime)((counter.QuadPart - anchorCounter) * (1e9 / frequency.QuadPart));
+}
+
+void
+XrBackend::AnchorTime(XrTime predictedDisplayTime)
+{
+	LARGE_INTEGER counter;
+	QueryPerformanceCounter(&counter);
+	anchorCounter_ = counter.QuadPart;
+	anchorTime_ = predictedDisplayTime;
 }
 
 void
@@ -514,6 +554,9 @@ XrBackend::WaitAndBeginFrame(double &vsyncOffsetSeconds, double &framePeriodSeco
 	frameState_ = {XR_TYPE_FRAME_STATE};
 	if (XR_FAILED(xrWaitFrame(session_, nullptr, &frameState_))) {
 		return false;
+	}
+	if (!qpcToTime_) {
+		AnchorTime(frameState_.predictedDisplayTime);
 	}
 	if (XR_FAILED(xrBeginFrame(session_, nullptr))) {
 		return false;
