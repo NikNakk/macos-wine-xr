@@ -778,7 +778,12 @@ public:
 		QueryPerformanceCounter(&now);
 		QueryPerformanceFrequency(&frequency);
 		lastVsync_ = now.QuadPart - (LONGLONG)(sinceVsync * frequency.QuadPart);
-		vsyncCount_ = (uint64_t)llround((double)lastVsync_ / ((double)frequency.QuadPart * refresh));
+		// Vsyncs since the first one reported, starting at 1, so skipped
+		// refreshes still advance the counter.
+		if (!firstVsync_) {
+			firstVsync_ = lastVsync_;
+		}
+		vsyncCount_ = 1 + (uint64_t)llround((double)(lastVsync_ - firstVsync_) / ((double)frequency.QuadPart * refresh));
 		// The prediction moves by a refresh from frame to frame, and each change
 		// of SteamVR's property shifts its pose prediction by a refresh. Check
 		// every half second, and only change it when no frame in that time
@@ -1097,6 +1102,7 @@ private:
 	uint64_t presentCount_ = 0, vsyncCount_ = 0;
 	LONGLONG lastVsync_ = 0;
 	double vsyncToPhotons_ = -1;
+	LONGLONG firstVsync_ = 0;
 	vr::VRInputComponentHandle_t proximity_ = vr::k_ulInvalidInputComponentHandle;
 	static constexpr size_t kPhotonSamples = 60;
 	double photonSamples_[kPhotonSamples] = {};
