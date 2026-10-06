@@ -266,6 +266,13 @@ main(int argc, char **argv)
 		compositor->SetExplicitTimingMode(vr::VRCompositorTimingMode_Explicit_RuntimePerformsPostPresentHandoff);
 	}
 
+	// The compositor's tracking space cycles every 5 s, to see in which spaces
+	// WaitGetPoses reports a valid head.
+	const vr::ETrackingUniverseOrigin cycle[3] = {vr::TrackingUniverseStanding, vr::TrackingUniverseSeated,
+	                                              vr::TrackingUniverseRawAndUncalibrated};
+	const char *cycleNames[3] = {"standing", "seated", "raw"};
+	int space = -1;
+
 	using Clock = std::chrono::steady_clock;
 	auto start = Clock::now(), windowStart = start;
 	uint32_t frames = 0, waitErrors = 0, submitErrors = 0, invalidHead = 0, lastWaitError = 0, lastSubmitError = 0;
@@ -285,6 +292,12 @@ main(int argc, char **argv)
 			}
 		}
 
+		int wanted = (int)(std::chrono::duration<double>(Clock::now() - start).count() / 5) % 3;
+		if (wanted != space) {
+			space = wanted;
+			compositor->SetTrackingSpace(cycle[space]);
+			Log("Compositor tracking space: %s\n", cycleNames[space]);
+		}
 		auto waitBegin = Clock::now();
 		vr::EVRCompositorError error = compositor->WaitGetPoses(poses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 		double waitMs = std::chrono::duration<double, std::milli>(Clock::now() - waitBegin).count();
@@ -348,10 +361,13 @@ main(int argc, char **argv)
 		    "invalid head %u\n",
 		    std::chrono::duration<double>(Clock::now() - start).count(), frames / elapsed, waitMsTotal / frames,
 		    waitMsMax, waitErrors, lastWaitError, submitErrors, lastSubmitError, invalidHead);
-		Log("  head: pos %.3f %.3f %.3f yaw %.1f pitch %.1f valid %d result %d; input %d pause %d canRender %d\n",
-		    render.m[0][3], render.m[1][3], render.m[2][3], YawDegrees(render), PitchDegrees(render), head.bPoseIsValid,
+		Log("  head (%s): pos %.3f %.3f %.3f yaw %.1f pitch %.1f valid %d result %d; input %d pause %d "
+		    "canRender %d\n",
+		    cycleNames[space], render.m[0][3], render.m[1][3], render.m[2][3], YawDegrees(render), PitchDegrees(render), head.bPoseIsValid,
 		    head.eTrackingResult, system->IsInputAvailable(), system->ShouldApplicationPause(),
 		    compositor->CanRenderScene());
+		Log("  render poses: left valid %d result %d, right valid %d result %d\n", poses[1].bPoseIsValid,
+		    poses[1].eTrackingResult, poses[2].bPoseIsValid, poses[2].eTrackingResult);
 		Log("  vsync: %s since %.2f ms, counter %llu, %.1f Hz, to photons %.2f ms -> predict %.2f ms; "
 		    "render vs predicted %.1f deg %.3f m, render vs now %.1f deg %.3f m\n",
 		    haveVsync ? "ok" : "unavailable", sinceVsync * 1000, (unsigned long long)vsyncCounter, hz,
