@@ -537,6 +537,10 @@ public:
 			}
 		}
 		pending_.push_back(layer);
+		if (pending_.size() == 1) {
+			lastPrediction_ = perEye[0].flHmdPosePredictionTimeInSecondsFromNow;
+			lastRenderHead_ = ToPose(perEye[0].mHmdPose).orientation;
+		}
 	}
 
 	void
@@ -555,6 +559,21 @@ public:
 				Log("Sync texture AcquireSync failed; submitting no layers this frame\n");
 			}
 			layers.clear();
+		}
+		auto now = std::chrono::steady_clock::now();
+		if (!layers.empty() && now - lastPresentLog_ > std::chrono::seconds(5)) {
+			lastPresentLog_ = now;
+			XrPosef head;
+			XrVector3f linear, angular;
+			bool positionValid;
+			if (xr_.LocateHeadNow(head, linear, angular, positionValid)) {
+				const XrQuaternionf &a = lastRenderHead_, &b = head.orientation;
+				float dot = fabsf(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
+				float degrees = 2.0f * acosf(std::min(dot, 1.0f)) * 57.29578f;
+				Log("Present: SteamVR predicted %.1f ms ahead; render vs current head %.2f deg; angular "
+				    "velocity %.2f %.2f %.2f rad/s\n",
+				    lastPrediction_ * 1000, degrees, angular.x, angular.y, angular.z);
+			}
 		}
 		xr_.Present(layers);
 		if (locked) {
@@ -600,7 +619,7 @@ private:
 		const uint64_t universe = 0x6d77787200000001ull; // "mwxr", 1
 		char json[2048];
 		snprintf(json, sizeof(json),
-		         "{\"json_id\":\"chaperone_info\",\"version\":5,\"universes\":[{\"universeID\":\"%llu\","
+		         "{\"jsonid\":\"chaperone_info\",\"version\":5,\"universes\":[{\"universeID\":\"%llu\","
 		         "\"play_area\":[%.3f,%.3f],"
 		         "\"collision_bounds\":["
 		         "[[%.3f,0,%.3f],[%.3f,%.2f,%.3f],[%.3f,%.2f,%.3f],[%.3f,0,%.3f]],"
@@ -682,6 +701,17 @@ private:
 			if (xr_.UpdateHands(hands)) {
 				controllers_[0]->Update(hands[0]);
 				controllers_[1]->Update(hands[1]);
+				auto now = std::chrono::steady_clock::now();
+				if (now - lastInputLog_ > std::chrono::seconds(5)) {
+					lastInputLog_ = now;
+					for (int hand = 0; hand < 2; ++hand) {
+						const HandState &h = hands[hand];
+						Log("%s hand: active %d pose %d trigger %.2f squeeze %.2f stick %.2f %.2f lower %d "
+						    "upper %d menu %d\n",
+						    hand ? "Right" : "Left", h.active, h.poseValid, h.trigger, h.squeeze,
+						    h.thumbstick.x, h.thumbstick.y, h.lowerClick, h.upperClick, h.menuClick);
+					}
+				}
 			}
 			std::this_thread::sleep_until(next);
 		}
@@ -743,11 +773,15 @@ private:
 	std::atomic<bool> running_ = false;
 	std::thread poseThread_;
 	vr::DriverPose_t lastPose_ = {};
-	std::chrono::steady_clock::time_point lastPoseLog_;
+	std::chrono::steady_clock::time_point lastPoseLog_, lastInputLog_;
 
 	std::mutex texturesMutex_;
 	std::map<vr::SharedTextureHandle_t, TextureRef> textures_;
 	std::vector<LayerSubmit> pending_;
+
+	float lastPrediction_ = 0;
+	XrQuaternionf lastRenderHead_ = {0, 0, 0, 1};
+	std::chrono::steady_clock::time_point lastPresentLog_;
 
 	vr::SharedTextureHandle_t syncHandle_ = 0;
 	IDXGIKeyedMutex *syncMutex_ = nullptr;
