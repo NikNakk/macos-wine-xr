@@ -6,6 +6,12 @@
 #include <cstring>
 #include <dxgi.h>
 
+#if __has_include("dxmt_native_interop.h")
+#include "dxmt_native_interop.h"
+#define MWXR_HAVE_DXMT_INTEROP 1
+#endif
+#include <set>
+
 namespace mwxr {
 
 #define XR_CHECK(call)                                                                                                 \
@@ -649,6 +655,81 @@ XrBackend::SwapchainFor(size_t layer, int eye, uint32_t width, uint32_t height, 
 	return &swapchain;
 }
 
+bool
+XrBackend::CreateSharedSwapchain(uint32_t width, uint32_t height, DXGI_FORMAT format, XrSwapchain &swapchain,
+                                 ID3D11Texture2D *textures[3], HANDLE handles[3])
+{
+	std::lock_guard<std::mutex> lock(mutex_);
+	swapchain = XR_NULL_HANDLE;
+#ifndef MWXR_HAVE_DXMT_INTEROP
+	return false;
+#else
+	bool formatSupported = false;
+	for (int64_t candidate : formats_) {
+		formatSupported |= candidate == format; // the application opens the image with this format
+	}
+	IDXMTNativeDevice3 *native = nullptr;
+	if (!formatSupported || !session_ ||
+	    FAILED(device->QueryInterface(DXMT_IID_NATIVE_DEVICE3, (void **)&native))) {
+		return false;
+	}
+	XrSwapchainCreateInfo info = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
+	info.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+	info.format = format;
+	info.sampleCount = 1;
+	info.width = width;
+	info.height = height;
+	info.faceCount = 1;
+	info.arraySize = 1;
+	info.mipCount = 1;
+	uint32_t count = 0;
+	bool ok = XR_SUCCEEDED(xrCreateSwapchain(session_, &info, &swapchain)) &&
+	          XR_SUCCEEDED(xrEnumerateSwapchainImages(swapchain, 0, &count, nullptr)) && count == 3;
+	if (ok) {
+		XrSwapchainImageD3D11KHR images[3] = {{XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR},
+		                                      {XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR},
+		                                      {XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR}};
+		ok = XR_SUCCEEDED(xrEnumerateSwapchainImages(swapchain, 3, &count,
+		                                             reinterpret_cast<XrSwapchainImageBaseHeader *>(images)));
+		for (int i = 0; ok && i < 3; ++i) {
+			textures[i] = images[i].texture;
+			ok = SUCCEEDED(native->CreateSharedTextureHandle(textures[i], &handles[i])) && handles[i];
+		}
+	}
+	native->Release();
+	if (!ok) {
+		Log("Zero-copy swapchain %ux%u format %d unavailable (%u images); copying instead\n", width, height,
+		    format, count);
+		if (swapchain) {
+			xrDestroySwapchain(swapchain);
+			swapchain = XR_NULL_HANDLE;
+		}
+		return false;
+	}
+	return true;
+#endif
+}
+
+void
+XrBackend::DestroySwapchain(XrSwapchain swapchain)
+{
+	std::lock_guard<std::mutex> lock(mutex_);
+	xrDestroySwapchain(swapchain);
+}
+
+int
+XrBackend::AcquireImage(XrSwapchain swapchain)
+{
+	uint32_t index = 0;
+	XrSwapchainImageWaitInfo waitInfo = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+	waitInfo.timeout = XR_INFINITE_DURATION;
+	if (XR_FAILED(xrAcquireSwapchainImage(swapchain, nullptr, &index)) ||
+	    XR_FAILED(xrWaitSwapchainImage(swapchain, &waitInfo))) {
+		return -1;
+	}
+	return (int)index;
+}
+
 void
 XrBackend::Present(const std::vector<LayerSubmit> &layers)
 {
@@ -657,6 +738,16 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers)
 		WaitAndBeginFrame(offset, period);
 	}
 	std::lock_guard<std::mutex> lock(mutex_);
+	// Zero-copy images: released after the caller's sync, so the runtime's
+	// GPU wait follows the application's rendering.
+	std::set<XrSwapchain> released;
+	for (const auto &layer : layers) {
+		for (const auto &eye : layer.eye) {
+			if (eye.swapchain && released.insert(eye.swapchain).second) {
+				xrReleaseSwapchainImage(eye.swapchain, nullptr);
+			}
+		}
+	}
 	if (!running_ || !frameBegun_) {
 		return;
 	}
@@ -668,10 +759,21 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers)
 			bool complete = true;
 			for (int eye = 0; eye < 2 && complete; ++eye) {
 				const EyeSubmit &submit = layers[i].eye[eye];
-				D3D11_TEXTURE2D_DESC desc;
-				submit.texture->GetDesc(&desc);
 				uint32_t width = submit.box.right - submit.box.left;
 				uint32_t height = submit.box.bottom - submit.box.top;
+				XrCompositionLayerProjectionView &view = views[i * 2 + eye];
+				view = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
+				view.pose = submit.pose;
+				view.fov = submit.fov;
+				view.subImage.imageRect.offset = {0, 0};
+				view.subImage.imageRect.extent = {(int32_t)width, (int32_t)height};
+				if (submit.swapchain) {
+					view.subImage.swapchain = submit.swapchain;
+					view.subImage.imageRect.offset = {(int32_t)submit.box.left, (int32_t)submit.box.top};
+					continue;
+				}
+				D3D11_TEXTURE2D_DESC desc;
+				submit.texture->GetDesc(&desc);
 				EyeSwapchain *swapchain = SwapchainFor(i, eye, width, height, desc.Format);
 				uint32_t image = 0;
 				XrSwapchainImageWaitInfo waitInfo = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
@@ -684,13 +786,7 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers)
 				context_->CopySubresourceRegion(swapchain->images[image].texture, 0, 0, 0, 0, submit.texture,
 				                                0, &submit.box);
 				xrReleaseSwapchainImage(swapchain->handle, nullptr);
-
-				XrCompositionLayerProjectionView &view = views[i * 2 + eye];
-				view = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
-				view.pose = submit.pose;
-				view.fov = submit.fov;
 				view.subImage.swapchain = swapchain->handle;
-				view.subImage.imageRect.extent = {(int32_t)width, (int32_t)height};
 			}
 			if (!complete) {
 				continue;

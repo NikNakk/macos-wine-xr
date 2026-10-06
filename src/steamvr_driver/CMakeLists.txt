@@ -39,6 +39,13 @@ add_library(driver_mwxr SHARED driver.cpp xr_backend.cpp)
 set_target_properties(driver_mwxr PROPERTIES PREFIX "")
 target_include_directories(driver_mwxr PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(driver_mwxr PRIVATE openxr_loader d3d11 dxgi)
+
+# Zero-copy swap texture sets need DXMT's IDXMTNativeDevice3; without its
+# header the driver always copies into its OpenXR swapchains.
+set(DXMT_SOURCE_DIR "" CACHE PATH "DXMT checkout providing include/dxmt_native_interop.h")
+if(DXMT_SOURCE_DIR)
+	target_include_directories(driver_mwxr PRIVATE "${DXMT_SOURCE_DIR}/include")
+endif()
 if(MINGW)
 	# No MinGW runtime DLLs beside vrserver.exe.
 	target_link_options(driver_mwxr PRIVATE -static)
