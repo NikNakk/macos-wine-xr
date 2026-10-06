@@ -386,13 +386,13 @@ main(int argc, char **argv)
 		}
 		// HMD validity across prediction times, to see whether a compositor
 		// asking for a time outside the pose history would get an invalid pose.
-		const float offsets[] = {-0.5f, -0.2f, -0.1f, -0.05f, 0.0f, 0.05f, 0.1f, 0.2f, 0.5f, 1.0f};
-		char predictions[256] = {};
+		const float offsets[] = {-86400.0f, -3600.0f, -10.0f, -0.5f, -0.1f, 0.0f, 0.1f, 0.5f, 10.0f, 3600.0f, 86400.0f};
+		char predictions[512] = {};
 		size_t used = 0;
 		for (float offset : offsets) {
 			vr::TrackedDevicePose_t p = {};
 			system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, offset, &p, 1);
-			used += snprintf(predictions + used, sizeof(predictions) - used, " %+.2fs:%d/%d", offset, p.bPoseIsValid,
+			used += snprintf(predictions + used, sizeof(predictions) - used, " %+gs:%d/%d", offset, p.bPoseIsValid,
 			                 p.eTrackingResult);
 		}
 		Log("  hmd by prediction time:%s\n", predictions);
@@ -404,6 +404,13 @@ main(int argc, char **argv)
 		    spaces[1][0].bPoseIsValid, spaces[1][0].eTrackingResult, spaces[2][0].bPoseIsValid,
 		    spaces[2][0].eTrackingResult, chaperone ? (int)chaperone->GetCalibrationState() : -1);
 		if (haveTiming) {
+			// The compositor's clock for this frame against this process's QPC.
+			LARGE_INTEGER qpc, qpf;
+			QueryPerformanceCounter(&qpc);
+			QueryPerformanceFrequency(&qpf);
+			double qpcSeconds = (double)qpc.QuadPart / (double)qpf.QuadPart;
+			Log("  clocks: compositor frame system time %.6f s, probe QPC %.6f s, difference %.3f s\n",
+			    timing.m_flSystemTimeInSeconds, qpcSeconds, qpcSeconds - timing.m_flSystemTimeInSeconds);
 			Log("  frame %u: presents %u mispresented %u dropped %u reprojection 0x%x, gpu %.2f ms, "
 			    "compositor %.2f ms, interval %.2f ms\n",
 			    timing.m_nFrameIndex, timing.m_nNumFramePresents, timing.m_nNumMisPresented,
