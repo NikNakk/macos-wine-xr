@@ -489,8 +489,15 @@ On the PS VR2, the result:
 - 98.9% of frames advanced the display time by one refresh.
 - The app lead fell from 51 ms to 32 ms.
 
-`SecondsFromVsyncToPhotons` still alternates between 4 and 5 refreshes
-(25 / 33 ms) as the prediction moves. It may want hysteresis.
+That run was launched as a direct-mode comparison. A concurrent simulated
+launch rewrote `displayMode` to `virtual` before vrserver started, so it ran
+in virtual mode against the PS VR2 service. A clean direct-mode comparison is
+still to do.
+
+In that run, `SecondsFromVsyncToPhotons` changed nearly every frame,
+alternating between 4 and 5 refreshes (25 / 33 ms), and reaching 9 during
+start-up. It now follows the median of the last 60 frames, updated every 60
+frames. That change is not yet tested on hardware.
 
 ### Next steps
 
