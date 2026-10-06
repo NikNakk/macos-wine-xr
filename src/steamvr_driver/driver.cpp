@@ -772,6 +772,18 @@ public:
 		QueryPerformanceFrequency(&frequency);
 		lastVsync_ = now.QuadPart - (LONGLONG)(sinceVsync * frequency.QuadPart);
 		vsyncCount_ = (uint64_t)llround((double)lastVsync_ / ((double)frequency.QuadPart * refresh));
+		// The prediction moves by a refresh from frame to frame, so SteamVR's
+		// property follows the median of the last half second instead.
+		photonSamples_[photonSampleCount_++ % kPhotonSamples] = photons;
+		if (photonSampleCount_ % kPhotonSamples != 0 && vsyncToPhotons_ >= 0) {
+			return;
+		}
+		size_t count = photonSampleCount_ < kPhotonSamples ? photonSampleCount_ : kPhotonSamples;
+		double sorted[kPhotonSamples];
+		std::copy(photonSamples_, photonSamples_ + count, sorted);
+		std::nth_element(sorted, sorted + count / 2, sorted + count);
+		photons = sorted[count / 2];
+		periods = photons / refresh + 1;
 		if (fabs(photons - vsyncToPhotons_) > 0.25 * refresh && objectId_ != vr::k_unTrackedDeviceIndexInvalid) {
 			vsyncToPhotons_ = photons;
 			auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId_);
@@ -1060,6 +1072,9 @@ private:
 	uint64_t presentCount_ = 0, vsyncCount_ = 0;
 	LONGLONG lastVsync_ = 0;
 	double vsyncToPhotons_ = -1;
+	static constexpr size_t kPhotonSamples = 60;
+	double photonSamples_[kPhotonSamples] = {};
+	size_t photonSampleCount_ = 0;
 
 	float lastPrediction_ = 0;
 	XrQuaternionf lastRenderHead_ = {0, 0, 0, 1};
