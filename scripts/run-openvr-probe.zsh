@@ -8,7 +8,7 @@
 #   MWXR_STEAMVR_ROOT  the Wine/DXMT root with Steam and SteamVR in prefix/
 #   arguments          passed to openvr_probe.exe, for example --seconds 60 or
 #                      --explicit-timing
-#   MWXR_OPENVR_POSE_FIX=1  load tools/openvr_shim in front of Valve's DLL
+#   MWXR_OPENVR_SHIM_INSTALL=1  load tools/openvr_shim in front of Valve's DLL
 set -euo pipefail
 repo=${0:A:h:h}
 : ${MWXR_STEAMVR_ROOT:?Wine 11.10/current-DXMT root with Steam and SteamVR in its prefix}
@@ -20,10 +20,10 @@ pgrep -f 'vrserver.exe' >/dev/null || { print -u2 "Start SteamVR first (run-stea
 # Valve's runtime-matched openvr_api.dll, loaded from beside the executable,
 # optionally behind the pose shim.
 rm -f "${probe_dir}/openvr_api_valve.dll"
-if [[ ${MWXR_OPENVR_POSE_FIX:-0} == 1 ]]; then
+if [[ ${MWXR_OPENVR_SHIM_INSTALL:-0} == 1 ]]; then
   cp "${steamvr}/bin/win64/openvr_api.dll" "${probe_dir}/openvr_api_valve.dll"
   cp "${MWXR_OPENVR_SHIM:-${repo}/build-in-process/openvr-shim/openvr_api.dll}" "${probe_dir}/openvr_api.dll"
-  print "Using the OpenVR pose shim"
+  print "Using the OpenVR shim"
 else
   cp "${steamvr}/bin/win64/openvr_api.dll" "${probe_dir}/"
 fi
