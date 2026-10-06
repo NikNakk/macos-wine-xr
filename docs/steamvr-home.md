@@ -591,6 +591,21 @@ The two latest sessions wrote none, so the dumps do not explain the
 freeze. Still open: what Home's main loop waits for after its first
 frame.
 
+Last run of the day, with Steam's overlay kept out of SteamVR and Home
+(`MWXR_WINEDLLOVERRIDES='gameoverlayrenderer64='`, confirmed absent from the
+process), and Home's console recorded live from start-up:
+
+1. 3.3 s: Home spawns the player.
+2. 3.8 s: "Submitting first frame to the compositor".
+3. 4.0 to 6.6 s: UI updates and Panorama backlogs.
+4. After that, nothing from the game loop; only background network pings
+   follow (7.1 and 10.2 s).
+
+While frozen, Home's process (`0x1248`) had no thread `0x124c`, normally
+its main thread under Wine. The overlay is therefore not the cause. Next:
+trace Home's main thread (waits and exit) from launch to the freeze, or
+try other titles (Half-Life: Alyx, Unity games) first.
+
 ### Next steps
 
 - PS VR2 run of virtual mode. It needs Monado built from
