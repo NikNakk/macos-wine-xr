@@ -45,6 +45,18 @@ if [[ ${ALYX_START_STEAM:-1} == 1 ]]; then
  sleep ${ALYX_STEAM_WAIT_S:-30}
 fi
 
+# Valve's openvr_api.dll needs a path registry even with VR_OVERRIDE. Wine
+# builds name the Windows user differently (CrossOver: "crossover"), so write
+# it for every user profile in the prefix.
+xrizer_windows="Z:${MWXR_XRIZER_ROOT//\//\\}"
+for profile in "${MWXR_IN_PROCESS_PREFIX}"/drive_c/users/*(/N); do
+ [[ ${profile:t} == Public ]] && continue
+ mkdir -p "${profile}/AppData/Local/openvr"
+ cat > "${profile}/AppData/Local/openvr/openvrpaths.vrpath" <<JSON
+{"jsonid": "vrpathreg", "runtime": ["${xrizer_windows//\\/\\\\}"], "version": 1}
+JSON
+done
+
 trace_windows="Z:${logs//\//\\}"
 export VR_OVERRIDE="Z:${MWXR_XRIZER_ROOT//\//\\}"
 export XDG_STATE_HOME=${trace_windows}
