@@ -358,6 +358,20 @@ main(int argc, char **argv)
 		    toPhotons * 1000, predict * 1000, AngleBetween(render, predicted.mDeviceToAbsoluteTracking),
 		    Distance(render, predicted.mDeviceToAbsoluteTracking), AngleBetween(render, now.mDeviceToAbsoluteTracking),
 		    Distance(render, now.mDeviceToAbsoluteTracking));
+		// Which tracking spaces SteamVR considers valid, and why (once a second).
+		vr::TrackedDevicePose_t spaces[3][3] = {};
+		const vr::ETrackingUniverseOrigin origins[3] = {vr::TrackingUniverseStanding, vr::TrackingUniverseSeated,
+		                                                vr::TrackingUniverseRawAndUncalibrated};
+		for (int o = 0; o < 3; ++o) {
+			system->GetDeviceToAbsoluteTrackingPose(origins[o], 0, spaces[o], 3);
+		}
+		vr::IVRChaperone *chaperone = vr::VRChaperone();
+		Log("  validity (valid/result) standing hmd %d/%d left %d/%d right %d/%d; seated hmd %d/%d; raw hmd %d/%d; "
+		    "chaperone calibration %d\n",
+		    spaces[0][0].bPoseIsValid, spaces[0][0].eTrackingResult, spaces[0][1].bPoseIsValid,
+		    spaces[0][1].eTrackingResult, spaces[0][2].bPoseIsValid, spaces[0][2].eTrackingResult,
+		    spaces[1][0].bPoseIsValid, spaces[1][0].eTrackingResult, spaces[2][0].bPoseIsValid,
+		    spaces[2][0].eTrackingResult, chaperone ? (int)chaperone->GetCalibrationState() : -1);
 		if (haveTiming) {
 			Log("  frame %u: presents %u mispresented %u dropped %u reprojection 0x%x, gpu %.2f ms, "
 			    "compositor %.2f ms, interval %.2f ms\n",
