@@ -280,6 +280,27 @@ private:
 	                             haptic_ = vr::k_ulInvalidInputComponentHandle;
 };
 
+// SteamVR's compositor always composites into resolve textures of its own and
+// submits only those; applications' texture sets are read by the compositor
+// and never reach the driver's layers.
+static bool
+IsCompositorProcess(uint32_t pid)
+{
+	HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+	if (!process) {
+		return false;
+	}
+	char path[MAX_PATH];
+	DWORD size = sizeof(path);
+	bool compositor = false;
+	if (QueryFullProcessImageNameA(process, 0, path, &size)) {
+		const char *name = strrchr(path, '\\');
+		compositor = !_stricmp(name ? name + 1 : path, "vrcompositor.exe");
+	}
+	CloseHandle(process);
+	return compositor;
+}
+
 class HmdDevice : public TrackedDeviceServerDriverAbi,
                   public DisplayComponentAbi,
                   public vr::IVRDriverDirectModeComponent
@@ -434,7 +455,7 @@ public:
 		set->pid = pid;
 		set->xr = &xr_;
 		out->unTextureFlags = 0;
-		if (zeroCopy_ && desc->nSampleCount <= 1 &&
+		if (zeroCopy_ && desc->nSampleCount <= 1 && IsCompositorProcess(pid) &&
 		    xr_.CreateSharedSwapchain(desc->nWidth, desc->nHeight, (DXGI_FORMAT)desc->nFormat, set->swapchain,
 		                              set->textures, set->sharedHandles)) {
 			for (int i = 0; i < 3; ++i) {

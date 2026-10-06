@@ -154,9 +154,11 @@ runtime registered in the prefix, its calls go straight to native Monado.
 Nothing in it is specific to the PS VR2 or to Monado.
 
 ```text
-game (OpenVR) -> renders into driver-owned D3D11 textures (vrclient)
+game (OpenVR) -> renders into driver-allocated shared textures (vrclient)
+vrcompositor  -> composites the game and overlays into its own resolve textures,
+                 which are OpenXR swapchain images (zero-copy)
 vrserver: driver_mwxr
-  Present:     keyed-mutex sync, one GPU copy per eye into an OpenXR swapchain,
+  Present:     keyed-mutex sync, release the images,
                xrEndFrame with projection layers posed from SteamVR's render pose
   PostPresent: xrWaitFrame + xrBeginFrame (paces the compositor), VsyncEvent
   pose thread: xrLocateSpace(VIEW) and both grip spaces at the current time,
@@ -164,13 +166,33 @@ vrserver: driver_mwxr
   -> wineopenxr (in process) -> native Khronos loader -> Monado client -> service
 ```
 
-The game's frames are not composited twice. With
-`IVRDriverDirectModeComponent` (the interface SteamVR's Oculus driver uses with
-LibOVR), applications render undistorted eyes into textures the driver
-allocates (`CreateSwapTextureSet` is called for the application's pid). The
-runtime does the only distortion and timewarp. SteamVR overlays arrive as
-further layers, which are submitted as alpha-blended projection layers. The
-remaining cost is one copy per eye per frame; see "Next steps".
+The game's frames are composited twice: once by SteamVR, once by the runtime.
+With `IVRDriverDirectModeComponent` (the interface SteamVR's Oculus driver uses
+with LibOVR), applications render undistorted eyes into textures the driver
+allocates (`CreateSwapTextureSet` for the application's pid). `vrcompositor`
+then always composites them, with overlays, fades and its own reprojection,
+into "driver direct mode resolve textures" of its own (sets created for
+`vrcompositor.exe`), and only those reach `SubmitLayer`. The runtime then does
+distortion and timewarp. This pass is built into SteamVR's direct mode; SteamVR
+on Oculus headsets has the same double composition. Valve's private compositor
+plugin interface (`IVRDriverDirectInternal`) is not public. SteamVR sizes the
+resolve textures itself (1292-1440 x 1452-1468 per eye so far, below Home's
+1549 x 1742 render), so this pass also limits resolution.
+
+**Zero-copy.** With DXMT's `IDXMTNativeDevice3::CreateSharedTextureHandle`, each
+of the compositor's resolve sets is an OpenXR swapchain whose three images are
+published to `vrcompositor`. The compositor renders straight into the runtime's
+images and the driver makes no copy. The first image is acquired at creation
+(the compositor renders into it first); later ones are acquired in
+`GetNextSwapTextureSetIndex` (the runtime decides the order) and released in
+`Present` after the keyed-mutex wait. Applications' sets, which never reach
+`SubmitLayer`, stay plain shared textures. A compositor set falls back to one
+copy per eye into a separate swapchain when its format is not a runtime
+swapchain format, it is multisampled, the swapchain does not have exactly three
+images, or the device cannot export them. Building without `DXMT_SOURCE_DIR`
+always copies. The driver setting `zeroCopy` (default true) allows A/B
+comparison. Checked against simulated Monado: the compositor's sets were
+zero-copy, Home's were shared textures, with no copies or `xrEndFrame` errors.
 
 ### What the driver presents
 
@@ -222,7 +244,8 @@ OPENXR_SOURCE_DIR=/path/to/OpenXR-SDK scripts/build-in-process-gate.zsh
 # Driver (the Khronos loader and MinGW runtimes are linked statically):
 cmake -S src/steamvr_driver -B build-in-process/steamvr-driver -G Ninja \
   -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-  -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_BUILD_TYPE=RelWithDebInfo
+  -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DDXMT_SOURCE_DIR=/path/to/dxmt   # optional: zero-copy (IDXMTNativeDevice3)
 cmake --build build-in-process/steamvr-driver
 ```
 
@@ -316,9 +339,10 @@ PS VR2 (installed service v25.1.0-2146, `XRT_MACOS_CLIENT_COMPOSITOR=1`):
 
 ### Next steps
 
-- Zero-copy: hand the OpenXR swapchain images to applications as the swap
-  texture set, which needs DXMT to share imported Metal textures across
-  processes.
+- PS VR2 check of the zero-copy path.
+- Raise SteamVR's resolve resolution towards the runtime's recommendation, if
+  SteamVR allows it (its supersampling settings), to reduce the loss in the
+  extra composite.
 - Simulated controllers, to debug input without hardware.
 - Measure latency and Game Mode behaviour against the direct
   OpenComposite/xrizer path before choosing defaults per game.
