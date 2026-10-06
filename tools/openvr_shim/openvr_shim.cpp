@@ -72,6 +72,8 @@ struct Stats
 	uint32_t submits[2] = {}, submitErrors = 0, lastSubmitError = 0, lastType = 0, lastColorSpace = 0,
 	         lastFlags = 0, distinctHandles = 0;
 	void *handles[8] = {};
+	double submitTotalMs = 0, submitMaxMs = 0, submitGapMaxMs = 0;
+	LONGLONG lastSubmit = 0;
 	double waitTotalMs = 0, waitMaxMs = 0, intervalMaxMs = 0;
 	LONGLONG lastReturn = 0;
 } g_stats;
@@ -186,13 +188,16 @@ Record(LONGLONG begin, LONGLONG end, vr::EVRCompositorError error, const vr::Tra
 		    "HMD invalid %u, marked valid %u\n",
 		    s.calls * 1000.0 / windowMs, s.waitTotalMs / s.calls, s.waitMaxMs, s.intervalMaxMs, s.errors,
 		    s.lastError, s.invalidHmd, s.fixed);
-		Log("Submit: left %u right %u, errors %u (last %u), texture type %u colour space %u flags 0x%x, "
-		    "distinct handles %u\n",
-		    s.submits[0], s.submits[1], s.submitErrors, s.lastSubmitError, s.lastType, s.lastColorSpace,
-		    s.lastFlags, s.distinctHandles);
+		uint32_t submits = s.submits[0] + s.submits[1];
+		Log("Submit: left %u right %u, in-call avg %.2f max %.2f ms, longest gap %.1f ms, errors %u (last %u), "
+		    "texture type %u colour space %u flags 0x%x, distinct handles %u\n",
+		    s.submits[0], s.submits[1], submits ? s.submitTotalMs / submits : 0.0, s.submitMaxMs,
+		    s.submitGapMaxMs, s.submitErrors, s.lastSubmitError, s.lastType, s.lastColorSpace, s.lastFlags,
+		    s.distinctHandles);
 		s.windowStart = end;
 		s.calls = s.errors = s.lastError = s.invalidHmd = s.fixed = 0;
 		s.submits[0] = s.submits[1] = s.submitErrors = s.lastSubmitError = s.distinctHandles = 0;
+		s.submitTotalMs = s.submitMaxMs = s.submitGapMaxMs = 0;
 		memset(s.handles, 0, sizeof(s.handles));
 		s.waitTotalMs = s.waitMaxMs = s.intervalMaxMs = 0;
 	}
@@ -252,9 +257,20 @@ SubmitHook(void *self, vr::EVREye eye, const vr::Texture_t *texture, const vr::V
            vr::EVRSubmitFlags flags)
 {
 	const Patched *p = Find(self);
+	LARGE_INTEGER begin, end;
+	QueryPerformanceCounter(&begin);
 	vr::EVRCompositorError error = p->submit(self, eye, texture, bounds, flags);
+	QueryPerformanceCounter(&end);
 	AcquireSRWLockExclusive(&g_stats.lock);
 	Stats &s = g_stats;
+	double inCallMs = QpcMs(end.QuadPart - begin.QuadPart);
+	s.submitTotalMs += inCallMs;
+	s.submitMaxMs = inCallMs > s.submitMaxMs ? inCallMs : s.submitMaxMs;
+	if (s.lastSubmit) {
+		double gapMs = QpcMs(end.QuadPart - s.lastSubmit);
+		s.submitGapMaxMs = gapMs > s.submitGapMaxMs ? gapMs : s.submitGapMaxMs;
+	}
+	s.lastSubmit = end.QuadPart;
 	if (eye == vr::Eye_Left || eye == vr::Eye_Right) {
 		++s.submits[eye];
 	}
