@@ -129,12 +129,163 @@ FovFromProjection(const vr::HmdMatrix44_t &p, XrFovf &fov)
 	return true;
 }
 
+// A hand controller presented to SteamVR as an Oculus Touch controller, which
+// matches the OpenXR Touch profile the runtime binds (Valve's own Touch input
+// profile and bindings then apply to every game).
+class ControllerDevice : public TrackedDeviceServerDriverAbi
+{
+public:
+	explicit ControllerDevice(int hand) : hand_(hand) {}
+
+	vr::EVRInitError
+	Activate(uint32_t objectId) override
+	{
+		objectId_ = objectId;
+		auto *props = vr::VRProperties();
+		auto container = props->TrackedDeviceToPropertyContainer(objectId);
+		bool left = hand_ == 0;
+		props->SetStringProperty(container, vr::Prop_TrackingSystemName_String, "mwxr");
+		props->SetStringProperty(container, vr::Prop_ModelNumber_String,
+		                         left ? "mwxr Touch-compatible (Left)" : "mwxr Touch-compatible (Right)");
+		props->SetStringProperty(container, vr::Prop_ControllerType_String, "oculus_touch");
+		props->SetStringProperty(container, vr::Prop_InputProfilePath_String, "{oculus}/input/touch_profile.json");
+		props->SetStringProperty(container, vr::Prop_RenderModelName_String,
+		                         left ? "oculus_quest2_controller_left" : "oculus_quest2_controller_right");
+		props->SetInt32Property(container, vr::Prop_ControllerRoleHint_Int32,
+		                        left ? vr::TrackedControllerRole_LeftHand : vr::TrackedControllerRole_RightHand);
+		props->SetInt32Property(container, vr::Prop_DeviceClass_Int32, vr::TrackedDeviceClass_Controller);
+		props->SetBoolProperty(container, vr::Prop_DeviceProvidesBatteryStatus_Bool, false);
+
+		auto *input = vr::VRDriverInput();
+		auto boolean = [&](const char *path) {
+			vr::VRInputComponentHandle_t handle = vr::k_ulInvalidInputComponentHandle;
+			input->CreateBooleanComponent(container, path, &handle);
+			return handle;
+		};
+		auto scalar = [&](const char *path, vr::EVRScalarUnits units) {
+			vr::VRInputComponentHandle_t handle = vr::k_ulInvalidInputComponentHandle;
+			input->CreateScalarComponent(container, path, &handle, vr::VRScalarType_Absolute, units);
+			return handle;
+		};
+		stickX_ = scalar("/input/joystick/x", vr::VRScalarUnits_NormalizedTwoSided);
+		stickY_ = scalar("/input/joystick/y", vr::VRScalarUnits_NormalizedTwoSided);
+		stickClick_ = boolean("/input/joystick/click");
+		stickTouch_ = boolean("/input/joystick/touch");
+		trigger_ = scalar("/input/trigger/value", vr::VRScalarUnits_NormalizedOneSided);
+		triggerTouch_ = boolean("/input/trigger/touch");
+		grip_ = scalar("/input/grip/value", vr::VRScalarUnits_NormalizedOneSided);
+		gripTouch_ = boolean("/input/grip/touch");
+		lowerClick_ = boolean(left ? "/input/x/click" : "/input/a/click");
+		lowerTouch_ = boolean(left ? "/input/x/touch" : "/input/a/touch");
+		upperClick_ = boolean(left ? "/input/y/click" : "/input/b/click");
+		upperTouch_ = boolean(left ? "/input/y/touch" : "/input/b/touch");
+		systemClick_ = boolean("/input/system/click");
+		thumbrestTouch_ = boolean("/input/thumbrest/touch");
+		input->CreateHapticComponent(container, "/output/haptic", &haptic_);
+		Log("%s controller active\n", left ? "Left" : "Right");
+		return vr::VRInitError_None;
+	}
+
+	void
+	Deactivate() override
+	{
+		objectId_ = vr::k_unTrackedDeviceIndexInvalid;
+	}
+	void
+	EnterStandby() override
+	{}
+	void *
+	GetComponent(const char *) override
+	{
+		return nullptr;
+	}
+	void
+	DebugRequest(const char *, char *response, uint32_t size) override
+	{
+		if (size) {
+			response[0] = 0;
+		}
+	}
+	vr::DriverPose_t *
+	GetPose(vr::DriverPose_t *result) override
+	{
+		*result = lastPose_;
+		return result;
+	}
+
+	vr::VRInputComponentHandle_t
+	HapticHandle() const
+	{
+		return haptic_;
+	}
+
+	void
+	Update(const HandState &state)
+	{
+		uint32_t id = objectId_;
+		if (id == vr::k_unTrackedDeviceIndexInvalid) {
+			return;
+		}
+		vr::DriverPose_t pose = {};
+		pose.qWorldFromDriverRotation = {1, 0, 0, 0};
+		pose.qDriverFromHeadRotation = {1, 0, 0, 0};
+		pose.deviceIsConnected = state.active;
+		if (state.poseValid) {
+			XrQuaternionf inverse = {-state.pose.orientation.x, -state.pose.orientation.y,
+			                         -state.pose.orientation.z, state.pose.orientation.w};
+			XrVector3f local = Rotate(inverse, state.angularVelocity);
+			pose.qRotation = ToQuat(state.pose.orientation);
+			pose.vecPosition[0] = state.pose.position.x;
+			pose.vecPosition[1] = state.pose.position.y;
+			pose.vecPosition[2] = state.pose.position.z;
+			pose.vecVelocity[0] = state.linearVelocity.x;
+			pose.vecVelocity[1] = state.linearVelocity.y;
+			pose.vecVelocity[2] = state.linearVelocity.z;
+			pose.vecAngularVelocity[0] = local.x;
+			pose.vecAngularVelocity[1] = local.y;
+			pose.vecAngularVelocity[2] = local.z;
+			pose.poseIsValid = true;
+			pose.result = vr::TrackingResult_Running_OK;
+		} else {
+			pose.qRotation = {1, 0, 0, 0};
+			pose.result = vr::TrackingResult_Running_OutOfRange;
+		}
+		lastPose_ = pose;
+		vr::VRServerDriverHost()->TrackedDevicePoseUpdated(id, pose, sizeof(pose));
+
+		auto *input = vr::VRDriverInput();
+		input->UpdateScalarComponent(stickX_, state.thumbstick.x, 0);
+		input->UpdateScalarComponent(stickY_, state.thumbstick.y, 0);
+		input->UpdateBooleanComponent(stickClick_, state.thumbstickClick, 0);
+		input->UpdateBooleanComponent(stickTouch_, state.thumbstickTouch || state.thumbstickClick, 0);
+		input->UpdateScalarComponent(trigger_, state.trigger, 0);
+		input->UpdateBooleanComponent(triggerTouch_, state.triggerTouch || state.trigger > 0.05f, 0);
+		input->UpdateScalarComponent(grip_, state.squeeze, 0);
+		input->UpdateBooleanComponent(gripTouch_, state.squeeze > 0.05f, 0);
+		input->UpdateBooleanComponent(lowerClick_, state.lowerClick, 0);
+		input->UpdateBooleanComponent(lowerTouch_, state.lowerTouch || state.lowerClick, 0);
+		input->UpdateBooleanComponent(upperClick_, state.upperClick, 0);
+		input->UpdateBooleanComponent(upperTouch_, state.upperTouch || state.upperClick, 0);
+		input->UpdateBooleanComponent(systemClick_, state.menuClick, 0);
+		input->UpdateBooleanComponent(thumbrestTouch_, state.thumbrestTouch, 0);
+	}
+
+private:
+	int hand_;
+	std::atomic<uint32_t> objectId_ = vr::k_unTrackedDeviceIndexInvalid;
+	vr::DriverPose_t lastPose_ = {};
+	vr::VRInputComponentHandle_t stickX_ = 0, stickY_ = 0, stickClick_ = 0, stickTouch_ = 0, trigger_ = 0,
+	                             triggerTouch_ = 0, grip_ = 0, gripTouch_ = 0, lowerClick_ = 0, lowerTouch_ = 0,
+	                             upperClick_ = 0, upperTouch_ = 0, systemClick_ = 0, thumbrestTouch_ = 0,
+	                             haptic_ = vr::k_ulInvalidInputComponentHandle;
+};
+
 class HmdDevice : public TrackedDeviceServerDriverAbi,
                   public DisplayComponentAbi,
                   public vr::IVRDriverDirectModeComponent
 {
 public:
-	explicit HmdDevice(XrBackend &xr) : xr_(xr) {}
+	HmdDevice(XrBackend &xr, ControllerDevice *left, ControllerDevice *right) : xr_(xr), controllers_{left, right} {}
 
 	// ITrackedDeviceServerDriver
 	vr::EVRInitError
@@ -163,6 +314,7 @@ public:
 		props->SetBoolProperty(container, vr::Prop_DeviceProvidesBatteryStatus_Bool, false);
 		props->SetBoolProperty(container, vr::Prop_HasCamera_Bool, false);
 		props->SetBoolProperty(container, vr::Prop_DisplayDebugMode_Bool, false);
+		SetPlayArea(container);
 		vr::VRServerDriverHost()->SetDisplayEyeToHead(objectId, ToMatrix(xr_.eyeInHead[0]),
 		                                             ToMatrix(xr_.eyeInHead[1]));
 		Log("HMD '%s' active: IPD %.1f mm, %.0f Hz\n", xr_.systemName.c_str(), ipd * 1000, frequency_);
@@ -437,6 +589,35 @@ public:
 	}
 
 private:
+	// A standing universe at the reference space origin, so SteamVR does not
+	// require room setup. The runtime's STAGE is already floor-level.
+	void
+	SetPlayArea(vr::PropertyContainerHandle_t container)
+	{
+		float width = xr_.playAreaWidth > 0 ? xr_.playAreaWidth : 2.0f;
+		float depth = xr_.playAreaDepth > 0 ? xr_.playAreaDepth : 2.0f;
+		float x = width / 2, z = depth / 2, h = 2.43f;
+		const uint64_t universe = 0x6d77787200000001ull; // "mwxr", 1
+		char json[2048];
+		snprintf(json, sizeof(json),
+		         "{\"json_id\":\"chaperone_info\",\"version\":5,\"universes\":[{\"universeID\":\"%llu\","
+		         "\"play_area\":[%.3f,%.3f],"
+		         "\"collision_bounds\":["
+		         "[[%.3f,0,%.3f],[%.3f,%.2f,%.3f],[%.3f,%.2f,%.3f],[%.3f,0,%.3f]],"
+		         "[[%.3f,0,%.3f],[%.3f,%.2f,%.3f],[%.3f,%.2f,%.3f],[%.3f,0,%.3f]],"
+		         "[[%.3f,0,%.3f],[%.3f,%.2f,%.3f],[%.3f,%.2f,%.3f],[%.3f,0,%.3f]],"
+		         "[[%.3f,0,%.3f],[%.3f,%.2f,%.3f],[%.3f,%.2f,%.3f],[%.3f,0,%.3f]]],"
+		         "\"standing\":{\"translation\":[0,0,0],\"yaw\":0},"
+		         "\"seated\":{\"translation\":[0,0,0],\"yaw\":0}}]}",
+		         (unsigned long long)universe, width, depth, -x, -z, -x, h, -z, x, h, -z, x, -z, x, -z, x, h, -z, x,
+		         h, z, x, z, x, z, x, h, z, -x, h, z, -x, z, -x, z, -x, h, z, -x, h, -z, -x, -z);
+		auto *props = vr::VRProperties();
+		props->SetUint64Property(container, vr::Prop_CurrentUniverseId_Uint64, universe);
+		props->SetStringProperty(container, vr::Prop_DriverProvidedChaperoneJson_String, json);
+		props->SetBoolProperty(container, vr::Prop_DriverProvidedChaperoneVisibility_Bool, true);
+		Log("Play area %.2f x %.2f m (%s)\n", width, depth, xr_.playAreaWidth > 0 ? "runtime" : "default");
+	}
+
 	struct TextureSet
 	{
 		uint32_t pid = 0;
@@ -497,6 +678,11 @@ private:
 		while (running_) {
 			auto next = std::chrono::steady_clock::now() + interval;
 			UpdatePose();
+			HandState hands[2];
+			if (xr_.UpdateHands(hands)) {
+				controllers_[0]->Update(hands[0]);
+				controllers_[1]->Update(hands[1]);
+			}
 			std::this_thread::sleep_until(next);
 		}
 	}
@@ -536,12 +722,20 @@ private:
 			out.result = vr::TrackingResult_Running_OutOfRange;
 		}
 		lastPose_ = out;
+		auto now = std::chrono::steady_clock::now();
+		if (now - lastPoseLog_ > std::chrono::seconds(5)) {
+			lastPoseLog_ = now;
+			Log("Head: valid %d position %.3f %.3f %.3f orientation %.3f %.3f %.3f %.3f\n", out.poseIsValid,
+			    out.vecPosition[0], out.vecPosition[1], out.vecPosition[2], out.qRotation.w, out.qRotation.x,
+			    out.qRotation.y, out.qRotation.z);
+		}
 		if (objectId_ != vr::k_unTrackedDeviceIndexInvalid) {
 			vr::VRServerDriverHost()->TrackedDevicePoseUpdated(objectId_, out, sizeof(out));
 		}
 	}
 
 	XrBackend &xr_;
+	ControllerDevice *controllers_[2];
 	std::atomic<uint32_t> objectId_ = vr::k_unTrackedDeviceIndexInvalid;
 	float frequency_ = 90.0f;
 	double minPeriod_ = 0;
@@ -549,6 +743,7 @@ private:
 	std::atomic<bool> running_ = false;
 	std::thread poseThread_;
 	vr::DriverPose_t lastPose_ = {};
+	std::chrono::steady_clock::time_point lastPoseLog_;
 
 	std::mutex texturesMutex_;
 	std::map<vr::SharedTextureHandle_t, TextureRef> textures_;
@@ -574,12 +769,22 @@ public:
 			xr_.Shutdown();
 			return vr::VRInitError_Driver_Failed;
 		}
-		hmd_ = new HmdDevice(xr_);
+		left_ = new ControllerDevice(0);
+		right_ = new ControllerDevice(1);
+		hmd_ = new HmdDevice(xr_, left_, right_);
 		auto *driver = reinterpret_cast<vr::ITrackedDeviceServerDriver *>(
 		    static_cast<TrackedDeviceServerDriverAbi *>(hmd_));
 		if (!vr::VRServerDriverHost()->TrackedDeviceAdded("mwxr-hmd", vr::TrackedDeviceClass_HMD, driver)) {
 			Log("TrackedDeviceAdded failed\n");
 			return vr::VRInitError_Driver_Failed;
+		}
+		const char *serials[2] = {"mwxr-left", "mwxr-right"};
+		ControllerDevice *controllers[2] = {left_, right_};
+		for (int hand = 0; hand < 2; ++hand) {
+			auto *controller = reinterpret_cast<vr::ITrackedDeviceServerDriver *>(
+			    static_cast<TrackedDeviceServerDriverAbi *>(controllers[hand]));
+			vr::VRServerDriverHost()->TrackedDeviceAdded(serials[hand], vr::TrackedDeviceClass_Controller,
+			                                             controller);
 		}
 		return vr::VRInitError_None;
 	}
@@ -588,7 +793,10 @@ public:
 	Cleanup() override
 	{
 		delete hmd_;
+		delete left_;
+		delete right_;
 		hmd_ = nullptr;
+		left_ = right_ = nullptr;
 		xr_.Shutdown();
 		VR_CLEANUP_SERVER_DRIVER_CONTEXT();
 	}
@@ -603,6 +811,19 @@ public:
 	RunFrame() override
 	{
 		xr_.PollEvents();
+		vr::VREvent_t event;
+		while (vr::VRServerDriverHost()->PollNextEvent(&event, sizeof(event))) {
+			if (event.eventType != vr::VREvent_Input_HapticVibration) {
+				continue;
+			}
+			const auto &haptic = event.data.hapticVibration;
+			for (int hand = 0; hand < 2; ++hand) {
+				ControllerDevice *controller = hand ? right_ : left_;
+				if (controller && haptic.componentHandle == controller->HapticHandle()) {
+					xr_.Vibrate(hand, haptic.fDurationSeconds, haptic.fFrequency, haptic.fAmplitude);
+				}
+			}
+		}
 	}
 
 	bool
@@ -620,6 +841,7 @@ public:
 private:
 	XrBackend xr_;
 	HmdDevice *hmd_ = nullptr;
+	ControllerDevice *left_ = nullptr, *right_ = nullptr;
 };
 
 static ServerProvider g_provider;
