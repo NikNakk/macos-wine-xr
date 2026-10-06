@@ -8,7 +8,12 @@
 #   MWXR_MONADO=simulated  an isolated simulated-only Monado service
 #                          (SIMULATED_LEFT/RIGHT=wmr adds simulated controllers)
 #   MWXR_MONADO=hardware   the installed Monado LaunchAgent (PS VR2)
+#   MWXR_MONADO=isolated   another PS VR2 service build (MONADO_SERVICE_BUILD),
+#                          under its own launchd label and socket with the
+#                          installed LaunchAgent's environment; the agent itself
+#                          is left alone but must not be running (USB)
 #   APPID=<steam app id>   optionally launch a Steam app once SteamVR is up
+#   MWXR_DISPLAY_MODE=direct|virtual  sets driver_mwxr.displayMode first
 #
 # Required:
 #   MWXR_STEAMVR_ROOT        built by build-current-dxmt.zsh, with a prefix
@@ -30,10 +35,10 @@ mode=${MWXR_MONADO:-simulated}
 
 # Register the driver folder, select it, and never leave it blocked by
 # SteamVR safe mode after a failed development start.
-python3 - "${prefix}" "Z:${driver_root//\//\\}" "${steam_dir}/config/steamvr.vrsettings" <<'PY'
+python3 - "${prefix}" "Z:${driver_root//\//\\}" "${steam_dir}/config/steamvr.vrsettings" "${MWXR_DISPLAY_MODE:-}" <<'PY'
 import json, sys
 from pathlib import Path
-prefix, driver, settings = sys.argv[1:]
+prefix, driver, settings, display_mode = sys.argv[1:]
 for profile in Path(prefix, 'drive_c/users').iterdir():
     if profile.name == 'Public' or not profile.is_dir():
         continue
@@ -50,6 +55,8 @@ s = json.loads(path.read_text()) if path.exists() else {}
 s.setdefault("steamvr", {}).update({"forcedDriver": "mwxr", "activateMultipleDrivers": True, "enableSafeMode": False})
 s.setdefault("driver_null", {})["enable"] = False
 s.setdefault("driver_mwxr", {}).update({"enable": True, "blocked_by_safe_mode": False})
+if display_mode:
+    s["driver_mwxr"]["displayMode"] = display_mode
 # The desktop view needs Windows.Graphics.Capture (useNewDesktop) or real
 # desktop duplication; neither works under Wine.
 s.setdefault("dashboard", {}).update({"showDesktop": False, "enableWindowView": False, "useNewDesktop": False})
@@ -82,38 +89,63 @@ fi
 
 # vrstartup.exe returns at once (exit status 3 is normal); vrserver and its
 # children inherit this environment.
-case ${mode} in
- simulated)
-  : ${MONADO_SIM_BUILD:?Configured ARM64 simulated-only Monado build}
-  # Isolated service as in run-in-process-simulated.zsh, kept up until vrserver exits.
-  service=${MONADO_SIM_BUILD}/src/xrt/targets/service/monado-service
+# An isolated service: own launchd label, Metal XPC name and socket directory,
+# booted out again when this script exits. (The trap is set here: in zsh, an
+# EXIT trap set inside a function fires when the function returns.)
+isolated_label= isolated_dir=
+trap '[[ -n ${isolated_label} ]] && { launchctl bootout "gui/${UID}/${isolated_label}" || true; rm -rf "${isolated_dir}"; }' EXIT INT TERM
+start_isolated_service() { # <service binary> <environment template plist or empty> <simulated 0|1>
   label=org.freedesktop.monado.mwxr-test.${UID}.$$
   export XRT_MACOS_METAL_IPC_SERVICE_NAME=org.freedesktop.monado.metal-ipc.mwxr-test.${UID}.$$
   export XDG_RUNTIME_DIR=/private/tmp/mwxr-steamvr.${UID}.$$
   mkdir -p "${XDG_RUNTIME_DIR}"
-  python3 - "${logs}" "${label}" "${service}" "${MONADO_VULKAN_ICD:-/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json}" <<'PY'
+  python3 - "${logs}" "${label}" "$1" "${MONADO_VULKAN_ICD:-/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json}" "$2" "$3" <<'PY'
 import os, plistlib, sys
-root, label, service, icd = sys.argv[1:]
-env = dict(PATH='/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin', SIMULATED_ENABLE='1', XRT_COMPOSITOR_NULL='0',
-    XRT_NO_STDIN='1', XDG_RUNTIME_DIR=os.environ['XDG_RUNTIME_DIR'],
-    XRT_MACOS_METAL_IPC_SERVICE_NAME=os.environ['XRT_MACOS_METAL_IPC_SERVICE_NAME'], VK_ICD_FILENAMES=icd)
-# Simulated controllers: SIMULATED_LEFT/RIGHT=simple|wmr|ml2.
-env.update({k: os.environ[k] for k in ('SIMULATED_LEFT', 'SIMULATED_RIGHT') if os.environ.get(k)})
+root, label, service, icd, template, simulated = sys.argv[1:]
+env = {}
+if template:
+    with open(template, 'rb') as f:
+        env = dict(plistlib.load(f).get('EnvironmentVariables', {}))
+    # Belongs to the installed service only.
+    env.pop('IPC_WINE_TCP_PORT', None)
+env.update(PATH=env.get('PATH', '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'), XRT_NO_STDIN='1',
+    XDG_RUNTIME_DIR=os.environ['XDG_RUNTIME_DIR'], VK_ICD_FILENAMES=icd,
+    XRT_MACOS_METAL_IPC_SERVICE_NAME=os.environ['XRT_MACOS_METAL_IPC_SERVICE_NAME'])
+if simulated == '1':
+    env.update(SIMULATED_ENABLE='1', XRT_COMPOSITOR_NULL='0')
+    # Simulated controllers: SIMULATED_LEFT/RIGHT=simple|wmr|ml2.
+    env.update({k: os.environ[k] for k in ('SIMULATED_LEFT', 'SIMULATED_RIGHT') if os.environ.get(k)})
 # Log levels, for example XRT_COMPOSITOR_LOG=info.
 env.update({k: v for k, v in os.environ.items() if k.startswith('XRT_') and k.endswith('_LOG')})
-plist = dict(Label=label, ProgramArguments=[service], RunAtLoad=False,
+plist = dict(Label=label, ProgramArguments=[service], RunAtLoad=False, ProcessType='Interactive',
     MachServices={env['XRT_MACOS_METAL_IPC_SERVICE_NAME']: True}, EnvironmentVariables=env,
     StandardOutPath=root + '/service.out.log', StandardErrorPath=root + '/service.err.log')
 with open(root + '/service.plist', 'wb') as f: plistlib.dump(plist, f)
 PY
   launchctl bootstrap "gui/${UID}" "${logs}/service.plist"
-  trap 'launchctl bootout "gui/${UID}/${label}" || true; rm -rf "${XDG_RUNTIME_DIR}"' EXIT INT TERM
+  isolated_label=${label} isolated_dir=${XDG_RUNTIME_DIR}
+}
+
+case ${mode} in
+ simulated)
+  : ${MONADO_SIM_BUILD:?Configured ARM64 simulated-only Monado build}
+  start_isolated_service "${MONADO_SIM_BUILD}/src/xrt/targets/service/monado-service" "" 1
+  "${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true ;;
+ isolated)
+  : ${MONADO_SERVICE_BUILD:?ARM64 Monado build with the PS VR2 driver}
+  if pgrep -x monado-service >/dev/null; then
+    print -u2 "A monado-service is running and may hold the PS VR2; stop it first"; exit 1
+  fi
+  unset XR_RUNTIME_JSON IPC_IGNORE_VERSION
+  start_isolated_service "${MONADO_SERVICE_BUILD}/src/xrt/targets/service/monado-service" \
+    "${MWXR_SERVICE_TEMPLATE:-${HOME}/Library/LaunchAgents/org.freedesktop.monado.service.plist}" 0
+  export XRT_MACOS_CLIENT_COMPOSITOR=${XRT_MACOS_CLIENT_COMPOSITOR:-1}
   "${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true ;;
  hardware)
   unset XR_RUNTIME_JSON XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR IPC_IGNORE_VERSION
   export XRT_MACOS_CLIENT_COMPOSITOR=${XRT_MACOS_CLIENT_COMPOSITOR:-1}
   "${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true ;;
- *) print -u2 "MWXR_MONADO must be simulated or hardware"; exit 2 ;;
+ *) print -u2 "MWXR_MONADO must be simulated, isolated or hardware"; exit 2 ;;
 esac
 print "SteamVR started; waiting for vrserver to exit (close the SteamVR status window to stop it)"
 sleep 20

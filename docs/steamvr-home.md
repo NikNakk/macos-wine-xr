@@ -454,12 +454,17 @@ The run script now passes `XRT_*_LOG` variables (for example
 
 ### Next steps
 
-- PS VR2 run of virtual mode. Needs Monado built from
+- PS VR2 run of virtual mode. It needs Monado built from
   `claude/display-distortion-mndx` with
-  `-DXRT_FEATURE_OPENXR_MNDX_DISPLAY_DISTORTION=ON` (service and x86_64
-  client), and `driver_mwxr.displayMode = virtual`. Check the image is
-  correctly distorted, compare a dump with the panel, and measure latency and
-  pacing against direct mode and the xrizer path.
+  `-DXRT_FEATURE_OPENXR_MNDX_DISPLAY_DISTORTION=ON`, for both the service and
+  the x86_64 client. `MWXR_MONADO=isolated` runs such a service
+  (`MONADO_SERVICE_BUILD`) under its own launchd label and socket, with the
+  installed LaunchAgent's environment. The agent is left alone, but must not
+  be running, because the service claims the headset's USB.
+  `MWXR_DISPLAY_MODE=virtual` selects the mode. Checks:
+  - the image is correctly distorted;
+  - a dump matches the panel;
+  - latency and pacing compared with direct mode and the xrizer path.
 - PS VR2 check of the zero-copy path.
 - Raise SteamVR's resolve resolution towards the runtime's recommendation, if
   SteamVR allows it (its supersampling settings), to reduce the loss in the
