@@ -1,0 +1,7 @@
+{
+	"alwaysActivate": false,
+	"name": "mwxr",
+	"directory": "",
+	"resourceOnly": false,
+	"hmd_presence": ["*.*"]
+}
