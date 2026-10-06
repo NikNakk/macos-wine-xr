@@ -345,7 +345,7 @@ PS VR2 (installed service v25.1.0-2146, `XRT_MACOS_CLIENT_COMPOSITOR=1`):
   `monado-service`. Not yet measured.
 - No skeletal input, battery or proximity.
 
-### Virtual-display mode (stage 1: SteamVR as the only compositor), 2026-10-06
+### Virtual-display mode: SteamVR as the only compositor, 2026-10-06
 
 Goal: one compositor for the SteamVR path. SteamVR's compositor produces the
 panel-ready image; Monado only owns the device and display, the timing and the
@@ -407,8 +407,59 @@ build was configured before the commit, so it still reports 2146. A fresh
 configure reports a new tag and needs `IPC_IGNORE_VERSION=1` until the
 service is rebuilt (the IPC protocol is unchanged).
 
+### Presenting the virtual display (stages 2 and 3), 2026-10-06
+
+The driver now submits SteamVR's backbuffer, and Monado presents it without
+compositing. The frame path in virtual mode:
+
+1. SteamVR's compositor renders and distorts into its backbuffer.
+2. `IVRVirtualDisplay::Present`: the driver takes the backbuffer's keyed
+   mutex (key 0), copies it into a display-sized OpenXR swapchain image
+   (`SAMPLED | TRANSFER_SRC`, same format) and releases both. It then ends the
+   frame with one projection layer carrying `XrCompositionLayerDisplayImageMNDX`.
+   `WaitForPresent` waits for and begins the next frame.
+3. Monado (`claude/display-distortion-mndx`, `ad9902882` and `9a30427fd`)
+   sees a frame whose only layer is a display image. It skips distortion,
+   timewarp and its own target image. It passes the swapchain image's
+   `MTLTexture` to the macOS presenter (`comp_target::present_external`),
+   which draws it into the `CAMetalLayer` drawable. The draw swaps RGBA to
+   BGRA, and scales when the sizes differ. A GPU-reuse claim keeps the image
+   from the application until the presenter's command buffer completes.
+   Targets without `present_external` blit the image instead.
+
+The in-process runtime passes the marker struct through `xrEndFrame`, and now
+allows `TRANSFER_SRC` swapchain usage.
+
+GPU work per frame is one copy in D3D11 and one draw into the drawable,
+instead of a resolve, Monado's distortion pass and a blit. The copy could go
+later, by presenting SteamVR's backbuffer directly (DXMT exporting its Metal
+texture and the keyed mutex's shared event), but that needs new DXMT and
+runtime plumbing for about one copy.
+
+Simulated HMD on the attached PS VR2 panel. The service was built from the
+worktree without the PS VR2 USB driver; the x86_64 client's tag matched.
+`XRT_MACOS_CLIENT_COMPOSITOR` was on, so the presenter ran inside vrserver:
+
+- `Presenting an externally composited 1280x720 image (format 70, drawn)`.
+  Format 70 is RGBA8. The simulated display is 1280 x 720, scaled to the
+  4000 x 2040 drawable.
+- The presenter's Vulkan wait was 0.000 ms: Monado rendered nothing.
+- Once warmed up, it held 120 Hz: completion cadence 8.34 to 8.45 ms average,
+  0 to 4 late per 240 frames. The first two windows, while SteamVR started,
+  had 15 and 73 late.
+- No keyed-mutex or `xrEndFrame` failures.
+
+The run script now passes `XRT_*_LOG` variables (for example
+`XRT_COMPOSITOR_LOG=info`) to the simulated service.
+
 ### Next steps
 
+- PS VR2 run of virtual mode. Needs Monado built from
+  `claude/display-distortion-mndx` with
+  `-DXRT_FEATURE_OPENXR_MNDX_DISPLAY_DISTORTION=ON` (service and x86_64
+  client), and `driver_mwxr.displayMode = virtual`. Check the image is
+  correctly distorted, compare a dump with the panel, and measure latency and
+  pacing against direct mode and the xrizer path.
 - PS VR2 check of the zero-copy path.
 - Raise SteamVR's resolve resolution towards the runtime's recommendation, if
   SteamVR allows it (its supersampling settings), to reduce the loss in the

@@ -711,22 +711,26 @@ public:
 		vr::VRServerDriverHost()->VsyncEvent(vsyncOffset);
 	}
 
-	// IVRVirtualDisplay. Validation stage: SteamVR's final, distorted backbuffer
-	// is inspected (and optionally dumped); the OpenXR frame loop only paces.
+	// IVRVirtualDisplay: SteamVR's compositor has distorted the frame with the
+	// runtime's distortion, so its backbuffer is submitted as the display image
+	// and presented as it is. Present ends the OpenXR frame; WaitForPresent
+	// waits for and begins the next one.
 	void
 	Present(const vr::PresentInfo_t *info, uint32_t size) override
 	{
-		if (!info || size < sizeof(vr::PresentInfo_t)) {
-			return;
+		ID3D11Texture2D *backbuffer = nullptr;
+		if (info && size >= sizeof(vr::PresentInfo_t)) {
+			++presentCount_;
+			backbuffer = Backbuffer(info->backbufferTextureHandle);
 		}
-		++presentCount_;
-		ID3D11Texture2D *backbuffer = Backbuffer(info->backbufferTextureHandle);
 		if (!backbuffer) {
+			xr_.Present({});
 			return;
 		}
 		if (dumpDir_[0] && (presentCount_ == 300 || presentCount_ == 1200)) {
 			DumpBackbuffer(backbuffer, info->nFrameId);
 		}
+		xr_.PresentDisplayImage(backbuffer);
 	}
 
 	void
@@ -734,7 +738,6 @@ public:
 	{
 		double vsyncOffset = 0, period = 0;
 		if (xr_.WaitAndBeginFrame(vsyncOffset, period)) {
-			xr_.Present({}); // no layers yet: presentation is the next stage
 			LARGE_INTEGER now, frequency;
 			QueryPerformanceCounter(&now);
 			QueryPerformanceFrequency(&frequency);
