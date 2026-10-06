@@ -452,6 +452,46 @@ worktree without the PS VR2 USB driver; the x86_64 client's tag matched.
 The run script now passes `XRT_*_LOG` variables (for example
 `XRT_COMPOSITOR_LOG=info`) to the simulated service.
 
+### Virtual-display pacing on the PS VR2, 2026-10-06
+
+The first PS VR2 run of virtual mode (Monado `5f948c72c`, bridge `652017b`)
+presented at a steady 120 Hz, and the image was correctly distorted. It felt
+less smooth than direct mode. Client-side traces (`PSVR2_TIMING_TRACE=1`)
+showed SteamVR completing only 37.7 frames a second, mostly every third
+refresh, so each image was shown three times. Direct mode hides that: Monado
+re-warps every repeat with a fresh pose. In virtual mode nothing does, by
+design.
+
+The cause was the timing the driver gave SteamVR:
+
+- `GetTimeSinceLastVsync` was based on `predictedDisplayTime - period`, but
+  Monado's app pacer predicts several refreshes ahead (about 51 ms here). The
+  "last vsync" was therefore about 33 ms in the future, and SteamVR waited for
+  it.
+- SteamVR's slow frames then raised Monado's estimate of the app's frame time
+  (about 15 ms of "draw"), which pushed the prediction further ahead.
+- Virtual mode also kept the 90 Hz default display frequency; only direct
+  mode adopted the runtime's period.
+
+The fix (driver):
+
+- **Last vsync:** report the latest vsync that has already happened (display
+  time minus whole refresh periods).
+- **Vsync to photons:** set `SecondsFromVsyncToPhotons` to the remaining whole
+  periods, so SteamVR's estimate equals the runtime's display time.
+- **Vsync counter:** derive it from the vsync time.
+- **Display frequency:** start from the extension's nominal refresh rate.
+
+On the PS VR2, the result:
+
+- SteamVR ran at 116 to 120 fps after start-up (109 fps over the whole 95 s
+  run).
+- 98.9% of frames advanced the display time by one refresh.
+- The app lead fell from 51 ms to 32 ms.
+
+`SecondsFromVsyncToPhotons` still alternates between 4 and 5 refreshes
+(25 / 33 ms) as the prediction moves. It may want hysteresis.
+
 ### Next steps
 
 - PS VR2 run of virtual mode. It needs Monado built from

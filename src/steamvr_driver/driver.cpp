@@ -328,6 +328,9 @@ public:
 		auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId);
 		auto *props = vr::VRProperties();
 		frequency_ = vr::VRSettings()->GetFloat(kSettingsSection, "displayFrequency");
+		if (virtualDisplay_ && xr_.display.nominalRefreshRate > 0) {
+			frequency_ = xr_.display.nominalRefreshRate; // the runtime's display, not a guess
+		}
 		if (frequency_ <= 0) {
 			frequency_ = 90.0f;
 		}
@@ -692,23 +695,32 @@ public:
 		if (!xr_.WaitAndBeginFrame(vsyncOffset, period)) {
 			return;
 		}
-		// predictedDisplayPeriod becomes a multiple of the refresh when frames
-		// are late, so only ever adopt a shorter period than seen so far.
-		if (period > 0 && (minPeriod_ == 0 || period < minPeriod_ * 0.95)) {
-			minPeriod_ = period;
-		} else {
-			period = 0;
-		}
-		if (period > 0 && fabs(1.0 / period - frequency_) > 1.0 &&
-		    objectId_ != vr::k_unTrackedDeviceIndexInvalid) {
-			frequency_ = (float)(1.0 / period);
+		if (AdoptPeriod(period)) {
 			auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId_);
-			vr::VRProperties()->SetFloatProperty(container, vr::Prop_DisplayFrequency_Float, frequency_);
 			vr::VRProperties()->SetFloatProperty(container, vr::Prop_SecondsFromVsyncToPhotons_Float,
-			                                      (float)period);
-			Log("Runtime frame period %.3f ms: display frequency now %.2f Hz\n", period * 1000, frequency_);
+			                                      1.0f / frequency_);
 		}
 		vr::VRServerDriverHost()->VsyncEvent(vsyncOffset);
+	}
+
+	// predictedDisplayPeriod becomes a multiple of the refresh when frames are
+	// late, so only ever adopt a shorter period than seen so far. Returns true
+	// when SteamVR's display frequency changed.
+	bool
+	AdoptPeriod(double period)
+	{
+		if (period <= 0 || (minPeriod_ != 0 && period >= minPeriod_ * 0.95)) {
+			return false;
+		}
+		minPeriod_ = period;
+		if (fabs(1.0 / period - frequency_) <= 1.0 || objectId_ == vr::k_unTrackedDeviceIndexInvalid) {
+			return false;
+		}
+		frequency_ = (float)(1.0 / period);
+		auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId_);
+		vr::VRProperties()->SetFloatProperty(container, vr::Prop_DisplayFrequency_Float, frequency_);
+		Log("Runtime frame period %.3f ms: display frequency now %.2f Hz\n", period * 1000, frequency_);
+		return true;
 	}
 
 	// IVRVirtualDisplay: SteamVR's compositor has distorted the frame with the
@@ -733,16 +745,40 @@ public:
 		xr_.PresentDisplayImage(backbuffer);
 	}
 
+	// SteamVR paces its compositor from the last vsync and expects a frame it
+	// starts after vsync V on screen at V + period + SecondsFromVsyncToPhotons.
+	// The runtime gives the display time of the frame just begun, which can be
+	// several refreshes ahead, so report the latest vsync that has already
+	// happened (display time minus whole periods) and put the rest of the
+	// pipeline into SecondsFromVsyncToPhotons.
 	void
 	WaitForPresent() override
 	{
 		double vsyncOffset = 0, period = 0;
-		if (xr_.WaitAndBeginFrame(vsyncOffset, period)) {
-			LARGE_INTEGER now, frequency;
-			QueryPerformanceCounter(&now);
-			QueryPerformanceFrequency(&frequency);
-			lastVsync_ = now.QuadPart + (LONGLONG)(vsyncOffset * frequency.QuadPart);
-			++vsyncCount_;
+		if (!xr_.WaitAndBeginFrame(vsyncOffset, period)) {
+			return;
+		}
+		AdoptPeriod(period);
+		double refresh = 1.0 / frequency_;
+		double toDisplay = vsyncOffset + period; // seconds from now to the predicted display time
+		double periods = ceil(toDisplay / refresh - 1e-3);
+		if (periods < 1) {
+			periods = 1;
+		}
+		double sinceVsync = periods * refresh - toDisplay; // >= 0
+		double photons = (periods - 1) * refresh;
+		LARGE_INTEGER now, frequency;
+		QueryPerformanceCounter(&now);
+		QueryPerformanceFrequency(&frequency);
+		lastVsync_ = now.QuadPart - (LONGLONG)(sinceVsync * frequency.QuadPart);
+		vsyncCount_ = (uint64_t)llround((double)lastVsync_ / ((double)frequency.QuadPart * refresh));
+		if (fabs(photons - vsyncToPhotons_) > 0.25 * refresh && objectId_ != vr::k_unTrackedDeviceIndexInvalid) {
+			vsyncToPhotons_ = photons;
+			auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId_);
+			vr::VRProperties()->SetFloatProperty(container, vr::Prop_SecondsFromVsyncToPhotons_Float,
+			                                      (float)photons);
+			Log("Virtual display: vsync to photons now %.2f ms (%.0f refreshes ahead)\n", photons * 1000,
+			    periods);
 		}
 	}
 
@@ -1023,6 +1059,7 @@ private:
 	std::vector<std::pair<vr::SharedTextureHandle_t, ID3D11Texture2D *>> backbuffers_;
 	uint64_t presentCount_ = 0, vsyncCount_ = 0;
 	LONGLONG lastVsync_ = 0;
+	double vsyncToPhotons_ = -1;
 
 	float lastPrediction_ = 0;
 	XrQuaternionf lastRenderHead_ = {0, 0, 0, 1};
