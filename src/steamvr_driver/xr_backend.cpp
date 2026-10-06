@@ -136,8 +136,20 @@ XrBackend::Init(std::string &error)
 		}
 	}
 	XR_CHECK(xrCreateReferenceSpace(session_, &spaceInfo, &baseSpace_));
+	baseSpaceType_ = spaceInfo.referenceSpaceType;
+	if (baseSpaceType_ == XR_REFERENCE_SPACE_TYPE_STAGE) {
+		XrExtent2Df bounds = {};
+		if (xrGetReferenceSpaceBoundsRect(session_, XR_REFERENCE_SPACE_TYPE_STAGE, &bounds) == XR_SUCCESS) {
+			playAreaWidth = bounds.width;
+			playAreaDepth = bounds.height;
+		}
+	}
 	spaceInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
 	XR_CHECK(xrCreateReferenceSpace(session_, &spaceInfo, &viewSpace_));
+
+	if (!CreateActions(error)) {
+		return false;
+	}
 
 	uint32_t formatCount = 0;
 	XR_CHECK(xrEnumerateSwapchainFormats(session_, 0, &formatCount, nullptr));
@@ -181,8 +193,215 @@ XrBackend::Init(std::string &error)
 
 	Log("OpenXR runtime '%s', system '%s', %ux%u per eye, %s space, %u swapchain formats\n", runtimeName.c_str(),
 	    systemName.c_str(), recommendedWidth, recommendedHeight,
-	    spaceInfo.referenceSpaceType == XR_REFERENCE_SPACE_TYPE_STAGE ? "STAGE" : "LOCAL", formatCount);
+	    baseSpaceType_ == XR_REFERENCE_SPACE_TYPE_STAGE ? "STAGE" : "LOCAL", formatCount);
 	return true;
+}
+
+bool
+XrBackend::CreateActions(std::string &error)
+{
+	XR_CHECK(xrStringToPath(instance_, "/user/hand/left", &handPaths_[0]));
+	XR_CHECK(xrStringToPath(instance_, "/user/hand/right", &handPaths_[1]));
+	XrActionSetCreateInfo setInfo = {XR_TYPE_ACTION_SET_CREATE_INFO};
+	strcpy(setInfo.actionSetName, "steamvr");
+	strcpy(setInfo.localizedActionSetName, "SteamVR");
+	XR_CHECK(xrCreateActionSet(instance_, &setInfo, &actionSet_));
+
+	struct ActionDef
+	{
+		XrAction *action;
+		const char *name;
+		XrActionType type;
+	} defs[] = {
+	    {&gripPose_, "grip_pose", XR_ACTION_TYPE_POSE_INPUT},
+	    {&trigger_, "trigger", XR_ACTION_TYPE_FLOAT_INPUT},
+	    {&triggerTouch_, "trigger_touch", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&squeeze_, "squeeze", XR_ACTION_TYPE_FLOAT_INPUT},
+	    {&thumbstick_, "thumbstick", XR_ACTION_TYPE_VECTOR2F_INPUT},
+	    {&thumbstickClick_, "thumbstick_click", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&thumbstickTouch_, "thumbstick_touch", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&lowerClick_, "lower_click", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&lowerTouch_, "lower_touch", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&upperClick_, "upper_click", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&upperTouch_, "upper_touch", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&menuClick_, "menu_click", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&thumbrestTouch_, "thumbrest_touch", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&haptic_, "haptic", XR_ACTION_TYPE_VIBRATION_OUTPUT},
+	};
+	for (const auto &def : defs) {
+		XrActionCreateInfo info = {XR_TYPE_ACTION_CREATE_INFO};
+		strcpy(info.actionName, def.name);
+		strcpy(info.localizedActionName, def.name);
+		info.actionType = def.type;
+		info.countSubactionPaths = 2;
+		info.subactionPaths = handPaths_;
+		XR_CHECK(xrCreateAction(actionSet_, &info, def.action));
+	}
+
+	auto suggest = [&](const char *profile, std::initializer_list<std::pair<XrAction, const char *>> bindings) {
+		std::vector<XrActionSuggestedBinding> suggested;
+		for (const auto &binding : bindings) {
+			XrPath path;
+			if (XR_SUCCEEDED(xrStringToPath(instance_, binding.second, &path))) {
+				suggested.push_back({binding.first, path});
+			}
+		}
+		XrPath profilePath;
+		xrStringToPath(instance_, profile, &profilePath);
+		XrInteractionProfileSuggestedBinding info = {XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+		info.interactionProfile = profilePath;
+		info.countSuggestedBindings = (uint32_t)suggested.size();
+		info.suggestedBindings = suggested.data();
+		XrResult result = xrSuggestInteractionProfileBindings(instance_, &info);
+		Log("Suggested bindings for %s: %d\n", profile, result);
+	};
+	suggest("/interaction_profiles/oculus/touch_controller",
+	        {{gripPose_, "/user/hand/left/input/grip/pose"},
+	         {gripPose_, "/user/hand/right/input/grip/pose"},
+	         {trigger_, "/user/hand/left/input/trigger/value"},
+	         {trigger_, "/user/hand/right/input/trigger/value"},
+	         {triggerTouch_, "/user/hand/left/input/trigger/touch"},
+	         {triggerTouch_, "/user/hand/right/input/trigger/touch"},
+	         {squeeze_, "/user/hand/left/input/squeeze/value"},
+	         {squeeze_, "/user/hand/right/input/squeeze/value"},
+	         {thumbstick_, "/user/hand/left/input/thumbstick"},
+	         {thumbstick_, "/user/hand/right/input/thumbstick"},
+	         {thumbstickClick_, "/user/hand/left/input/thumbstick/click"},
+	         {thumbstickClick_, "/user/hand/right/input/thumbstick/click"},
+	         {thumbstickTouch_, "/user/hand/left/input/thumbstick/touch"},
+	         {thumbstickTouch_, "/user/hand/right/input/thumbstick/touch"},
+	         {lowerClick_, "/user/hand/left/input/x/click"},
+	         {lowerClick_, "/user/hand/right/input/a/click"},
+	         {lowerTouch_, "/user/hand/left/input/x/touch"},
+	         {lowerTouch_, "/user/hand/right/input/a/touch"},
+	         {upperClick_, "/user/hand/left/input/y/click"},
+	         {upperClick_, "/user/hand/right/input/b/click"},
+	         {upperTouch_, "/user/hand/left/input/y/touch"},
+	         {upperTouch_, "/user/hand/right/input/b/touch"},
+	         {menuClick_, "/user/hand/left/input/menu/click"},
+	         {thumbrestTouch_, "/user/hand/left/input/thumbrest/touch"},
+	         {thumbrestTouch_, "/user/hand/right/input/thumbrest/touch"},
+	         {haptic_, "/user/hand/left/output/haptic"},
+	         {haptic_, "/user/hand/right/output/haptic"}});
+	suggest("/interaction_profiles/khr/simple_controller",
+	        {{gripPose_, "/user/hand/left/input/grip/pose"},
+	         {gripPose_, "/user/hand/right/input/grip/pose"},
+	         {trigger_, "/user/hand/left/input/select/click"},
+	         {trigger_, "/user/hand/right/input/select/click"},
+	         {menuClick_, "/user/hand/left/input/menu/click"},
+	         {menuClick_, "/user/hand/right/input/menu/click"},
+	         {haptic_, "/user/hand/left/output/haptic"},
+	         {haptic_, "/user/hand/right/output/haptic"}});
+
+	XrSessionActionSetsAttachInfo attach = {XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
+	attach.countActionSets = 1;
+	attach.actionSets = &actionSet_;
+	XR_CHECK(xrAttachSessionActionSets(session_, &attach));
+	for (int hand = 0; hand < 2; ++hand) {
+		XrActionSpaceCreateInfo spaceInfo = {XR_TYPE_ACTION_SPACE_CREATE_INFO};
+		spaceInfo.action = gripPose_;
+		spaceInfo.subactionPath = handPaths_[hand];
+		spaceInfo.poseInActionSpace.orientation.w = 1.0f;
+		XR_CHECK(xrCreateActionSpace(session_, &spaceInfo, &gripSpaces_[hand]));
+	}
+	return true;
+}
+
+bool
+XrBackend::UpdateHands(HandState hands[2])
+{
+	if (!actionSet_ || state_ != XR_SESSION_STATE_FOCUSED) {
+		return false;
+	}
+	XrActiveActionSet active = {actionSet_, XR_NULL_PATH};
+	XrActionsSyncInfo syncInfo = {XR_TYPE_ACTIONS_SYNC_INFO};
+	syncInfo.countActiveActionSets = 1;
+	syncInfo.activeActionSets = &active;
+	if (XR_FAILED(xrSyncActions(session_, &syncInfo))) {
+		return false;
+	}
+	XrTime now = NowXrTime();
+	for (int hand = 0; hand < 2; ++hand) {
+		HandState &out = hands[hand];
+		XrActionStateGetInfo get = {XR_TYPE_ACTION_STATE_GET_INFO};
+		get.subactionPath = handPaths_[hand];
+		auto boolean = [&](XrAction action) {
+			XrActionStateBoolean state = {XR_TYPE_ACTION_STATE_BOOLEAN};
+			get.action = action;
+			return XR_SUCCEEDED(xrGetActionStateBoolean(session_, &get, &state)) && state.isActive &&
+			       state.currentState;
+		};
+		auto scalar = [&](XrAction action) {
+			XrActionStateFloat state = {XR_TYPE_ACTION_STATE_FLOAT};
+			get.action = action;
+			return XR_SUCCEEDED(xrGetActionStateFloat(session_, &get, &state)) && state.isActive
+			           ? state.currentState
+			           : 0.0f;
+		};
+		XrActionStatePose poseState = {XR_TYPE_ACTION_STATE_POSE};
+		get.action = gripPose_;
+		out.active = XR_SUCCEEDED(xrGetActionStatePose(session_, &get, &poseState)) && poseState.isActive;
+		out.trigger = scalar(trigger_);
+		out.squeeze = scalar(squeeze_);
+		XrActionStateVector2f stick = {XR_TYPE_ACTION_STATE_VECTOR2F};
+		get.action = thumbstick_;
+		out.thumbstick = XR_SUCCEEDED(xrGetActionStateVector2f(session_, &get, &stick)) && stick.isActive
+		                     ? stick.currentState
+		                     : XrVector2f{};
+		out.triggerTouch = boolean(triggerTouch_);
+		out.thumbstickClick = boolean(thumbstickClick_);
+		out.thumbstickTouch = boolean(thumbstickTouch_);
+		out.lowerClick = boolean(lowerClick_);
+		out.lowerTouch = boolean(lowerTouch_);
+		out.upperClick = boolean(upperClick_);
+		out.upperTouch = boolean(upperTouch_);
+		out.menuClick = boolean(menuClick_);
+		out.thumbrestTouch = boolean(thumbrestTouch_);
+
+		XrSpaceVelocity velocity = {XR_TYPE_SPACE_VELOCITY};
+		XrSpaceLocation location = {XR_TYPE_SPACE_LOCATION, &velocity};
+		out.poseValid = out.active && XR_SUCCEEDED(xrLocateSpace(gripSpaces_[hand], baseSpace_, now, &location)) &&
+		                (location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT);
+		if (out.poseValid) {
+			out.pose = location.pose;
+			out.positionValid = (location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0;
+			out.linearVelocity = (velocity.velocityFlags & XR_SPACE_VELOCITY_LINEAR_VALID_BIT)
+			                         ? velocity.linearVelocity
+			                         : XrVector3f{};
+			out.angularVelocity = (velocity.velocityFlags & XR_SPACE_VELOCITY_ANGULAR_VALID_BIT)
+			                          ? velocity.angularVelocity
+			                          : XrVector3f{};
+		}
+
+		XrInteractionProfileState profile = {XR_TYPE_INTERACTION_PROFILE_STATE};
+		if (XR_SUCCEEDED(xrGetCurrentInteractionProfile(session_, handPaths_[hand], &profile)) &&
+		    profile.interactionProfile != XR_NULL_PATH) {
+			char name[XR_MAX_PATH_LENGTH];
+			uint32_t length = 0;
+			if (XR_SUCCEEDED(xrPathToString(instance_, profile.interactionProfile, sizeof(name), &length, name)) &&
+			    currentProfile[hand] != name) {
+				currentProfile[hand] = name;
+				Log("%s hand interaction profile: %s\n", hand ? "Right" : "Left", name);
+			}
+		}
+	}
+	return true;
+}
+
+void
+XrBackend::Vibrate(int hand, float durationSeconds, float frequency, float amplitude)
+{
+	if (!haptic_ || state_ != XR_SESSION_STATE_FOCUSED) {
+		return;
+	}
+	XrHapticVibration vibration = {XR_TYPE_HAPTIC_VIBRATION};
+	vibration.duration = durationSeconds > 0 ? (XrDuration)(durationSeconds * 1e9) : XR_MIN_HAPTIC_DURATION;
+	vibration.frequency = frequency > 0 ? frequency : XR_FREQUENCY_UNSPECIFIED;
+	vibration.amplitude = amplitude;
+	XrHapticActionInfo info = {XR_TYPE_HAPTIC_ACTION_INFO};
+	info.action = haptic_;
+	info.subactionPath = handPaths_[hand];
+	xrApplyHapticFeedback(session_, &info, reinterpret_cast<XrHapticBaseHeader *>(&vibration));
 }
 
 void
@@ -441,6 +660,24 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers)
 				projection.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
 			}
 			projections.push_back(projection);
+		}
+	}
+	LARGE_INTEGER now, frequency;
+	QueryPerformanceCounter(&now);
+	QueryPerformanceFrequency(&frequency);
+	if (now.QuadPart - lastLayerLog_ > 5 * frequency.QuadPart) {
+		lastLayerLog_ = now.QuadPart;
+		Log("Frame: %zu layers submitted, %zu projected, shouldRender %d\n", layers.size(), projections.size(),
+		    frameState_.shouldRender);
+		for (size_t i = 0; i < layers.size(); ++i) {
+			for (int eye = 0; eye < 2; ++eye) {
+				const EyeSubmit &e = layers[i].eye[eye];
+				const float r2d = 57.29578f;
+				Log("  layer %zu eye %d: box %u,%u-%u,%u pos %.3f %.3f %.3f fov L%.1f R%.1f U%.1f D%.1f\n", i,
+				    eye, e.box.left, e.box.top, e.box.right, e.box.bottom, e.pose.position.x, e.pose.position.y,
+				    e.pose.position.z, e.fov.angleLeft * r2d, e.fov.angleRight * r2d, e.fov.angleUp * r2d,
+				    e.fov.angleDown * r2d);
+			}
 		}
 	}
 	std::vector<const XrCompositionLayerBaseHeader *> headers;

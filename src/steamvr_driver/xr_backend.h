@@ -30,6 +30,21 @@ struct LayerSubmit
 	EyeSubmit eye[2];
 };
 
+// One hand's controller state, from the Touch (or simple) interaction profile.
+struct HandState
+{
+	bool active = false;       // the runtime has a device bound for this hand
+	bool poseValid = false, positionValid = false;
+	XrPosef pose = {{0, 0, 0, 1}, {0, 0, 0}}; // grip pose in the reference space
+	XrVector3f linearVelocity = {}, angularVelocity = {};
+	float trigger = 0, squeeze = 0;
+	XrVector2f thumbstick = {};
+	bool triggerTouch = false, thumbstickClick = false, thumbstickTouch = false;
+	bool lowerClick = false, lowerTouch = false; // A (right) / X (left)
+	bool upperClick = false, upperTouch = false; // B (right) / Y (left)
+	bool menuClick = false, thumbrestTouch = false;
+};
+
 class XrBackend
 {
 public:
@@ -43,6 +58,7 @@ public:
 	XrFovf fov[2] = {};
 	XrPosef eyeInHead[2] = {};
 	std::string systemName, runtimeName;
+	float playAreaWidth = 0, playAreaDepth = 0; // STAGE bounds, 0 if unavailable
 	ID3D11Device *device = nullptr;
 
 	// Handles session state changes; call regularly from one thread.
@@ -54,6 +70,14 @@ public:
 	// Head pose (VIEW space) in the reference space at the current time.
 	bool
 	LocateHeadNow(XrPosef &pose, XrVector3f &linearVelocity, XrVector3f &angularVelocity, bool &positionValid);
+
+	// Controllers: syncs actions and locates both grip poses now. Returns false
+	// while the session is not focused.
+	bool
+	UpdateHands(HandState hands[2]);
+	void
+	Vibrate(int hand, float durationSeconds, float frequency, float amplitude);
+	std::string currentProfile[2];
 
 	// Frame loop, all on the compositor's present thread.
 	// Present: copies and submits; begins a frame first if none is open.
@@ -75,6 +99,8 @@ private:
 
 	bool
 	BeginSessionLocked();
+	bool
+	CreateActions(std::string &error);
 	EyeSwapchain *
 	SwapchainFor(size_t layer, int eye, uint32_t width, uint32_t height, DXGI_FORMAT sourceFormat);
 	int64_t
@@ -88,11 +114,22 @@ private:
 	XrSession session_ = XR_NULL_HANDLE;
 	XrSpace baseSpace_ = XR_NULL_HANDLE, viewSpace_ = XR_NULL_HANDLE;
 	XrSessionState state_ = XR_SESSION_STATE_UNKNOWN;
+	XrReferenceSpaceType baseSpaceType_ = XR_REFERENCE_SPACE_TYPE_LOCAL;
+	LONGLONG lastLayerLog_ = 0;
 	bool running_ = false, frameBegun_ = false;
 	XrFrameState frameState_ = {XR_TYPE_FRAME_STATE};
 	ID3D11DeviceContext *context_ = nullptr;
 	std::vector<int64_t> formats_;
 	std::vector<EyeSwapchain> swapchains_; // [layer * 2 + eye]
+
+	XrActionSet actionSet_ = XR_NULL_HANDLE;
+	XrPath handPaths_[2] = {};
+	XrAction gripPose_ = XR_NULL_HANDLE, trigger_ = XR_NULL_HANDLE, triggerTouch_ = XR_NULL_HANDLE,
+	         squeeze_ = XR_NULL_HANDLE, thumbstick_ = XR_NULL_HANDLE, thumbstickClick_ = XR_NULL_HANDLE,
+	         thumbstickTouch_ = XR_NULL_HANDLE, lowerClick_ = XR_NULL_HANDLE, lowerTouch_ = XR_NULL_HANDLE,
+	         upperClick_ = XR_NULL_HANDLE, upperTouch_ = XR_NULL_HANDLE, menuClick_ = XR_NULL_HANDLE,
+	         thumbrestTouch_ = XR_NULL_HANDLE, haptic_ = XR_NULL_HANDLE;
+	XrSpace gripSpaces_[2] = {};
 
 	PFN_xrConvertWin32PerformanceCounterToTimeKHR qpcToTime_ = nullptr;
 	PFN_xrConvertTimeToWin32PerformanceCounterKHR timeToQpc_ = nullptr;
