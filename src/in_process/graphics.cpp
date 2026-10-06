@@ -5,6 +5,7 @@
 // runtime-owned Metal objects as D3D11 resources. Nothing here is specific to
 // the D3D translation layer in use.
 #include "openxr_loader.h"
+#include "mndx_display_distortion.h"
 #include <d3d11_4.h>
 #include <dxgi1_2.h>
 #include <stdio.h>
@@ -293,7 +294,11 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
         if (!info->layers || !info->layers[0] || info->layers[0]->type != XR_TYPE_COMPOSITION_LAYER_PROJECTION)
             return XR_ERROR_LAYER_INVALID;
         projection = *(const XrCompositionLayerProjection *)info->layers[0];
-        if (projection.next || projection.viewCount != 2 || !projection.views) return XR_ERROR_LAYER_INVALID;
+        // The one chained struct passed on: XR_MNDX_display_distortion's display image marker.
+        const auto *marker = (const XrCompositionLayerDisplayImageMNDX *)projection.next;
+        if (marker && (marker->type != XR_TYPE_COMPOSITION_LAYER_DISPLAY_IMAGE_MNDX || marker->next))
+            return XR_ERROR_LAYER_INVALID;
+        if (projection.viewCount != 2 || !projection.views) return XR_ERROR_LAYER_INVALID;
         for (unsigned i = 0; i < 2; ++i) {
             views[i] = projection.views[i];
             if (views[i].next || !views[i].subImage.swapchain) return XR_ERROR_LAYER_INVALID;

@@ -106,6 +106,12 @@ public:
 	// Present: copies and submits; begins a frame first if none is open.
 	void
 	Present(const std::vector<LayerSubmit> &layers);
+	// Virtual-display mode: copies SteamVR's final backbuffer (guarded by its
+	// keyed mutex) into a display-sized swapchain and submits it as the frame's
+	// display image (XR_MNDX_display_distortion), which the runtime presents
+	// without compositing. Ends the frame, beginning one first if none is open.
+	void
+	PresentDisplayImage(ID3D11Texture2D *source);
 	// PostPresent: waits for and begins the next frame. Returns the seconds
 	// from now to the vsync before its predicted display time.
 	bool
@@ -126,6 +132,15 @@ private:
 	CreateActions(std::string &error);
 	EyeSwapchain *
 	SwapchainFor(size_t layer, int eye, uint32_t width, uint32_t height, DXGI_FORMAT sourceFormat);
+	EyeSwapchain *
+	EnsureSwapchain(EyeSwapchain &swapchain,
+	                uint32_t width,
+	                uint32_t height,
+	                DXGI_FORMAT sourceFormat,
+	                XrSwapchainUsageFlags usage,
+	                const char *label);
+	void
+	EndFrameLocked(const std::vector<const XrCompositionLayerBaseHeader *> &headers);
 	int64_t
 	ChooseFormat(DXGI_FORMAT source);
 	XrTime
@@ -146,6 +161,7 @@ private:
 	ID3D11DeviceContext *context_ = nullptr;
 	std::vector<int64_t> formats_;
 	std::vector<EyeSwapchain> swapchains_; // [layer * 2 + eye]
+	EyeSwapchain displaySwapchain_;
 
 	XrActionSet actionSet_ = XR_NULL_HANDLE;
 	XrPath handPaths_[2] = {};

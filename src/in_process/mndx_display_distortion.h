@@ -14,6 +14,13 @@
 #define XR_MNDX_DISPLAY_DISTORTION_EXTENSION_NAME "XR_MNDX_display_distortion"
 #define XR_MNDX_DISPLAY_DISTORTION_MAX_VIEWS 2
 #define XR_TYPE_DISPLAY_DISTORTION_PROPERTIES_MNDX ((XrStructureType)0x7fff5060)
+#define XR_TYPE_COMPOSITION_LAYER_DISPLAY_IMAGE_MNDX ((XrStructureType)0x7fff5061)
+
+// Chained to a projection layer whose image is already the display image.
+typedef struct XrCompositionLayerDisplayImageMNDX {
+    XrStructureType type;
+    const void *next;
+} XrCompositionLayerDisplayImageMNDX;
 
 typedef struct XrDisplayDistortionViewMNDX {
     XrRect2Di viewport;

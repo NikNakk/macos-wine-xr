@@ -99,6 +99,8 @@ env = dict(PATH='/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin', SIMULATED_ENA
     XRT_MACOS_METAL_IPC_SERVICE_NAME=os.environ['XRT_MACOS_METAL_IPC_SERVICE_NAME'], VK_ICD_FILENAMES=icd)
 # Simulated controllers: SIMULATED_LEFT/RIGHT=simple|wmr|ml2.
 env.update({k: os.environ[k] for k in ('SIMULATED_LEFT', 'SIMULATED_RIGHT') if os.environ.get(k)})
+# Log levels, for example XRT_COMPOSITOR_LOG=info.
+env.update({k: v for k, v in os.environ.items() if k.startswith('XRT_') and k.endswith('_LOG')})
 plist = dict(Label=label, ProgramArguments=[service], RunAtLoad=False,
     MachServices={env['XRT_MACOS_METAL_IPC_SERVICE_NAME']: True}, EnvironmentVariables=env,
     StandardOutPath=root + '/service.out.log', StandardErrorPath=root + '/service.err.log')

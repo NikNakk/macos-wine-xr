@@ -107,7 +107,8 @@ XrResult wine_xrCreateSwapchain(XrSession session, const XrSwapchainCreateInfo *
     if (!native.format) return XR_ERROR_SWAPCHAIN_FORMAT_UNSUPPORTED;
     if (info->next || info->faceCount != 1 || info->sampleCount != 1 || info->mipCount != 1 || !info->arraySize ||
         (info->usageFlags & ~(XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
-                             XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT | XR_SWAPCHAIN_USAGE_MUTABLE_FORMAT_BIT))) {
+                             XR_SWAPCHAIN_USAGE_TRANSFER_SRC_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT |
+                             XR_SWAPCHAIN_USAGE_MUTABLE_FORMAT_BIT))) {
         fprintf(stderr, "wineopenxr: unsupported color swapchain next=%p faces=%u samples=%u mips=%u array=%u usage=0x%llx\n",
                 info->next, info->faceCount, info->sampleCount, info->mipCount, info->arraySize,
                 (unsigned long long)info->usageFlags);

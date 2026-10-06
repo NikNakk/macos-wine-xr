@@ -635,7 +635,20 @@ XrBackend::SwapchainFor(size_t layer, int eye, uint32_t width, uint32_t height, 
 	if (swapchains_.size() <= index) {
 		swapchains_.resize(index + 1);
 	}
-	EyeSwapchain &swapchain = swapchains_[index];
+	char label[32];
+	snprintf(label, sizeof(label), "layer %zu eye %d", layer, eye);
+	return EnsureSwapchain(swapchains_[index], width, height, sourceFormat,
+	                       XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT, label);
+}
+
+XrBackend::EyeSwapchain *
+XrBackend::EnsureSwapchain(EyeSwapchain &swapchain,
+                           uint32_t width,
+                           uint32_t height,
+                           DXGI_FORMAT sourceFormat,
+                           XrSwapchainUsageFlags usage,
+                           const char *label)
+{
 	int64_t format = ChooseFormat(sourceFormat);
 	if (!format) {
 		static bool logged = false;
@@ -645,15 +658,15 @@ XrBackend::SwapchainFor(size_t layer, int eye, uint32_t width, uint32_t height, 
 		}
 		return nullptr;
 	}
-	if (swapchain.handle && swapchain.width == width && swapchain.height == height && swapchain.format == format) {
-		return &swapchain;
+	if (swapchain.width == width && swapchain.height == height && swapchain.format == format) {
+		return swapchain.handle ? &swapchain : nullptr; // no handle: creation failed, already logged
 	}
 	if (swapchain.handle) {
 		xrDestroySwapchain(swapchain.handle);
 		swapchain = {};
 	}
 	XrSwapchainCreateInfo info = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
-	info.usageFlags = XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+	info.usageFlags = usage;
 	info.format = format;
 	info.sampleCount = 1;
 	info.width = width;
@@ -662,8 +675,12 @@ XrBackend::SwapchainFor(size_t layer, int eye, uint32_t width, uint32_t height, 
 	info.arraySize = 1;
 	info.mipCount = 1;
 	if (XR_FAILED(xrCreateSwapchain(session_, &info, &swapchain.handle))) {
-		Log("xrCreateSwapchain %ux%u format %lld failed\n", width, height, (long long)format);
+		Log("xrCreateSwapchain %s %ux%u format %lld usage 0x%llx failed\n", label, width, height,
+		    (long long)format, (unsigned long long)usage);
 		swapchain = {};
+		swapchain.width = width;
+		swapchain.height = height;
+		swapchain.format = format;
 		return nullptr;
 	}
 	uint32_t count = 0;
@@ -674,8 +691,7 @@ XrBackend::SwapchainFor(size_t layer, int eye, uint32_t width, uint32_t height, 
 	swapchain.width = width;
 	swapchain.height = height;
 	swapchain.format = format;
-	Log("Swapchain layer %zu eye %d: %ux%u format %lld, %u images\n", layer, eye, width, height, (long long)format,
-	    count);
+	Log("Swapchain %s: %ux%u format %lld, %u images\n", label, width, height, (long long)format, count);
 	return &swapchain;
 }
 
@@ -847,6 +863,80 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers)
 	for (auto &projection : projections) {
 		headers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader *>(&projection));
 	}
+	EndFrameLocked(headers);
+}
+
+void
+XrBackend::PresentDisplayImage(ID3D11Texture2D *source)
+{
+	if (!frameBegun_) {
+		double offset, period;
+		WaitAndBeginFrame(offset, period);
+	}
+	std::lock_guard<std::mutex> lock(mutex_);
+	if (!running_ || !frameBegun_) {
+		return;
+	}
+	XrCompositionLayerDisplayImageMNDX marker = {XR_TYPE_COMPOSITION_LAYER_DISPLAY_IMAGE_MNDX};
+	XrCompositionLayerProjectionView views[2] = {{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW},
+	                                             {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}};
+	XrCompositionLayerProjection projection = {XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+	std::vector<const XrCompositionLayerBaseHeader *> headers;
+	D3D11_TEXTURE2D_DESC desc;
+	source->GetDesc(&desc);
+	EyeSwapchain *swapchain = nullptr;
+	if (frameState_.shouldRender) {
+		// SAMPLED and TRANSFER_SRC let the runtime present or copy the image.
+		swapchain = EnsureSwapchain(displaySwapchain_, desc.Width, desc.Height, desc.Format,
+		                            XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT |
+		                                XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_SRC_BIT,
+		                            "display image");
+	}
+	uint32_t image = 0;
+	XrSwapchainImageWaitInfo waitInfo = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+	waitInfo.timeout = XR_INFINITE_DURATION;
+	if (swapchain && XR_SUCCEEDED(xrAcquireSwapchainImage(swapchain->handle, nullptr, &image)) &&
+	    XR_SUCCEEDED(xrWaitSwapchainImage(swapchain->handle, &waitInfo))) {
+		// SteamVR's compositor hands the backbuffer over with key 0.
+		IDXGIKeyedMutex *mutex = nullptr;
+		source->QueryInterface(__uuidof(IDXGIKeyedMutex), (void **)&mutex);
+		bool locked = mutex && mutex->AcquireSync(0, 100) == S_OK;
+		if (!mutex || locked) {
+			context_->CopyResource(swapchain->images[image].texture, source);
+		}
+		if (locked) {
+			mutex->ReleaseSync(0);
+		}
+		if (mutex) {
+			mutex->Release();
+		}
+		xrReleaseSwapchainImage(swapchain->handle, nullptr);
+		if (!mutex || locked) {
+			for (uint32_t i = 0; i < 2; ++i) {
+				// The pose and FOV only describe the image: it is presented as it is.
+				views[i].pose = {{0, 0, 0, 1}, {0, 0, 0}};
+				views[i].fov = display.views[i].fov;
+				views[i].subImage.swapchain = swapchain->handle;
+				views[i].subImage.imageRect = display.views[i].viewport;
+			}
+			projection.next = &marker;
+			projection.space = viewSpace_;
+			projection.viewCount = 2;
+			projection.views = views;
+			headers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader *>(&projection));
+		} else {
+			static int failures = 0;
+			if (failures++ < 5) {
+				Log("Display image: backbuffer keyed mutex not acquired\n");
+			}
+		}
+	}
+	EndFrameLocked(headers);
+}
+
+void
+XrBackend::EndFrameLocked(const std::vector<const XrCompositionLayerBaseHeader *> &headers)
+{
 	XrFrameEndInfo endInfo = {XR_TYPE_FRAME_END_INFO};
 	endInfo.displayTime = frameState_.predictedDisplayTime;
 	endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
