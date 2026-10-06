@@ -21,7 +21,8 @@ namespace mwxr {
 struct EyeSubmit
 {
 	ID3D11Texture2D *texture;
-	D3D11_BOX box;      // valid region of texture
+	XrSwapchain swapchain; // zero-copy: texture is this swapchain's acquired image
+	D3D11_BOX box;         // valid region of texture
 	XrPosef pose;       // eye pose in the reference space at render time
 	XrFovf fov;
 };
@@ -78,6 +79,18 @@ public:
 	UpdateHands(HandState hands[2]);
 	void
 	Vibrate(int hand, float durationSeconds, float frequency, float amplitude);
+
+	// Zero-copy swap texture sets: an OpenXR swapchain whose three images are
+	// published to other processes (IDXMTNativeDevice3). Returns false, with
+	// nothing created, when the runtime or D3D device cannot provide that.
+	bool
+	CreateSharedSwapchain(uint32_t width, uint32_t height, DXGI_FORMAT format, XrSwapchain &swapchain,
+	                      ID3D11Texture2D *textures[3], HANDLE handles[3]);
+	void
+	DestroySwapchain(XrSwapchain swapchain);
+	// Acquires and waits for the next image; returns its index or -1.
+	int
+	AcquireImage(XrSwapchain swapchain);
 	std::string currentProfile[2];
 
 	// Frame loop, all on the compositor's present thread.

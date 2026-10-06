@@ -319,6 +319,7 @@ public:
 		                                             ToMatrix(xr_.eyeInHead[1]));
 		Log("HMD '%s' active: IPD %.1f mm, %.0f Hz\n", xr_.systemName.c_str(), ipd * 1000, frequency_);
 
+		zeroCopy_ = vr::VRSettings()->GetBool(kSettingsSection, "zeroCopy");
 		poseRateHz_ = vr::VRSettings()->GetInt32(kSettingsSection, "poseRateHz");
 		if (poseRateHz_ <= 0) {
 			poseRateHz_ = 500;
@@ -431,6 +432,23 @@ public:
 		std::lock_guard<std::mutex> lock(texturesMutex_);
 		auto set = std::make_shared<TextureSet>();
 		set->pid = pid;
+		set->xr = &xr_;
+		out->unTextureFlags = 0;
+		if (zeroCopy_ && desc->nSampleCount <= 1 &&
+		    xr_.CreateSharedSwapchain(desc->nWidth, desc->nHeight, (DXGI_FORMAT)desc->nFormat, set->swapchain,
+		                              set->textures, set->sharedHandles)) {
+			for (int i = 0; i < 3; ++i) {
+				set->handles[i] = (vr::SharedTextureHandle_t)set->sharedHandles[i];
+				out->rSharedTextureHandles[i] = set->handles[i];
+				textures_[set->handles[i]] = {set, i};
+			}
+			// The application renders into the image it is given first.
+			set->acquired = xr_.AcquireImage(set->swapchain);
+			set->next = set->acquired >= 0 ? set->acquired : 0;
+			Log("Swap texture set for pid %u: %ux%u format %u, zero-copy (first image %d)\n", pid, desc->nWidth,
+			    desc->nHeight, desc->nFormat, set->acquired);
+			return;
+		}
 		D3D11_TEXTURE2D_DESC td = {};
 		td.Width = desc->nWidth;
 		td.Height = desc->nHeight;
@@ -441,7 +459,6 @@ public:
 		td.Usage = D3D11_USAGE_DEFAULT;
 		td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 		td.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
-		out->unTextureFlags = 0;
 		for (int i = 0; i < 3; ++i) {
 			IDXGIResource *resource = nullptr;
 			HANDLE handle = nullptr;
@@ -504,8 +521,18 @@ public:
 			}
 			TextureSet *set = it->second.set.get();
 			if (set != advanced) { // both eyes may share one set
-				set->next = (set->next + 1) % 3;
 				advanced = set;
+				if (set->swapchain) {
+					// The runtime decides the order; keep an image still unsubmitted.
+					if (set->acquired < 0) {
+						set->acquired = xr_.AcquireImage(set->swapchain);
+					}
+					if (set->acquired >= 0) {
+						set->next = set->acquired;
+					}
+				} else {
+					set->next = (set->next + 1) % 3;
+				}
 			}
 			(*indices)[eye] = set->next;
 		}
@@ -522,9 +549,22 @@ public:
 			if (it == textures_.end()) {
 				return;
 			}
-			ID3D11Texture2D *texture = it->second.set->textures[it->second.index];
+			TextureSet *set = it->second.set.get();
+			ID3D11Texture2D *texture = set->textures[it->second.index];
 			D3D11_TEXTURE2D_DESC desc;
 			texture->GetDesc(&desc);
+			if (set->swapchain) {
+				if (it->second.index != set->acquired) {
+					static int mismatches = 0;
+					if (mismatches++ < 5) {
+						Log("Zero-copy layer uses image %d but image %d is acquired\n", it->second.index,
+						    set->acquired);
+					}
+					return;
+				}
+				layer.eye[eye].swapchain = set->swapchain;
+				submittedSets_.push_back(it->second.set);
+			}
 			float u0 = std::min(in.bounds.uMin, in.bounds.uMax), u1 = std::max(in.bounds.uMin, in.bounds.uMax);
 			float v0 = std::min(in.bounds.vMin, in.bounds.vMax), v1 = std::max(in.bounds.vMin, in.bounds.vMax);
 			EyeSubmit &out = layer.eye[eye];
@@ -547,9 +587,11 @@ public:
 	Present(vr::SharedTextureHandle_t syncTexture) override
 	{
 		std::vector<LayerSubmit> layers;
+		std::vector<std::shared_ptr<TextureSet>> submitted;
 		{
 			std::lock_guard<std::mutex> lock(texturesMutex_);
 			layers.swap(pending_);
+			submitted.swap(submittedSets_);
 		}
 		IDXGIKeyedMutex *mutex = SyncMutex(syncTexture);
 		bool locked = mutex && mutex->AcquireSync(0, 100) == S_OK;
@@ -558,7 +600,8 @@ public:
 			if (failures++ < 5) {
 				Log("Sync texture AcquireSync failed; submitting no layers this frame\n");
 			}
-			layers.clear();
+			layers.clear(); // zero-copy images stay acquired for the next frame
+			submitted.clear();
 		}
 		auto now = std::chrono::steady_clock::now();
 		if (!layers.empty() && now - lastPresentLog_ > std::chrono::seconds(5)) {
@@ -575,7 +618,13 @@ public:
 				    lastPrediction_ * 1000, degrees, angular.x, angular.y, angular.z);
 			}
 		}
-		xr_.Present(layers);
+		xr_.Present(layers); // releases the submitted zero-copy images
+		{
+			std::lock_guard<std::mutex> lock(texturesMutex_);
+			for (auto &set : submitted) {
+				set->acquired = -1;
+			}
+		}
 		if (locked) {
 			mutex->ReleaseSync(0);
 		}
@@ -643,8 +692,17 @@ private:
 		ID3D11Texture2D *textures[3] = {};
 		vr::SharedTextureHandle_t handles[3] = {};
 		uint32_t next = 0;
+		// Zero-copy: textures are the swapchain's images, owned by the runtime.
+		XrBackend *xr = nullptr;
+		XrSwapchain swapchain = XR_NULL_HANDLE;
+		HANDLE sharedHandles[3] = {};
+		int acquired = -1;
 		~TextureSet()
 		{
+			if (swapchain) {
+				xr->DestroySwapchain(swapchain);
+				return;
+			}
 			for (auto *texture : textures) {
 				if (texture) {
 					texture->Release();
@@ -778,6 +836,8 @@ private:
 	std::mutex texturesMutex_;
 	std::map<vr::SharedTextureHandle_t, TextureRef> textures_;
 	std::vector<LayerSubmit> pending_;
+	std::vector<std::shared_ptr<TextureSet>> submittedSets_;
+	bool zeroCopy_ = true;
 
 	float lastPrediction_ = 0;
 	XrQuaternionf lastRenderHead_ = {0, 0, 0, 1};
