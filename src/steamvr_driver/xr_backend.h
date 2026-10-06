@@ -15,6 +15,8 @@
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 
+#include "in_process/mndx_display_distortion.h"
+
 namespace mwxr {
 
 // One eye of one SteamVR layer, already resolved to a D3D11 texture.
@@ -61,6 +63,13 @@ public:
 	XrPosef eyeInHead[2] = {};
 	std::string systemName, runtimeName;
 	float playAreaWidth = 0, playAreaDepth = 0; // STAGE bounds, 0 if unavailable
+
+	// XR_MNDX_display_distortion, for SteamVR's virtual-display mode in which
+	// SteamVR's compositor produces the panel image itself.
+	bool hasDisplayDistortion = false;
+	XrDisplayDistortionPropertiesMNDX display = {XR_TYPE_DISPLAY_DISTORTION_PROPERTIES_MNDX};
+	bool
+	ComputeDisplayDistortion(uint32_t view, float u, float v, XrVector2f out[3]);
 	ID3D11Device *device = nullptr;
 
 	// Handles session state changes; call regularly from one thread.
@@ -149,6 +158,7 @@ private:
 
 	std::atomic<LONGLONG> anchorCounter_{0};
 	std::atomic<XrTime> anchorTime_{0};
+	PFN_xrComputeDisplayDistortionMNDX computeDistortion_ = nullptr;
 	PFN_xrConvertWin32PerformanceCounterToTimeKHR qpcToTime_ = nullptr;
 	PFN_xrConvertTimeToWin32PerformanceCounterKHR timeToQpc_ = nullptr;
 	PFN_xrGetD3D11GraphicsRequirementsKHR getRequirements_ = nullptr;
