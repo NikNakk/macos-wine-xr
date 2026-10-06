@@ -261,6 +261,7 @@ export MWXR_STEAMVR_ROOT=/path/to/steamvr-dxmt          # wine-11.10/, bin/, pre
 export MWXR_NATIVE_RUNTIME_JSON=/path/to/monado-x64/openxr_monado-dev.json
 MWXR_MONADO=hardware scripts/run-steamvr-mwxr.zsh          # installed Monado service, PS VR2
 MONADO_SIM_BUILD=/path/to/sim-service MWXR_MONADO=simulated scripts/run-steamvr-mwxr.zsh
+SIMULATED_LEFT=wmr SIMULATED_RIGHT=wmr MONADO_SIM_BUILD=... MWXR_MONADO=simulated scripts/run-steamvr-mwxr.zsh
 APPID=546560 MWXR_MONADO=hardware scripts/run-steamvr-mwxr.zsh   # then launch Half-Life: Alyx
 ```
 
@@ -327,9 +328,16 @@ PS VR2 (installed service v25.1.0-2146, `XRT_MACOS_CLIENT_COMPOSITOR=1`):
 
 ### Open issues
 
-- Controllers are not drawn in Home, and Home does not react to them, although
-  their values reach the driver. This may have the same cause as the missing
-  universe; recheck after the `jsonid` fix.
+- Controllers were not drawn in Home and Home did not react to them, although
+  their values reached the driver. With simulated WMR controllers
+  (`SIMULATED_LEFT=wmr SIMULATED_RIGHT=wmr`, bound through the driver's
+  `khr/simple_controller` fallback), SteamVR presents both as `oculus_touch`,
+  builds the Quest 2 render-model templates, and loads Home's
+  `bindings_touch.json`; Home loads the model components and processes the
+  actions, with no input errors. The binding chain therefore works. The
+  likely cause on the headset was the missing universe: with the eyes at
+  floor level, the hands were below Home's floor. Recheck on the PS VR2 after
+  the `jsonid` fix.
 - SteamVR's 41-45 ms prediction on the PS VR2 is long, and comes from the
   vsync timing the driver reports. Worth tuning with real pacing data.
 - "WaitForAcquire timed out" appears occasionally during hitches.
@@ -343,6 +351,5 @@ PS VR2 (installed service v25.1.0-2146, `XRT_MACOS_CLIENT_COMPOSITOR=1`):
 - Raise SteamVR's resolve resolution towards the runtime's recommendation, if
   SteamVR allows it (its supersampling settings), to reduce the loss in the
   extra composite.
-- Simulated controllers, to debug input without hardware.
 - Measure latency and Game Mode behaviour against the direct
   OpenComposite/xrizer path before choosing defaults per game.
