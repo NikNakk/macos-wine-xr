@@ -42,6 +42,30 @@ XrResult WINAPI xrDestroyInstance(XrInstance instance)
     return params.result;
 }
 
+static XrResult display_distortion_call(struct mw_display_distortion_params *params)
+{
+    if (UNIX_CALL(mw_display_distortion, params)) return XR_ERROR_RUNTIME_FAILURE;
+    return params->result;
+}
+
+static XrResult WINAPI xrGetDisplayDistortionPropertiesMNDX(XrInstance instance, XrSystemId system,
+                                                            XrDisplayDistortionPropertiesMNDX *properties)
+{
+    struct mw_display_distortion_params params = {.instance = instance, .system = system,
+        .op = MW_DISPLAY_DISTORTION_PROPERTIES, .properties = properties};
+    return display_distortion_call(&params);
+}
+
+static XrResult WINAPI xrComputeDisplayDistortionMNDX(XrInstance instance, XrSystemId system, uint32_t view_index,
+                                                      uint32_t point_count, const XrVector2f *points,
+                                                      XrVector2f *red, XrVector2f *green, XrVector2f *blue)
+{
+    struct mw_display_distortion_params params = {.instance = instance, .system = system,
+        .op = MW_DISPLAY_DISTORTION_COMPUTE, .view_index = view_index, .point_count = point_count,
+        .points = points, .red = red, .green = green, .blue = blue};
+    return display_distortion_call(&params);
+}
+
 XrResult WINAPI xrGetInstanceProcAddr(XrInstance instance, const char *name, PFN_xrVoidFunction *fn)
 {
     if (!name || !fn) return XR_ERROR_VALIDATION_FAILURE;
@@ -50,6 +74,15 @@ XrResult WINAPI xrGetInstanceProcAddr(XrInstance instance, const char *name, PFN
     if (!strcmp(name, "xrGetD3D11GraphicsRequirementsKHR")) {
         if (!instance || !wine_instance_from_handle(instance)->d3d11_enabled) return XR_ERROR_FUNCTION_UNSUPPORTED;
         *fn = (PFN_xrVoidFunction)xrGetD3D11GraphicsRequirementsKHR;
+        return XR_SUCCESS;
+    }
+    if (!strcmp(name, "xrGetDisplayDistortionPropertiesMNDX") || !strcmp(name, "xrComputeDisplayDistortionMNDX")) {
+        // Experimental Monado extension, passed through by mw_display_distortion_call.
+        if (!instance || !wine_instance_from_handle(instance)->display_distortion_enabled)
+            return XR_ERROR_FUNCTION_UNSUPPORTED;
+        *fn = !strcmp(name, "xrGetDisplayDistortionPropertiesMNDX")
+                  ? (PFN_xrVoidFunction)xrGetDisplayDistortionPropertiesMNDX
+                  : (PFN_xrVoidFunction)xrComputeDisplayDistortionMNDX;
         return XR_SUCCESS;
     }
     if (!strcmp(name, "xrConvertWin32PerformanceCounterToTimeKHR") ||

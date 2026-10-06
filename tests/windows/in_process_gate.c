@@ -19,7 +19,7 @@ int main(void)
     PFN_xrEnumerateApiLayerProperties enumerate_layers;
     uint32_t count = 99;
     if (XR_FAILED(gipa(XR_NULL_HANDLE, "xrEnumerateInstanceExtensionProperties", (void *)&enumerate)) ||
-        XR_FAILED(enumerate(NULL, 0, &count, NULL)) || count > 2 ||
+        XR_FAILED(enumerate(NULL, 0, &count, NULL)) || count > 3 ||
         XR_FAILED(gipa(XR_NULL_HANDLE, "xrEnumerateApiLayerProperties", (void *)&enumerate_layers)) ||
         XR_FAILED(enumerate_layers(0, &count, NULL)) || count != 0) return 5;
     XrInstanceCreateInfo ci = {XR_TYPE_INSTANCE_CREATE_INFO};

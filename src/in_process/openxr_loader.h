@@ -26,6 +26,7 @@ extern "C" {
 #endif
 #include "wineopenxr.h"
 #include "loader_thunks.h"
+#include "mndx_display_distortion.h"
 #ifdef __cplusplus
 }
 #endif
@@ -48,6 +49,7 @@ struct is_available_instance_function_openxr_params {
 // by the native XR_KHR_convert_timespec_time functions below.
 typedef struct { XrInstance host_instance; void *required_metal_device; uint32_t d3d11_enabled;
     uint32_t win32_time_enabled; void *native_timespec_to_time; void *native_time_to_timespec;
+    uint32_t display_distortion_enabled; // XR_MNDX_display_distortion, passed through natively
 } wine_XrInstance;
 typedef struct { XrSession host_session; wine_XrInstance *instance; void *metal_device;
     void *metal_queue; void *metal_event; uint64_t fence_value; void *graphics;

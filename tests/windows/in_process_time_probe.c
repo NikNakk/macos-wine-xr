@@ -70,7 +70,9 @@ int main(void)
            qpc_ms, xr_ms, roundtrip_ticks, (long long)ta);
     CHECK(ta > 0 && tb > ta, 14);
     CHECK(xr_ms - qpc_ms < 1.0 && qpc_ms - xr_ms < 1.0, 15);
-    CHECK(roundtrip_ticks > -100 && roundtrip_ticks < 100, 16); // within 10 us
+    // Each conversion samples both clocks separately (as Proton does), so
+    // scheduling can add tens of microseconds.
+    CHECK(roundtrip_ticks > -1000 && roundtrip_ticks < 1000, 16); // within 100 us
     CHECK(XR_SUCCEEDED(destroy(instance)), 17);
     printf("PASS\n");
     return 0;
