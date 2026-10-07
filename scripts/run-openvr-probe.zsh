@@ -33,5 +33,5 @@ print "Log: ${log}"
 export MVK_CONFIG_LOG_LEVEL=${MVK_CONFIG_LOG_LEVEL:-2}
 export DXMT_LOG_PATH=${DXMT_LOG_PATH:-Z:${root}/dxmt-logs}
 export MWXR_OPENVR_SHIM_LOG="Z:${log//\//\\}.shim"
-WINEPREFIX=${root}/prefix WINEDEBUG=-all "${root}/bin/wine-current-dxmt" "${probe_dir}/openvr_probe.exe" \
+WINEPREFIX=${root}/prefix WINEDEBUG=-all "${MWXR_WINE_WRAPPER:-${root}/bin/wine-current-dxmt}" "${probe_dir}/openvr_probe.exe" \
   --log "Z:${log//\//\\}" "$@"

@@ -24,6 +24,9 @@
 # Required:
 #   MWXR_STEAMVR_ROOT        built by build-current-dxmt.zsh, with a prefix
 #                            holding Steam and SteamVR (prefix/, bin/, wine-11.10/)
+#   MWXR_WINE_TREE           Wine install tree (default ${MWXR_STEAMVR_ROOT}/wine-11.10)
+#   MWXR_WINE_WRAPPER        Wine launcher (default ${MWXR_STEAMVR_ROOT}/bin/wine-current-dxmt),
+#                            for example a CrossOver rig's wine-crossover-dxmt
 #   MWXR_NATIVE_RUNTIME_JSON x86_64 Monado client manifest matching the service
 #   MONADO_SIM_BUILD         (simulated only) ARM64 simulated-only service build
 set -euo pipefail
@@ -71,7 +74,8 @@ path.write_text(json.dumps(s, indent=3))
 PY
 
 export MWXR_IN_PROCESS_BUILD=${MWXR_IN_PROCESS_BUILD:-${repo}/build-in-process/gate-steamvr}
-export MWXR_IN_PROCESS_WINE=${root}/wine-11.10
+export MWXR_IN_PROCESS_WINE=${MWXR_WINE_TREE:-${root}/wine-11.10}
+wine_wrapper=${MWXR_WINE_WRAPPER:-${root}/bin/wine-current-dxmt}
 export MWXR_IN_PROCESS_PREFIX=${prefix}
 export MWXR_NATIVE_RUNTIME_JSON
 export DXMT_LOG_LEVEL=${DXMT_LOG_LEVEL:-info}
@@ -81,14 +85,14 @@ logs=${root}/run-mwxr-$(date +%Y%m%d-%H%M%S); mkdir -p "${logs}"; print "Logs: $
 vrstartup=${steam_dir}/steamapps/common/SteamVR/bin/win64/vrstartup.exe
 
 # Steam first (it needs no XR environment), so SteamVR and Home can reach it.
-WINEPREFIX=${prefix} WINEDEBUG=-all "${root}/bin/wine-current-dxmt" 'C:\Program Files (x86)\Steam\steam.exe' -silent \
+WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' -silent \
  -cef-disable-gpu -cef-disable-gpu-compositing -cef-in-process-gpu -cef-disable-sandbox -no-cef-sandbox \
  -noverifyfiles -norepairfiles > "${logs}/steam.log" 2>&1 &
 print "Started Steam; waiting ${STEAM_WAIT_S:-40} s"; sleep ${STEAM_WAIT_S:-40}
 
 if [[ -n ${APPID:-} ]]; then
  ( sleep ${VR_WAIT_S:-60}
-   WINEPREFIX=${prefix} WINEDEBUG=-all "${root}/bin/wine-current-dxmt" 'C:\Program Files (x86)\Steam\steam.exe' \
+   WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' \
     -applaunch "${APPID}" ${=APP_ARGS:-} > "${logs}/applaunch.log" 2>&1
    print "Requested launch of app ${APPID}" ) &
 fi
