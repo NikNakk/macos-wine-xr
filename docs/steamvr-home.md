@@ -933,6 +933,63 @@ A report for Valve and a separate proposed author message are prepared in
 The report distinguishes captured Wine evidence from the user-reported Windows
 reproduction, and keeps the general guard's live acceptance gate explicit.
 
+### CrossOver guard restart, 2026-10-07
+
+At the user's request, all remaining Wine Windows processes and wineservers
+were closed and a process inventory confirmed none remained. Steam, SteamVR
+and the guard were then restarted in the existing
+`.build/steamvr-crossover/prefix`, using its patched CrossOver 26.3 FOSS Wine
+and `WINEMSYNC=1`, with the matching simulated service/client and
+`XRT_MACOS_CLIENT_COMPOSITOR=0`. The guard attached to Home PID 1156, verified
+the same recorded client DLL hash, and logged `ARMED` before Workshop calls.
+Early Home submission windows advanced (356, then 756 frames per eye), with
+no Submit errors. No dependency traversal or cycle rejection had occurred at
+this checkpoint. Steam's connection log had no successful logon in this run,
+and its startup log reported a main-loop stall; cached credentials alone do
+not establish a live session. UI inspection was unavailable because macOS was
+locked. SteamVR/Home and the guard are intentionally left running for the user.
+
+Logs: `.build/steamvr-cycle-guard/crossover/guard.log`, `launcher.log`, and
+`.build/steamvr-crossover/run-mwxr-20261007-110244/openvr-shim.log`.
+A remote recheck at 11:08 found Home, SteamVR and the guard still running.
+Home had submitted 24,196 frames per eye across emitted windows, without
+Submit errors; the latest windows ran about 47–65 frames/s. The guard had
+returned all 32 intercepted calls normally, with zero rejections. Steam itself
+had exited: `steam.log` ended with `fatal stalled cross-thread pipe` and
+`Fatal assert; application exiting` after the main-loop stall. No successful
+logon had occurred. Thus this is sustained simulated submission without a live
+Steam session, not validation of the published Workshop cycle under CrossOver.
+
+Original settings are backed up as
+`.build/steamvr-cycle-guard/crossover/settings-before.json`; the running
+launcher restores Valve's OpenVR DLL when it exits.
+
+### Steam-only cold-start isolation, 2026-10-07
+
+Home and SteamVR were stopped before starting Steam alone in the CrossOver
+prefix, with the same launcher arguments. Steam again logged
+`CSteamEngine::BMainLoop appears to have stalled > 15 seconds without event
+signalled`, without completing sign-in. A separate cold startup with
+`WINEMSYNC=0` also stalled. A third startup temporarily replaced the custom
+`steamwebhelper.exe` wrapper (which adds `--disable-gpu --single-process`)
+with its installed original helper; this also stalled. No Home/guard process
+was running in these three tests, so they reproduce the startup warning
+independently of the Home guard. They do not identify the stalled thread/IPC
+endpoint or prove every test would reach the same later fatal assertion.
+
+The earlier long CrossOver guard log also contains msync node-pool warnings.
+The local Wine server source falls back to `malloc` when that pool is empty;
+the warning alone is not evidence of allocation failure. The msync-disabled
+startup did not resolve the Steam hang. The account configuration still has a
+cached account and `RememberPassword=1`; this does not establish a valid live
+session. Exact underlying startup cause remains unresolved.
+
+Logs are in `.build/steamvr-cycle-guard/crossover-steam-only/`: `steam.log`,
+`steam-msync-off.log`, and `steam-original-helper.log`. Failed tests were
+stopped, and the original helper wrapper, SteamVR settings and Valve OpenVR DLL
+were verified restored. Home/guard were not relaunched because the required
+Steam sign-in gate was not met. This supersedes the earlier left-running state.
+
 ### Next steps
 
 - Run the general guard against a reproducible live cycle, on Windows or with
