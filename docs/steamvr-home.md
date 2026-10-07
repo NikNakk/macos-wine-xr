@@ -1051,6 +1051,31 @@ virtual mode looks right and tracks the head. Half-Life: Alyx was more
 playable in virtual mode than in direct mode at the same commit, though
 still CPU-limited at 120 Hz.
 
+### msync leaked wait registrations, 2026-10-07
+
+After long sessions, the CrossOver wineserver printed "msync: warn: node
+memory pool exhausted" many times. Under msync, the server keeps a list of
+the threads waiting on each object (from a pool of 524,288 entries). Two
+paths left entries on those lists:
+- The client gave up on a multi-object wait while the server was still
+  registering it (an object became signalled), without sending the removal.
+- The server's own early exit had an off-by-one (`i > 1`, not `i > 0`), so the
+  first object kept its entry.
+
+Entries on objects that are never signalled, such as a worker's shutdown
+event, then stay for good. Every unregister walks those lists, so the
+wineserver gets slower the longer the prefix runs. Home's high CPU in a Steam
+session that had been running for hours, and the drop after a restart, fit
+this.
+
+`patches/crossover/0002-msync-remove-abandoned-wait-registrations.patch`
+fixes both: the client now sends the removal when it gives up, and the
+server's early exit unregisters every object it registered. Rebuild
+`server/wineserver` and `dlls/ntdll/ntdll.so` and install both. In
+`tools/keyedmutex_test/msync_wait_leak.c`, stock CrossOver logged the warning
+12.9 million times in 60 s; the patched build logged none, used a fifth of the
+memory, and satisfied 68% more waits. The keyed-mutex test still passes.
+
 ### Next steps
 
 - Run the general guard against a reproducible live cycle, on Windows or with
