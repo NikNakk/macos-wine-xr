@@ -1106,6 +1106,38 @@ next suspect.
 Logging added for this: `home-console.log` in each run (Home's VConsole,
 `tools/vconsole_capture`), and the driver's skeleton update results.
 
+### The compositor draws no overlays, 2026-10-08
+
+`tools/openvr_probe/overlay_probe.exe` creates overlays four ways:
+- raw pixels (red);
+- a shared D3D11 texture (green);
+- a BMP file (blue);
+- raw pixels placed in the room rather than on the headset (magenta).
+
+In a simulated, virtual-mode CrossOver run, with frames dumped every 900
+presents (`driver_mwxr.virtualDisplayDumpEvery`), every call succeeded and
+SteamVR reported every overlay visible. No dumped frame contained any of
+them. The dashboard counts as open from start-up and dims the scene, but
+draws nothing.
+
+So the fault is not only Steam's GPU-less web helper, the shared-texture
+handoff, or the head pose:
+- Setting `forceSystemLayerUseAppPoses` false removed the dimming (the
+  compositor stopped logging "Driver requests system layer use app poses"),
+  but overlays still did not appear.
+- The room-placed overlay, which needs no HMD pose, was also missing.
+
+Leads still open:
+- Even raw and file overlays are probably uploaded by SteamVR's overlay
+  manager and shared with the compositor, so a sharing route other than
+  games' may arrive empty under DXMT.
+- DXMT logged two unknown interface queries: `ID3D11On12Device`, and
+  `50c7f8e9-a63f-4035-9801-b96e733347de` on the DXGI factory.
+- The compositor logged `VirtualDisplay CopyPixel AcquireSync FAILED`.
+
+Next: the same probe on the Wine 11.10 rig and with SteamVR's null driver,
+to separate Wine, DXMT and driver causes.
+
 ### Next steps
 
 - Run the general guard against a reproducible live cycle, on Windows or with
