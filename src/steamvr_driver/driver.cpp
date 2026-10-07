@@ -189,6 +189,12 @@ public:
 		    container, left ? "/input/skeleton/left" : "/input/skeleton/right",
 		    left ? "/skeleton/hand/left" : "/skeleton/hand/right", "/pose/raw", vr::VRSkeletalTracking_Estimated,
 		    nullptr, 0, &skeleton_);
+		vr::EVRSettingsError settingError = vr::VRSettingsError_None;
+		fingerCurl_ = vr::VRSettings()->GetBool(kSettingsSection, "fingerCurl", &settingError);
+		if (settingError != vr::VRSettingsError_None) {
+			fingerCurl_ = true;
+		}
+		Log("%s hand skeleton: finger curl %s\n", left ? "Left" : "Right", fingerCurl_ ? "on" : "off");
 		if (skeletonError != vr::VRInputError_None) {
 			skeleton_ = vr::k_ulInvalidInputComponentHandle;
 			Log("%s hand skeleton: error %d\n", left ? "Left" : "Right", skeletonError);
@@ -283,12 +289,16 @@ public:
 			// Curl as Touch controllers estimate it: the index finger from the
 			// trigger (slightly bent when only touching it), the other fingers
 			// from the grip, and the thumb when it rests on a control.
+			// driver_mwxr.fingerCurl false sends the open hand unchanged.
 			HandCurl curl = {};
-			curl.index = std::max(state.trigger, state.triggerTouch ? 0.25f : 0.0f);
-			curl.middle = curl.ring = curl.pinky = state.squeeze;
-			bool thumbDown = state.thumbstickTouch || state.thumbstickClick || state.lowerTouch ||
-			                 state.lowerClick || state.upperTouch || state.upperClick || state.thumbrestTouch;
-			curl.thumb = thumbDown ? 0.5f : 0.0f;
+			if (fingerCurl_) {
+				curl.index = std::max(state.trigger, state.triggerTouch ? 0.25f : 0.0f);
+				curl.middle = curl.ring = curl.pinky = state.squeeze;
+				bool thumbDown = state.thumbstickTouch || state.thumbstickClick || state.lowerTouch ||
+				                 state.lowerClick || state.upperTouch || state.upperClick ||
+				                 state.thumbrestTouch;
+				curl.thumb = thumbDown ? 0.5f : 0.0f;
+			}
 			vr::VRBoneTransform_t bones[kHandBoneCount];
 			CurlHand(hand_ == 0 ? kLeftOpenHand : kRightOpenHand, curl, bones);
 			vr::EVRInputError with = input->UpdateSkeletonComponent(
@@ -317,6 +327,7 @@ private:
 	                             haptic_ = vr::k_ulInvalidInputComponentHandle,
 	                             skeleton_ = vr::k_ulInvalidInputComponentHandle;
 	bool loggedSkeletonError_ = false;
+	bool fingerCurl_ = true;
 	uint64_t skeletonUpdates_ = 0;
 };
 
