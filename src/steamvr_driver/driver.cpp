@@ -7,6 +7,7 @@
 // LibOVR). Each Present copies them into OpenXR swapchains and submits them as
 // projection layers, so the OpenXR runtime does distortion and timewarp.
 // PostPresent runs xrWaitFrame/xrBeginFrame, which paces the compositor.
+#include "hand_skeleton.h"
 #include "log.h"
 #include "openvr_abi.h"
 #include "xr_backend.h"
@@ -182,6 +183,17 @@ public:
 		systemClick_ = boolean("/input/system/click");
 		thumbrestTouch_ = boolean("/input/thumbrest/touch");
 		input->CreateHapticComponent(container, "/output/haptic", &haptic_);
+		// Home draws its hands and pointer from the skeleton; without one its
+		// bindings fail ("invalid device path for skeleton output"). An open
+		// hand for now, with no finger curl.
+		vr::EVRInputError skeletonError = input->CreateSkeletonComponent(
+		    container, left ? "/input/skeleton/left" : "/input/skeleton/right",
+		    left ? "/skeleton/hand/left" : "/skeleton/hand/right", "/pose/raw", vr::VRSkeletalTracking_Estimated,
+		    nullptr, 0, &skeleton_);
+		if (skeletonError != vr::VRInputError_None) {
+			skeleton_ = vr::k_ulInvalidInputComponentHandle;
+			Log("%s hand skeleton: error %d\n", left ? "Left" : "Right", skeletonError);
+		}
 		Log("%s controller active\n", left ? "Left" : "Right");
 		return vr::VRInitError_None;
 	}
@@ -268,6 +280,13 @@ public:
 		input->UpdateBooleanComponent(upperTouch_, state.upperTouch || state.upperClick, 0);
 		input->UpdateBooleanComponent(systemClick_, state.menuClick, 0);
 		input->UpdateBooleanComponent(thumbrestTouch_, state.thumbrestTouch, 0);
+		if (skeleton_ != vr::k_ulInvalidInputComponentHandle) {
+			const vr::VRBoneTransform_t *bones = hand_ == 0 ? kLeftOpenHand : kRightOpenHand;
+			input->UpdateSkeletonComponent(skeleton_, vr::VRSkeletalMotionRange_WithController, bones,
+			                               kHandBoneCount);
+			input->UpdateSkeletonComponent(skeleton_, vr::VRSkeletalMotionRange_WithoutController, bones,
+			                               kHandBoneCount);
+		}
 	}
 
 private:
@@ -277,7 +296,8 @@ private:
 	vr::VRInputComponentHandle_t stickX_ = 0, stickY_ = 0, stickClick_ = 0, stickTouch_ = 0, trigger_ = 0,
 	                             triggerTouch_ = 0, grip_ = 0, gripTouch_ = 0, lowerClick_ = 0, lowerTouch_ = 0,
 	                             upperClick_ = 0, upperTouch_ = 0, systemClick_ = 0, thumbrestTouch_ = 0,
-	                             haptic_ = vr::k_ulInvalidInputComponentHandle;
+	                             haptic_ = vr::k_ulInvalidInputComponentHandle,
+	                             skeleton_ = vr::k_ulInvalidInputComponentHandle;
 };
 
 // SteamVR's compositor always composites into resolve textures of its own and
