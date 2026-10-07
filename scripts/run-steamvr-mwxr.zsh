@@ -20,6 +20,8 @@
 #   MWXR_OPENVR_SHIM_INSTALL=0  do not install tools/openvr_shim beside SteamVR
 #                           Home (default 1; it logs Home's frame loop to the run's
 #                           openvr-shim.log; Valve's openvr_api.dll is restored on exit)
+#   MWXR_OPENVR_SHIM_APP_DIRS='Half-Life Alyx/game/bin/win64'  also install it in these
+#                           folders (colon-separated, relative to steamapps/common)
 #
 # Required:
 #   MWXR_STEAMVR_ROOT        built by build-current-dxmt.zsh, with a prefix
@@ -107,23 +109,32 @@ isolated_label= isolated_dir=
 # Submit calls (see tools/openvr_shim). Valve's DLL is kept as
 # openvr_api_valve.dll and put back on exit.
 shim=${MWXR_OPENVR_SHIM:-${repo}/build-in-process/openvr-shim/openvr_api.dll}
-home_bin="${steam_dir}/steamapps/common/SteamVR/tools/steamvr_environments/game/bin/win64"
-shim_installed=0
+shim_dirs=("${steam_dir}/steamapps/common/SteamVR/tools/steamvr_environments/game/bin/win64")
+for dir in ${(s.:.)MWXR_OPENVR_SHIM_APP_DIRS:-}; do shim_dirs+=("${steam_dir}/steamapps/common/${dir}"); done
+shim_installed=()
 install_shim() {
-  [[ ${MWXR_OPENVR_SHIM_INSTALL:-1} == 1 && -f ${shim} && -f ${home_bin}/openvr_api.dll ]] || return 0
-  # A file without the marker is Valve's (perhaps updated by Steam): keep it.
-  if ! /usr/bin/grep -q mwxr-openvr-shim "${home_bin}/openvr_api.dll"; then
-    mv -f "${home_bin}/openvr_api.dll" "${home_bin}/openvr_api_valve.dll"
-  fi
-  [[ -f ${home_bin}/openvr_api_valve.dll ]] || return 0
-  cp "${shim}" "${home_bin}/openvr_api.dll"
-  shim_installed=1
-  print "Installed the OpenVR shim beside SteamVR Home"
+  [[ ${MWXR_OPENVR_SHIM_INSTALL:-1} == 1 && -f ${shim} ]] || return 0
+  local dir
+  for dir in "${shim_dirs[@]}"; do
+    [[ -f ${dir}/openvr_api.dll ]] || { print -u2 "No openvr_api.dll in ${dir}; shim not installed there"; continue; }
+    # A file without the marker is Valve's (perhaps updated by Steam): keep it.
+    if ! /usr/bin/grep -q mwxr-openvr-shim "${dir}/openvr_api.dll"; then
+      mv -f "${dir}/openvr_api.dll" "${dir}/openvr_api_valve.dll"
+    fi
+    [[ -f ${dir}/openvr_api_valve.dll ]] || continue
+    cp "${shim}" "${dir}/openvr_api.dll"
+    shim_installed+=("${dir}")
+    print "Installed the OpenVR shim in ${dir#${steam_dir}/steamapps/common/}"
+  done
 }
 restore_shim() {
-  if [[ ${shim_installed} == 1 && -f ${home_bin}/openvr_api_valve.dll ]]; then
-    mv -f "${home_bin}/openvr_api_valve.dll" "${home_bin}/openvr_api.dll"
-  fi
+  local dir
+  for dir in "${shim_installed[@]}"; do
+    [[ -f ${dir}/openvr_api_valve.dll ]] && mv -f "${dir}/openvr_api_valve.dll" "${dir}/openvr_api.dll"
+    # Apps started by a Steam launched elsewhere log beside the shim.
+    [[ -f ${dir}/openvr-shim.log ]] && cat "${dir}/openvr-shim.log" >> "${logs}/openvr-shim.log" && rm -f "${dir}/openvr-shim.log"
+  done
+  shim_installed=()
 }
 cleanup() {
   restore_shim

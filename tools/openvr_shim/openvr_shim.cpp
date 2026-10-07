@@ -91,9 +91,21 @@ QpcMs(LONGLONG ticks)
 void
 Log(const char *format, ...)
 {
+	// Without MWXR_OPENVR_SHIM_LOG (an app started by a Steam that was not
+	// launched with it), log beside this DLL.
+	char fallback[MAX_PATH] = {};
 	const char *path = getenv("MWXR_OPENVR_SHIM_LOG");
 	if (!path || !path[0]) {
-		return;
+		HMODULE self = nullptr;
+		GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+		                   reinterpret_cast<LPCSTR>(&Log), &self);
+		DWORD length = GetModuleFileNameA(self, fallback, MAX_PATH);
+		char *slash = strrchr(fallback, '\\');
+		if (!length || !slash || (size_t)(slash - fallback) + sizeof("\\openvr-shim.log") > MAX_PATH) {
+			return;
+		}
+		strcpy(slash, "\\openvr-shim.log");
+		path = fallback;
 	}
 	FILE *f = fopen(path, "a");
 	if (!f) {
