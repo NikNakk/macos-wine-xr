@@ -1162,15 +1162,14 @@ back to direct mode:
   process opens.
 
 So the compositor never gets as far as drawing an overlay, under any
-driver. The likeliest gate is the HMD render pose, which the compositor
-already produces as `TrackingResult_Uninitialized` under Wine, null driver
-included (see "the HMD render pose is invalid under Wine"). A compositor
-without a valid head pose has nowhere to place overlays or the dashboard,
-while it can still dim the scene and re-project the app's frames. Not yet
-proved.
+driver. The invalid HMD render pose (see "the HMD render pose is invalid
+under Wine") is not the gate: render poses are valid in virtual mode (Home
+needs no pose fix there), and overlays were missing in virtual mode too.
+The renderer is not the cause either, so the D3DMetal comparison is no
+longer needed.
 
-Next: find where vrcompositor's render pose turns invalid. The renderer is
-not the cause, so the D3DMetal comparison is no longer needed.
+Next: see what the compositor's threads are doing while overlays are shown,
+looking for an overlay or system-layer thread that is stuck.
 
 ### Next steps
 
