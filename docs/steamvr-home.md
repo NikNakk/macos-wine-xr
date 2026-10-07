@@ -1026,6 +1026,31 @@ Monado service remaining. Valve's OpenVR DLL and the original SteamVR settings
 were verified restored. The wrapper retry is no longer running. The user will
 inspect the Steam issue later; the bug-report draft remains unsubmitted.
 
+### Virtual mode on the PS VR2 with the compositor in the service, 2026-10-07
+
+Two Monado client bugs meant virtual mode had only ever worked with the
+compositor in vrserver (`XRT_MACOS_CLIENT_COMPOSITOR=1`):
+- Without the hosted compositor, the IPC client never copied the display
+  layout, so XR_MNDX_display_distortion was refused ("View 0 is rotated")
+  and the driver fell back to direct mode (`3a3afbf2a`).
+- Its placeholder distortion then replaced the IPC call with an identity,
+  so SteamVR drew with no lens correction. The image was undistorted and
+  felt locked to the eyes (`2f93a1e43`).
+
+The driver now logs the display layout and distortion samples at start-up
+(`80921a1`). For the PS VR2, the left eye's centre row maps 0.5 to 0.608,
+and its corner maps to (−1.7, −1.7). Identity values mean the client is not
+asking the service.
+
+The service and client must be built from the same commit. Isolated mode
+leaves `IPC_IGNORE_VERSION` unset, so a mismatch shows as "xrCreateInstance
+failed: -51".
+
+On the PS VR2 with CrossOver and msync, and the compositor in the service,
+virtual mode looks right and tracks the head. Half-Life: Alyx was more
+playable in virtual mode than in direct mode at the same commit, though
+still CPU-limited at 120 Hz.
+
 ### Next steps
 
 - Run the general guard against a reproducible live cycle, on Windows or with
