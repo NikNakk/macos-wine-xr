@@ -644,6 +644,11 @@ Home, and `tools/openvr_probe` for 14 s. CPU is per process, over 8 s.
 | 11.10 | in service | mostly 90, dips to 28 | 36% | 52% | 47% |
 | CrossOver, msync on | in service | 90 throughout | 35% | 33% | 49% |
 
+Correction: the two "in service" rows ran in direct mode, not virtual. With
+the compositor in the service, Monado's IPC client did not copy the display
+description, so XR_MNDX_display_distortion was refused ("View 0 is rotated").
+Monado commit `3a3afbf2a` fixes this; those rows need repeating.
+
 "In vrserver" means `XRT_MACOS_CLIENT_COMPOSITOR=1`, which this machine sets
 globally with `launchctl setenv`. The simulated service paces at 90 Hz.
 
