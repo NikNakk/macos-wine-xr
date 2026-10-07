@@ -683,11 +683,160 @@ put SteamVR into safe mode. The launcher clears `blocked_by_safe_mode`, but
 vrserver blocks the driver once more from its saved crash timestamp; the
 next start loads it again.
 
+### Home main-thread fault captured: Workshop dependency recursion, 2026-10-07
+
+The termination investigation now has a concrete fault, superseding the
+unqualified missing-main-thread and incomplete-Steam-IPC hypotheses above.
+This was a simulated-only run; no PS VR2 hardware was used.
+
+Source: macos-wine-xr worktree `03c7a73f83a1c08ed005ee1b9452890f23b4f85f`.
+Wine 11.10, the existing SteamVR/DXMT prefix and mwxr driver, with matching
+Monado simulated service and x86_64 client tags `v25.1.0-2151-g6b828a9ec`.
+The decisive run used `XRT_MACOS_CLIENT_COMPOSITOR=0`. Home's `client.dll`
+SHA-256 was `c331ca4fc37723dd496d06930049a5f847433aa169b70943a4511b080fa16f96`.
+
+An automated Windows debugger attached before Home finished startup. It
+armed `ntdll!RtlExitUserThread`, `ntdll!NtTerminateThread` and
+`kernelbase!TerminateThread`, recorded debugger thread-exit events, and sampled
+the original application thread. Normal helper-thread exits were captured
+with zero status and their caller stacks, demonstrating that the termination
+capture worked. No termination call for Home's original thread was recorded
+before the fault.
+
+In the decisive run Home was Windows PID `0x0fe0`, original TID `0x0fe4`:
+
+- At debugger elapsed 51.335 s, the main thread was inside `steamclient64.dll`
+  beneath repeated `client.dll+0x4f1a1a` frames.
+- At 53.614 s, that thread raised first-chance `0xc00000fd`
+  (`STATUS_STACK_OVERFLOW`), at `kernelbase.dll+0x681d9`.
+- Wine then logged a Rosetta synchronous-exception error. The native failure
+  and a subsequent suspension attempt prevented a complete thread-exit trace;
+  this run does not establish how the final thread disappearance is reported.
+- Reading the retained main-stack memory found **8,008** occurrences of the
+  recursive return address. Frames were 128 bytes apart, with the same object
+  pointer and alternating saved item IDs **3149046643** and **2289310332**.
+
+Disassembly identifies `client.dll+0x4f14f0` as
+`CWorkshopContentManager::GetItemStateAndDownloadIfRequested`, using its
+referenced assertion strings (`steamtours_workshop.cpp`). At `+0x4f1a15` it
+calls itself while traversing a cached list of dependent Workshop items;
+`+0x4f1a1a` is the return address. The saved item arguments were decoded from
+the function's actual prologue, rather than inferred from Steam IPC traffic.
+This is strong evidence of a Workshop dependency cycle in Home's cached
+traversal data, causing stack exhaustion. It explains why the previous Steam
+IPC loop was seen: each recursive call queries item state through Steam.
+The follow-up below confirms the same cycle in published metadata. The
+recursion does not implicate the Wine XR proxy or mwxr frame transport.
+
+The OpenVR shim logged sparse pose calls and zero submits in its emitted
+windows during this run. The previously observed single visible frame was not
+independently confirmed here; do not use this run as visual rendering proof.
+An initial high-overhead relay run and a manual-launch repeat did not reach
+the same fault and are not validation of continuous rendering.
+
+Evidence in the Monado workspace:
+
+- `.build/steamvr-home-termination/clean-trace.log`
+- `.build/steamvr-home-termination/workshop-stack-memory.log`
+- `.build/steamvr-home-termination/client-recursion.asm`
+- `.build/steamvr-home-termination/trace_threads.cpp` (temporary diagnostic)
+- `.build/steamvr-dxmt/run-mwxr-20261007-071337/`
+
+### Workshop metadata and exclusion test, 2026-10-07
+
+The public Steam Workshop pages independently confirm reciprocal requirements:
+
+- [Aperture Focus Glass Assets (3149046643)](https://steamcommunity.com/sharedfiles/filedetails/?id=3149046643)
+  requires item 2289310332.
+- [Aperture Focus Glass Environment (2289310332)](https://steamcommunity.com/sharedfiles/filedetails/?id=2289310332)
+  requires item 3149046643.
+
+Saved HTML is `item-3149046643.html` and `item-2289310332.html` in the
+termination evidence directory. Steam's `workshop_log.txt` reported zero
+installed, needed, or subscribed items for AppID 250820; there was no local
+`steamapps/workshop` directory. Home therefore encounters this cycle while
+querying browsable Workshop metadata, even without subscribing to these items.
+Removing local downloads or subscriptions is not an applicable workaround in
+this prefix.
+
+A repeat with the same simulated runtime excluded only these two IDs in
+Home's process memory. The temporary debugger validates the recorded function
+prologue, routes matching published IDs to an unavailable-state result, and
+executes the original function for all other IDs. This is a diagnostic patch
+specific to the recorded DLL, not a supported Home setting or a durable fix.
+
+Run: `.build/steamvr-dxmt/run-mwxr-20261007-073405/`;
+trace: `.build/steamvr-home-termination/exclusion-trace.log`.
+Home was PID `0x0410`, original TID `0x0414`. The debugger attached at elapsed
+43.652 s, sampled the original main thread alive through 155.748 s, and
+restored the original function on successful detach after its 120-second
+observation period. No stack-overflow exception occurred. The OpenVR shim
+logged continuous left/right submissions through this period, with no Submit
+errors. Across the complete run, including continued operation after debugger
+detach, emitted windows recorded **77,334 submissions per eye**, zero Submit
+errors. Some windows exceeded 100 submissions/s; this does not establish
+physical presentation rate or pacing quality. Pose logs still reported invalid
+HMD poses in this simulated setup. No headset rendering was assessed.
+
+Excluding the cycle restored sustained submission, strongly connecting Home's
+failure to its unguarded Workshop dependency traversal. Restoring the function
+on detach did not immediately retrigger the failure in this already-initialized
+process; this is not a clean-start baseline with the cycle enabled.
+
+All test processes were stopped. SteamVR settings and Valve's OpenVR DLL were
+restored; `client.dll` retained the SHA-256 above. No Workshop subscriptions,
+downloaded content, or Home binaries were changed persistently. A durable
+workaround or upstream cycle fix remains to be implemented.
+
+### Isolated Steam UGC probe, 2026-10-07
+
+`tools/workshop_probe/main.cpp` now retrieves the same items independently of
+Home, OpenVR, the Wine XR proxy and Monado. It dynamically loads Home's Steam
+API DLL under Wine 11.10, uses AppID 250820 and Home-matching UGC013/Utils009
+interfaces, and queries state, details and children. Traversal tracks visited
+nodes and the active path, with request/graph limits, so a cycle is reported
+rather than recursively overflowing. It does not subscribe or download.
+Build and repeat instructions are in `tools/workshop_probe/README.md`.
+
+Uncached queries returned success (`EResult=1`, `cached=0`) in 279 and 362 ms.
+Both items returned state flags 0, one child each, and the exact reciprocal
+IDs found on Home's stack. Cache-allowed queries returned the same data with
+`cached=1`, in 9 and 3 ms. A second fresh run verified the final probe.
+All successful probes completed normally and reported the two-node cycle.
+Thus neither a stuck Steam call nor a cache-only fabricated edge is needed to
+reproduce the dependency graph; Home adds the unbounded recursive traversal.
+This does not test file downloads or other Steam client implementations.
+
+Logs: `.build/steamvr-workshop-probe/fresh.log`, `cache-allowed.log` and
+`fresh-repeat.log`. No SteamVR processes or simulated runtime were started for
+these probes. The Steam client was stopped after testing.
+
+### Native Windows baseline and remaining attribution, 2026-10-07
+
+The user reports Home boots successfully on their Windows XPS13, with PS VR2
+tracking and a null display because the laptop lacks the required DisplayPort
+connection. This is a useful application baseline; binary hashes and the UGC
+probe results on that machine have not yet been compared with Wine.
+
+The tests above establish a real published cycle, a recursive main-thread stack
+overflow in the Wine setup, and recovery when those IDs are excluded. They do
+not establish why native Windows avoids the failing traversal. Home's internal
+metadata population, callback processing/order, application state, or a Wine
+compatibility difference remain possible. Do not assume installed items skip
+the traversal, or infer a platform-independent Home defect from the metadata
+probe alone. Run the standalone probe on Windows with that installation's API
+DLL, compare Home/API hashes and item states, then trace Home's internal
+traversal if the inputs match. Native Windows instructions are included with
+the probe.
+
 ### Next steps
 
+- Resolve the published Workshop cycle or implement a maintainable exclusion/
+  cycle guard before revisiting Home's pose flags or frame transport.
 - PS VR2 run of the CrossOver rig, with the compositor in the service and in
   vrserver.
-- Follow Home's Steam IPC loop under CrossOver.
+- Compare the Workshop recursion under CrossOver if it remains after resolving
+  the dependency/cache issue.
 - PS VR2 run of virtual mode. It needs Monado built from
   `claude/display-distortion-mndx` with
   `-DXRT_FEATURE_OPENXR_MNDX_DISPLAY_DISTORTION=ON`, for both the service and
