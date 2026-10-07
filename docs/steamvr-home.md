@@ -1146,8 +1146,31 @@ Steam's web helper also logs `Failed to create VR overlay for browser
 valve.steam.gamepadui.mainmenu` (`BOpenVRInitialized` false). That affects
 only the dashboard's Steam pages; the probe's overlays fail without it.
 
-Next: log DXMT's shared-resource and unknown-interface paths inside
-vrcompositor, or compare with GPTK's D3DMetal.
+DXMT shared-resource logging (DXMT `95b92f5`: `DXMT_LOG_LEVEL=debug`,
+`DXMT_LOG_PID=1`), in two simulated runs on the 11.10 rig, both of which fell
+back to direct mode:
+- No share, import or keyed mutex call failed in any process.
+- The compositor creates a texture for each raw and file overlay (64x64,
+  with initial data, plus 300x300 and 16x16 ones from the dashboard) and
+  takes a shared handle for each, but never imports any of them.
+- The probe's client creates an sRGB copy of the green texture and shares
+  it, and no process ever opens it.
+- At start-up, the compositor's render device does import the textures its
+  loader created (the skybox and others) and the driver's six eye images.
+  So importing works; overlays are simply never fetched for drawing.
+- The compositor creates two shared 1308x1472 "systemlayer" textures that no
+  process opens.
+
+So the compositor never gets as far as drawing an overlay, under any
+driver. The likeliest gate is the HMD render pose, which the compositor
+already produces as `TrackingResult_Uninitialized` under Wine, null driver
+included (see "the HMD render pose is invalid under Wine"). A compositor
+without a valid head pose has nowhere to place overlays or the dashboard,
+while it can still dim the scene and re-project the app's frames. Not yet
+proved.
+
+Next: find where vrcompositor's render pose turns invalid. The renderer is
+not the cause, so the D3DMetal comparison is no longer needed.
 
 ### Next steps
 
