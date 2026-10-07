@@ -401,6 +401,10 @@ public:
 		props->SetStringProperty(container, vr::Prop_ModelNumber_String, xr_.systemName.c_str());
 		props->SetStringProperty(container, vr::Prop_ManufacturerName_String, xr_.runtimeName.c_str());
 		props->SetStringProperty(container, vr::Prop_RenderModelName_String, "generic_hmd");
+		// Home spawns the avatar's hands for the controllers the headset expects. Unset, it falls back to a
+		// gamepad and, if our controllers attach later (PS Sense tracking takes a while to lock), never
+		// spawns hands for them.
+		props->SetStringProperty(container, vr::Prop_ExpectedControllerType_String, "oculus_touch");
 		props->SetFloatProperty(container, vr::Prop_UserIpdMeters_Float, ipd);
 		props->SetFloatProperty(container, vr::Prop_UserHeadToEyeDepthMeters_Float, 0.0f);
 		props->SetFloatProperty(container, vr::Prop_DisplayFrequency_Float, frequency_);
