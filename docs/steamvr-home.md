@@ -1076,6 +1076,36 @@ server's early exit unregisters every object it registered. Rebuild
 12.9 million times in 60 s; the patched build logged none, used a fifth of the
 memory, and satisfied 68% more waits. The keyed-mutex test still passes.
 
+### Home's hands and the invisible dashboard, 2026-10-07
+
+Home hides its hands and pointer while SteamVR's dashboard is open. At start-up,
+SteamVR opens the dashboard with Steam's interface as its main panel
+(`valve.steam.gamepadui.main`, "InitialOverlayToAutoShow"). Home's console then
+shows `Received event: 502, Dashboard Showing: 1` (`VREvent_DashboardActivated`)
+with no later 503. Under Wine the dashboard never draws: the view dims, and no
+panel appears, not even SteamVR's own bar. So the hands stay hidden behind a
+dashboard you can't see. The PS button (`/input/system/click`) toggles it,
+and macOS also opens Apple Arcade on that button.
+
+Fixed on the way: the headset now reports `Prop_ExpectedControllerType_String`
+`oculus_touch`. Before that, Home started in gamepad mode when the controllers
+attached late, logging the fallback hundreds of times a second.
+
+Steam's web helper in the CrossOver prefix is a wrapper that adds
+`--disable-gpu --single-process`. With Valve's helper restored
+(`steamvr-crossover/steamwebhelper-gpu.zsh on`), Steam does not start. ANGLE
+cannot create window surfaces: DXMT refuses a swap chain for another process's
+window ("cross-process swapchain not supported yet", `d3d11_swapchain.cpp`),
+and Chromium's GPU process presents for the browser process. The wrapper is
+back (`… off`). Cross-process swap chains would need remote-layer hosting
+in DXMT. That would make Steam's windows faster, but it is not shown to be
+what keeps the dashboard dark. SteamVR's web helper runs with a GPU process
+and its bar is also missing, so overlay textures crossing processes are the
+next suspect.
+
+Logging added for this: `home-console.log` in each run (Home's VConsole,
+`tools/vconsole_capture`), and the driver's skeleton update results.
+
 ### Next steps
 
 - Run the general guard against a reproducible live cycle, on Windows or with
