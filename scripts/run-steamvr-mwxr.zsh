@@ -22,6 +22,9 @@
 #                           openvr-shim.log; Valve's openvr_api.dll is restored on exit)
 #   MWXR_OPENVR_SHIM_APP_DIRS='Half-Life Alyx/game/bin/win64'  also install it in these
 #                           folders (colon-separated, relative to steamapps/common)
+#   MWXR_CAFFEINATE=0       let macOS sleep the displays during the run (by default
+#                           they stay awake: display sleep turns the headset's display
+#                           off, and a service with XRT_MACOS_EXIT_ON_DISPLAY_LOSS=1 exits)
 #
 # Required:
 #   MWXR_STEAMVR_ROOT        built by build-current-dxmt.zsh, with a prefix
@@ -84,6 +87,8 @@ export DXMT_LOG_LEVEL=${DXMT_LOG_LEVEL:-info}
 export DXMT_LOG_PATH=${DXMT_LOG_PATH:-Z:${root}/dxmt-logs}
 mkdir -p "${root}/dxmt-logs"
 logs=${root}/run-mwxr-$(date +%Y%m%d-%H%M%S); mkdir -p "${logs}"; print "Logs: ${logs}"
+# Keep the displays (the headset's included) awake until this script exits.
+[[ ${MWXR_CAFFEINATE:-1} == 1 ]] && caffeinate -d -w $$ &!
 vrstartup=${steam_dir}/steamapps/common/SteamVR/bin/win64/vrstartup.exe
 
 # Steam first (it needs no XR environment), so SteamVR and Home can reach it.
