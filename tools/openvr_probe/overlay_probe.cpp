@@ -121,6 +121,11 @@ main(int argc, char **argv)
 		return 1;
 	}
 	vr::IVROverlay *overlay = vr::VROverlay();
+	if (!overlay) {
+		Log("No IVROverlay (is the compositor running?)\n");
+		vr::VR_Shutdown();
+		return 1;
+	}
 
 	vr::VROverlayHandle_t raw = MakeOverlay("mwxr.probe.raw", "probe raw (red)", -0.5f);
 	vr::VROverlayHandle_t texture = MakeOverlay("mwxr.probe.texture", "probe texture (green)", 0.0f);
