@@ -6,6 +6,7 @@
 		"zeroCopy": true,
 		"displayMode": "direct",
 		"virtualDisplayDumpDir": "",
+		"virtualDisplayDumpEvery": 0,
 		"playAreaSize": 0.0,
 		"virtualPhotonRefreshes": 1.0,
 		"fingerCurl": true

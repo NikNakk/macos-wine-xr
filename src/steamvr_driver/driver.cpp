@@ -71,6 +71,51 @@ Compose(const XrPosef &a, const XrPosef &b)
 	return {Multiply(a.orientation, b.orientation), {a.position.x + p.x, a.position.y + p.y, a.position.z + p.z}};
 }
 
+static XrPosef
+Inverse(const XrPosef &a)
+{
+	XrQuaternionf q = {-a.orientation.x, -a.orientation.y, -a.orientation.z, a.orientation.w};
+	XrVector3f p = Rotate(q, a.position);
+	return {q, {-p.x, -p.y, -p.z}};
+}
+
+// Recentring: SteamVR's world from the runtime's space, applied to every device
+// pose through DriverPose_t's world-from-driver transform. Set by holding the
+// right controller's Options button (as on a PS5), and identity until then.
+static std::mutex g_recentreMutex;
+static XrPosef g_worldFromDriver = {{0, 0, 0, 1}, {0, 0, 0}};
+
+static XrPosef
+WorldFromDriver()
+{
+	std::lock_guard<std::mutex> lock(g_recentreMutex);
+	return g_worldFromDriver;
+}
+
+static void
+ApplyWorldFromDriver(vr::DriverPose_t &pose)
+{
+	XrPosef world = WorldFromDriver();
+	pose.qWorldFromDriverRotation = ToQuat(world.orientation);
+	pose.vecWorldFromDriverTranslation[0] = world.position.x;
+	pose.vecWorldFromDriverTranslation[1] = world.position.y;
+	pose.vecWorldFromDriverTranslation[2] = world.position.z;
+}
+
+// Make the head's current horizontal position the origin and its heading
+// forward (-Z), keeping height and the floor.
+static void
+RecentreOn(const XrPosef &head)
+{
+	XrVector3f forward = Rotate(head.orientation, {0, 0, -1});
+	float yaw = atan2f(-forward.x, -forward.z); // 0 when facing -Z
+	XrQuaternionf rotation = {0, sinf(-yaw / 2), 0, cosf(-yaw / 2)};
+	XrVector3f position = Rotate(rotation, {head.position.x, 0, head.position.z});
+	std::lock_guard<std::mutex> lock(g_recentreMutex);
+	g_worldFromDriver = {rotation, {-position.x, 0, -position.z}};
+	Log("Recentred: heading %.1f deg, position %.2f %.2f\n", yaw * 57.29578f, head.position.x, head.position.z);
+}
+
 static vr::HmdMatrix34_t
 ToMatrix(const XrPosef &pose)
 {
@@ -267,6 +312,7 @@ public:
 			pose.qRotation = {1, 0, 0, 0};
 			pose.result = vr::TrackingResult_Running_OutOfRange;
 		}
+		ApplyWorldFromDriver(pose);
 		lastPose_ = pose;
 		vr::VRServerDriverHost()->TrackedDevicePoseUpdated(id, pose, sizeof(pose));
 
@@ -366,6 +412,7 @@ public:
 		vr::VRSettings()->GetString(kSettingsSection, "displayMode", mode, sizeof(mode));
 		virtualDisplay_ = !strcmp(mode, "virtual") && xr_.hasDisplayDistortion;
 		vr::VRSettings()->GetString(kSettingsSection, "virtualDisplayDumpDir", dumpDir_, sizeof(dumpDir_));
+		dumpEvery_ = vr::VRSettings()->GetInt32(kSettingsSection, "virtualDisplayDumpEvery");
 		Log("Display mode: %s%s\n", virtualDisplay_ ? "virtual display" : "direct",
 		    !strcmp(mode, "virtual") && !virtualDisplay_ ? " (virtual requested, runtime lacks display distortion)"
 		                                                : "");
@@ -718,7 +765,8 @@ public:
 			out.texture = texture;
 			out.box = {(UINT)lroundf(u0 * desc.Width), (UINT)lroundf(v0 * desc.Height), 0,
 			           (UINT)lroundf(u1 * desc.Width), (UINT)lroundf(v1 * desc.Height), 1};
-			out.pose = Compose(ToPose(in.mHmdPose), xr_.eyeInHead[eye]);
+			// SteamVR renders in its world; the runtime composites in its own space.
+			out.pose = Compose(Compose(Inverse(WorldFromDriver()), ToPose(in.mHmdPose)), xr_.eyeInHead[eye]);
 			if (!FovFromProjection(in.mProjection, out.fov)) {
 				out.fov = xr_.fov[eye];
 			}
@@ -726,7 +774,7 @@ public:
 		pending_.push_back(layer);
 		if (pending_.size() == 1) {
 			lastPrediction_ = perEye[0].flHmdPosePredictionTimeInSecondsFromNow;
-			lastRenderHead_ = ToPose(perEye[0].mHmdPose).orientation;
+			lastRenderHead_ = Compose(Inverse(WorldFromDriver()), ToPose(perEye[0].mHmdPose)).orientation;
 		}
 	}
 
@@ -825,7 +873,9 @@ public:
 			xr_.Present({});
 			return;
 		}
-		if (dumpDir_[0] && (presentCount_ == 300 || presentCount_ == 1200)) {
+		// Frames 300 and 1200, and with virtualDisplayDumpEvery every that many frames (at most 20 dumps).
+		if (dumpDir_[0] && (presentCount_ == 300 || presentCount_ == 1200 ||
+		                    (dumpEvery_ > 0 && presentCount_ % dumpEvery_ == 0 && presentCount_ / dumpEvery_ <= 20))) {
 			DumpBackbuffer(backbuffer, info->nFrameId);
 		}
 		xr_.PresentDisplayImage(backbuffer);
@@ -1107,6 +1157,22 @@ private:
 			if (xr_.UpdateHands(hands)) {
 				controllers_[0]->Update(hands[0]);
 				controllers_[1]->Update(hands[1]);
+				// Hold the right Options button for a second to recentre.
+				auto pressed = std::chrono::steady_clock::now();
+				if (!hands[1].optionsClick) {
+					optionsSince_ = {};
+					recentredThisPress_ = false;
+				} else if (optionsSince_ == std::chrono::steady_clock::time_point{}) {
+					optionsSince_ = pressed;
+				} else if (!recentredThisPress_ && pressed - optionsSince_ >= std::chrono::seconds(1)) {
+					XrPosef head;
+					XrVector3f linear, angular;
+					bool positionValid;
+					if (xr_.LocateHeadNow(head, linear, angular, positionValid)) {
+						RecentreOn(head);
+					}
+					recentredThisPress_ = true;
+				}
 				auto now = std::chrono::steady_clock::now();
 				if (now - lastInputLog_ > std::chrono::seconds(5)) {
 					lastInputLog_ = now;
@@ -1157,6 +1223,7 @@ private:
 			out.poseIsValid = false;
 			out.result = vr::TrackingResult_Running_OutOfRange;
 		}
+		ApplyWorldFromDriver(out);
 		lastPose_ = out;
 		// Worn while the session runs; repeated because SteamVR may not be
 		// listening yet when the HMD activates.
@@ -1184,7 +1251,8 @@ private:
 	std::atomic<bool> running_ = false;
 	std::thread poseThread_;
 	vr::DriverPose_t lastPose_ = {};
-	std::chrono::steady_clock::time_point lastPoseLog_, lastInputLog_;
+	std::chrono::steady_clock::time_point lastPoseLog_, lastInputLog_, optionsSince_;
+	bool recentredThisPress_ = false;
 
 	std::mutex texturesMutex_;
 	std::map<vr::SharedTextureHandle_t, TextureRef> textures_;
@@ -1195,6 +1263,7 @@ private:
 	bool virtualDisplay_ = false;
 	bool loggedDistortionFailure_ = false;
 	char dumpDir_[512] = {};
+	int32_t dumpEvery_ = 0;
 	std::vector<std::pair<vr::SharedTextureHandle_t, ID3D11Texture2D *>> backbuffers_;
 	uint64_t presentCount_ = 0, vsyncCount_ = 0;
 	LONGLONG lastVsync_ = 0;

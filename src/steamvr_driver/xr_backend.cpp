@@ -46,7 +46,7 @@ XrBackend::Init(std::string &error)
 		return false;
 	}
 	// Optional: without it, the current XrTime is estimated from the frame loop.
-	const char *required[3] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
+	const char *required[4] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
 	uint32_t enabledCount = 1;
 	bool timeConversion = HasExtension(extensions, XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME);
 	if (timeConversion) {
@@ -56,6 +56,12 @@ XrBackend::Init(std::string &error)
 	hasDisplayDistortion = HasExtension(extensions, XR_MNDX_DISPLAY_DISTORTION_EXTENSION_NAME);
 	if (hasDisplayDistortion) {
 		required[enabledCount++] = XR_MNDX_DISPLAY_DISTORTION_EXTENSION_NAME;
+	}
+	// Optional: the PS Sense controllers' own profile, whose Options button
+	// (absent from the Touch profile) recentres.
+	hasPsvr2Interaction = HasExtension(extensions, "XR_MNDX_psvr2_interaction");
+	if (hasPsvr2Interaction) {
+		required[enabledCount++] = "XR_MNDX_psvr2_interaction";
 	}
 
 	XrInstanceCreateInfo instanceInfo = {XR_TYPE_INSTANCE_CREATE_INFO};
@@ -265,6 +271,7 @@ XrBackend::CreateActions(std::string &error)
 	    {&upperClick_, "upper_click", XR_ACTION_TYPE_BOOLEAN_INPUT},
 	    {&upperTouch_, "upper_touch", XR_ACTION_TYPE_BOOLEAN_INPUT},
 	    {&menuClick_, "menu_click", XR_ACTION_TYPE_BOOLEAN_INPUT},
+	    {&optionsClick_, "options_click", XR_ACTION_TYPE_BOOLEAN_INPUT},
 	    {&thumbrestTouch_, "thumbrest_touch", XR_ACTION_TYPE_BOOLEAN_INPUT},
 	    {&haptic_, "haptic", XR_ACTION_TYPE_VIBRATION_OUTPUT},
 	};
@@ -323,6 +330,38 @@ XrBackend::CreateActions(std::string &error)
 	         {thumbrestTouch_, "/user/hand/right/input/thumbrest/touch"},
 	         {haptic_, "/user/hand/left/output/haptic"},
 	         {haptic_, "/user/hand/right/output/haptic"}});
+	if (hasPsvr2Interaction) {
+		// Preferred by the runtime for PS Sense controllers: cross/circle as A/B,
+		// square/triangle as X/Y, the left PS button as the system (dashboard)
+		// button, and the right Options button.
+		suggest("/interaction_profiles/mndx/pssense_controller_mndx",
+		        {{gripPose_, "/user/hand/left/input/grip/pose"},
+		         {gripPose_, "/user/hand/right/input/grip/pose"},
+		         {trigger_, "/user/hand/left/input/trigger/value"},
+		         {trigger_, "/user/hand/right/input/trigger/value"},
+		         {triggerTouch_, "/user/hand/left/input/trigger/touch"},
+		         {triggerTouch_, "/user/hand/right/input/trigger/touch"},
+		         {squeeze_, "/user/hand/left/input/squeeze/click"},
+		         {squeeze_, "/user/hand/right/input/squeeze/click"},
+		         {thumbstick_, "/user/hand/left/input/thumbstick"},
+		         {thumbstick_, "/user/hand/right/input/thumbstick"},
+		         {thumbstickClick_, "/user/hand/left/input/thumbstick/click"},
+		         {thumbstickClick_, "/user/hand/right/input/thumbstick/click"},
+		         {thumbstickTouch_, "/user/hand/left/input/thumbstick/touch"},
+		         {thumbstickTouch_, "/user/hand/right/input/thumbstick/touch"},
+		         {lowerClick_, "/user/hand/left/input/square_mndx/click"},
+		         {lowerClick_, "/user/hand/right/input/cross_mndx/click"},
+		         {lowerTouch_, "/user/hand/left/input/square_mndx/touch"},
+		         {lowerTouch_, "/user/hand/right/input/cross_mndx/touch"},
+		         {upperClick_, "/user/hand/left/input/triangle_mndx/click"},
+		         {upperClick_, "/user/hand/right/input/circle_mndx/click"},
+		         {upperTouch_, "/user/hand/left/input/triangle_mndx/touch"},
+		         {upperTouch_, "/user/hand/right/input/circle_mndx/touch"},
+		         {menuClick_, "/user/hand/left/input/system/click"},
+		         {optionsClick_, "/user/hand/right/input/options_mndx/click"},
+		         {haptic_, "/user/hand/left/output/haptic"},
+		         {haptic_, "/user/hand/right/output/haptic"}});
+	}
 	suggest("/interaction_profiles/khr/simple_controller",
 	        {{gripPose_, "/user/hand/left/input/grip/pose"},
 	         {gripPose_, "/user/hand/right/input/grip/pose"},
@@ -396,6 +435,7 @@ XrBackend::UpdateHands(HandState hands[2])
 		out.upperClick = boolean(upperClick_);
 		out.upperTouch = boolean(upperTouch_);
 		out.menuClick = boolean(menuClick_);
+		out.optionsClick = boolean(optionsClick_);
 		out.thumbrestTouch = boolean(thumbrestTouch_);
 
 		XrSpaceVelocity velocity = {XR_TYPE_SPACE_VELOCITY};
