@@ -75,3 +75,44 @@ inline const vr::VRBoneTransform_t kRightOpenHand[kHandBoneCount] = {
     {{0.038340f, -0.090987f, 0.082579f, 1.000000f}, {-0.183037f, 0.736793f, 0.634757f, 0.143936f}},
     {{0.031806f, -0.087214f, 0.121015f, 1.000000f}, {-0.003659f, 0.758407f, 0.639342f, 0.126678f}},
 };
+
+#include <cmath>
+
+// Finger curl on top of the open hand. Each joint of a finger turns about one
+// local axis: +Z for the fingers, and for the thumb the axis its open pose
+// already bends about. Both were found by forward kinematics on the open
+// poses (fingertips move towards the palm); the same axes suit both hands.
+struct HandCurl
+{
+	float thumb, index, middle, ring, pinky; // 0 open .. 1 closed
+};
+
+inline vr::HmdQuaternionf_t
+QuatMultiply(const vr::HmdQuaternionf_t &a, const vr::HmdQuaternionf_t &b)
+{
+	return {a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z, a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+	        a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x, a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w};
+}
+
+inline void
+CurlHand(const vr::VRBoneTransform_t *open, const HandCurl &curl, vr::VRBoneTransform_t *out)
+{
+	for (uint32_t i = 0; i < kHandBoneCount; i++) {
+		out[i] = open[i];
+	}
+	auto bend = [&](uint32_t bone, float x, float y, float z, float degrees) {
+		float half = degrees * 3.14159265f / 360.0f, s = std::sin(half);
+		out[bone].orientation = QuatMultiply(out[bone].orientation, {std::cos(half), x * s, y * s, z * s});
+	};
+	// Proximal, middle and distal joints of each finger (bones 7-9, 12-14, ...).
+	const float fingers[4] = {curl.index, curl.middle, curl.ring, curl.pinky};
+	const float maxDegrees[3] = {75.0f, 90.0f, 60.0f};
+	for (uint32_t f = 0; f < 4; f++) {
+		for (uint32_t j = 0; j < 3; j++) {
+			bend(7 + 5 * f + j, 0.0f, 0.0f, 1.0f, fingers[f] * maxDegrees[j]);
+		}
+	}
+	// Thumb proximal and distal joints (bones 3 and 4).
+	bend(3, 0.0f, -0.522f, 0.853f, curl.thumb * 35.0f);
+	bend(4, 0.0f, -0.522f, 0.853f, curl.thumb * 50.0f);
+}

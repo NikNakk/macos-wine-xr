@@ -184,8 +184,7 @@ public:
 		thumbrestTouch_ = boolean("/input/thumbrest/touch");
 		input->CreateHapticComponent(container, "/output/haptic", &haptic_);
 		// Home draws its hands and pointer from the skeleton; without one its
-		// bindings fail ("invalid device path for skeleton output"). An open
-		// hand for now, with no finger curl.
+		// bindings fail ("invalid device path for skeleton output").
 		vr::EVRInputError skeletonError = input->CreateSkeletonComponent(
 		    container, left ? "/input/skeleton/left" : "/input/skeleton/right",
 		    left ? "/skeleton/hand/left" : "/skeleton/hand/right", "/pose/raw", vr::VRSkeletalTracking_Estimated,
@@ -281,7 +280,17 @@ public:
 		input->UpdateBooleanComponent(systemClick_, state.menuClick, 0);
 		input->UpdateBooleanComponent(thumbrestTouch_, state.thumbrestTouch, 0);
 		if (skeleton_ != vr::k_ulInvalidInputComponentHandle) {
-			const vr::VRBoneTransform_t *bones = hand_ == 0 ? kLeftOpenHand : kRightOpenHand;
+			// Curl as Touch controllers estimate it: the index finger from the
+			// trigger (slightly bent when only touching it), the other fingers
+			// from the grip, and the thumb when it rests on a control.
+			HandCurl curl = {};
+			curl.index = std::max(state.trigger, state.triggerTouch ? 0.25f : 0.0f);
+			curl.middle = curl.ring = curl.pinky = state.squeeze;
+			bool thumbDown = state.thumbstickTouch || state.thumbstickClick || state.lowerTouch ||
+			                 state.lowerClick || state.upperTouch || state.upperClick || state.thumbrestTouch;
+			curl.thumb = thumbDown ? 0.5f : 0.0f;
+			vr::VRBoneTransform_t bones[kHandBoneCount];
+			CurlHand(hand_ == 0 ? kLeftOpenHand : kRightOpenHand, curl, bones);
 			input->UpdateSkeletonComponent(skeleton_, vr::VRSkeletalMotionRange_WithController, bones,
 			                               kHandBoneCount);
 			input->UpdateSkeletonComponent(skeleton_, vr::VRSkeletalMotionRange_WithoutController, bones,
