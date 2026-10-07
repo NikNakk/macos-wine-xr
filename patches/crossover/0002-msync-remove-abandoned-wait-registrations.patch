@@ -10,7 +10,7 @@
                  wake_tid( tid );
                  break;
              }
---- dlls/ntdll/unix/msync.c.orig	2026-10-07 21:53:27
+--- a/dlls/ntdll/unix/msync.c	2026-10-07 21:53:27
 +++ b/dlls/ntdll/unix/msync.c	2026-10-07 21:53:27
 @@ -377,15 +377,9 @@
      {
