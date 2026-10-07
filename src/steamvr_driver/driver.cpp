@@ -361,6 +361,10 @@ public:
 		Log("HMD '%s' active: IPD %.1f mm, %.0f Hz\n", xr_.systemName.c_str(), ipd * 1000, frequency_);
 
 		zeroCopy_ = vr::VRSettings()->GetBool(kSettingsSection, "zeroCopy");
+		virtualPhotonRefreshes_ = vr::VRSettings()->GetFloat(kSettingsSection, "virtualPhotonRefreshes");
+		if (virtualPhotonRefreshes_ < 0) {
+			virtualPhotonRefreshes_ = 1.0f;
+		}
 		poseRateHz_ = vr::VRSettings()->GetInt32(kSettingsSection, "poseRateHz");
 		if (poseRateHz_ <= 0) {
 			poseRateHz_ = 500;
@@ -784,6 +788,14 @@ public:
 			firstVsync_ = lastVsync_;
 		}
 		vsyncCount_ = 1 + (uint64_t)llround((double)(lastVsync_ - firstVsync_) / ((double)frequency.QuadPart * refresh));
+		// In virtual mode the runtime only presents SteamVR's finished image,
+		// at the next vsync, so the display time it predicts (which leaves room
+		// for its own compositor, and moves further ahead when frames are late)
+		// does not measure the photon latency. Report a fixed one instead.
+		if (virtualDisplay_) {
+			SetVsyncToPhotons(virtualPhotonRefreshes_ * refresh, refresh);
+			return sinceVsync;
+		}
 		// The prediction moves by a refresh from frame to frame, and each change
 		// of SteamVR's property shifts its pose prediction by a refresh. Check
 		// every half second, and only change it when no frame in that time
@@ -800,17 +812,21 @@ public:
 		if (vsyncToPhotons_ >= sorted[0] - tolerance && vsyncToPhotons_ <= sorted[count - 1] + tolerance) {
 			return sinceVsync;
 		}
-		photons = sorted[count / 2];
-		periods = photons / refresh + 1;
-		if (fabs(photons - vsyncToPhotons_) > tolerance && objectId_ != vr::k_unTrackedDeviceIndexInvalid) {
-			vsyncToPhotons_ = photons;
-			auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId_);
-			vr::VRProperties()->SetFloatProperty(container, vr::Prop_SecondsFromVsyncToPhotons_Float,
-			                                      (float)photons);
-			Log("Display timing: vsync to photons now %.2f ms (%.0f refreshes ahead)\n", photons * 1000,
-			    periods);
-		}
+		SetVsyncToPhotons(sorted[count / 2], refresh);
 		return sinceVsync;
+	}
+
+	void
+	SetVsyncToPhotons(double photons, double refresh)
+	{
+		if (fabs(photons - vsyncToPhotons_) <= 0.25 * refresh || objectId_ == vr::k_unTrackedDeviceIndexInvalid) {
+			return;
+		}
+		vsyncToPhotons_ = photons;
+		auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId_);
+		vr::VRProperties()->SetFloatProperty(container, vr::Prop_SecondsFromVsyncToPhotons_Float, (float)photons);
+		Log("Display timing: vsync to photons now %.2f ms (%.0f refreshes ahead)\n", photons * 1000,
+		    photons / refresh + 1);
 	}
 
 	bool
@@ -1102,6 +1118,7 @@ private:
 	uint64_t presentCount_ = 0, vsyncCount_ = 0;
 	LONGLONG lastVsync_ = 0;
 	double vsyncToPhotons_ = -1;
+	float virtualPhotonRefreshes_ = 1.0f;
 	LONGLONG firstVsync_ = 0;
 	vr::VRInputComponentHandle_t proximity_ = vr::k_ulInvalidInputComponentHandle;
 	static constexpr size_t kPhotonSamples = 60;
