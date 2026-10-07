@@ -22,6 +22,9 @@
 #                           openvr-shim.log; Valve's openvr_api.dll is restored on exit)
 #   MWXR_OPENVR_SHIM_APP_DIRS='Half-Life Alyx/game/bin/win64'  also install it in these
 #                           folders (colon-separated, relative to steamapps/common)
+#   MWXR_HOME_CONSOLE=0     do not record SteamVR Home's developer console (by default
+#                           tools/vconsole_capture writes it to the run's home-console.log;
+#                           Home listens on -vconport 29009, set in SteamVR's tools.vrmanifest)
 #   MWXR_CAFFEINATE=0       let macOS sleep the displays during the run (by default
 #                           they stay awake: display sleep turns the headset's display
 #                           off, and a service with XRT_MACOS_EXIT_ON_DISPLAY_LOSS=1 exits)
@@ -89,6 +92,13 @@ mkdir -p "${root}/dxmt-logs"
 logs=${root}/run-mwxr-$(date +%Y%m%d-%H%M%S); mkdir -p "${logs}"; print "Logs: ${logs}"
 # Keep the displays (the headset's included) awake until this script exits.
 [[ ${MWXR_CAFFEINATE:-1} == 1 ]] && caffeinate -d -w $$ &!
+# Record Home's console for the whole run (it reconnects when Home restarts).
+console_pid=
+if [[ ${MWXR_HOME_CONSOLE:-1} == 1 ]]; then
+  python3 "${repo}/tools/vconsole_capture/vconsole_capture.py" --port ${MWXR_HOME_CONSOLE_PORT:-29009} \
+    --out "${logs}/home-console.log" &!
+  console_pid=$!
+fi
 vrstartup=${steam_dir}/steamapps/common/SteamVR/bin/win64/vrstartup.exe
 
 # Whether Steam runs in this prefix: Wine names each prefix's server directory
@@ -157,6 +167,7 @@ restore_shim() {
   shim_installed=()
 }
 cleanup() {
+  [[ -n ${console_pid:-} ]] && kill ${console_pid} 2>/dev/null
   restore_shim
   [[ -n ${isolated_label} ]] && { launchctl bootout "gui/${UID}/${isolated_label}" || true; rm -rf "${isolated_dir}"; }
   return 0
