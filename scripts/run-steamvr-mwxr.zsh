@@ -91,11 +91,26 @@ logs=${root}/run-mwxr-$(date +%Y%m%d-%H%M%S); mkdir -p "${logs}"; print "Logs: $
 [[ ${MWXR_CAFFEINATE:-1} == 1 ]] && caffeinate -d -w $$ &!
 vrstartup=${steam_dir}/steamapps/common/SteamVR/bin/win64/vrstartup.exe
 
+# Whether Steam runs in this prefix: Wine names each prefix's server directory
+# after the prefix's device and inode, and its processes keep it open.
+steam_running() {
+  local server_dir=$(printf 'server-%x-%x' $(stat -f '%d %i' "${prefix}")) pid
+  for pid in $(pgrep -f 'Steam.*\\steam\.exe'); do
+    lsof -p ${pid} 2>/dev/null | /usr/bin/grep -q "/${server_dir}/" && return 0
+  done
+  return 1
+}
+
 # Steam first (it needs no XR environment), so SteamVR and Home can reach it.
-WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' -silent \
- -cef-disable-gpu -cef-disable-gpu-compositing -cef-in-process-gpu -cef-disable-sandbox -no-cef-sandbox \
- -noverifyfiles -norepairfiles > "${logs}/steam.log" 2>&1 &
-print "Started Steam; waiting ${STEAM_WAIT_S:-40} s"; sleep ${STEAM_WAIT_S:-40}
+# Not -silent: in the CrossOver prefix, Steam started that way stalls at start-up.
+if steam_running; then
+  print "Steam is already running in this prefix"
+else
+  WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' \
+   -cef-disable-gpu -cef-disable-gpu-compositing -cef-in-process-gpu -cef-disable-sandbox -no-cef-sandbox \
+   -noverifyfiles -norepairfiles > "${logs}/steam.log" 2>&1 &
+  print "Started Steam; waiting ${STEAM_WAIT_S:-40} s"; sleep ${STEAM_WAIT_S:-40}
+fi
 
 if [[ -n ${APPID:-} ]]; then
  ( sleep ${VR_WAIT_S:-60}
