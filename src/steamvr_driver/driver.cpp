@@ -291,10 +291,19 @@ public:
 			curl.thumb = thumbDown ? 0.5f : 0.0f;
 			vr::VRBoneTransform_t bones[kHandBoneCount];
 			CurlHand(hand_ == 0 ? kLeftOpenHand : kRightOpenHand, curl, bones);
-			input->UpdateSkeletonComponent(skeleton_, vr::VRSkeletalMotionRange_WithController, bones,
-			                               kHandBoneCount);
-			input->UpdateSkeletonComponent(skeleton_, vr::VRSkeletalMotionRange_WithoutController, bones,
-			                               kHandBoneCount);
+			vr::EVRInputError with = input->UpdateSkeletonComponent(
+			    skeleton_, vr::VRSkeletalMotionRange_WithController, bones, kHandBoneCount);
+			vr::EVRInputError without = input->UpdateSkeletonComponent(
+			    skeleton_, vr::VRSkeletalMotionRange_WithoutController, bones, kHandBoneCount);
+			if ((with != vr::VRInputError_None || without != vr::VRInputError_None) && !loggedSkeletonError_) {
+				Log("%s hand skeleton update rejected: %d %d\n", hand_ == 0 ? "Left" : "Right", with, without);
+				loggedSkeletonError_ = true;
+			}
+			if (++skeletonUpdates_ % 2500 == 0) { // about every 5 s at the pose rate
+				Log("%s hand skeleton: %llu updates, curl thumb %.2f index %.2f grip %.2f\n",
+				    hand_ == 0 ? "Left" : "Right", (unsigned long long)skeletonUpdates_, curl.thumb, curl.index,
+				    curl.middle);
+			}
 		}
 	}
 
@@ -307,6 +316,8 @@ private:
 	                             upperClick_ = 0, upperTouch_ = 0, systemClick_ = 0, thumbrestTouch_ = 0,
 	                             haptic_ = vr::k_ulInvalidInputComponentHandle,
 	                             skeleton_ = vr::k_ulInvalidInputComponentHandle;
+	bool loggedSkeletonError_ = false;
+	uint64_t skeletonUpdates_ = 0;
 };
 
 // SteamVR's compositor always composites into resolve textures of its own and
