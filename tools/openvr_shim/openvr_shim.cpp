@@ -10,7 +10,7 @@
 //
 // Every export forwards to Valve's DLL, renamed openvr_api_valve.dll beside
 // this one (openvr_api.def), except VR_GetGenericInterface. For
-// IVRCompositor_022 to _025 it patches the returned interface's
+// IVRCompositor_022 to _027 (Half-Life: Alyx uses 026) it patches the returned interface's
 // WaitGetPoses, GetLastPoses and GetLastPoseForTrackedDeviceIndex (vtable
 // slots 2 to 4) and Submit (slot 5; later versions insert GetSubmitTexture
 // before it), and logs the application's frame loop every 5 s to
@@ -369,7 +369,7 @@ VR_GetGenericInterface(const char *version, vr::EVRInitError *error)
 	void *result = g_getGenericInterface(version, error);
 	// Plain C++ interfaces only: "FnTable:" tables have a different layout.
 	if (result && version && !strncmp(version, "IVRCompositor_", 14) && atoi(version + 14) >= 22 &&
-	    atoi(version + 14) <= 25) {
+	    atoi(version + 14) <= 27) {
 		Patch(result, version);
 	}
 	return result;
