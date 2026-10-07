@@ -28,3 +28,10 @@ add_dependencies(openvr_probe openvr_api_import)
 target_include_directories(openvr_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../src/steamvr_driver)
 target_link_libraries(openvr_probe PRIVATE ${openvr_import} d3d11 d3dcompiler)
 target_link_options(openvr_probe PRIVATE -static)
+
+# Overlay probe (overlay_probe.exe): which overlay image paths reach the compositor.
+add_executable(overlay_probe overlay_probe.cpp)
+add_dependencies(overlay_probe openvr_api_import)
+target_include_directories(overlay_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../src/steamvr_driver)
+target_link_libraries(overlay_probe PRIVATE ${openvr_import} d3d11)
+target_link_options(overlay_probe PRIVATE -static)

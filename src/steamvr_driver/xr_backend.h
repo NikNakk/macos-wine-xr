@@ -47,6 +47,7 @@ struct HandState
 	bool lowerClick = false, lowerTouch = false; // A (right) / X (left)
 	bool upperClick = false, upperTouch = false; // B (right) / Y (left)
 	bool menuClick = false, thumbrestTouch = false;
+	bool optionsClick = false; // right Options (PS Sense profile only)
 };
 
 class XrBackend
@@ -67,6 +68,7 @@ public:
 	// XR_MNDX_display_distortion, for SteamVR's virtual-display mode in which
 	// SteamVR's compositor produces the panel image itself.
 	bool hasDisplayDistortion = false;
+	bool hasPsvr2Interaction = false;
 	XrDisplayDistortionPropertiesMNDX display = {XR_TYPE_DISPLAY_DISTORTION_PROPERTIES_MNDX};
 	bool
 	ComputeDisplayDistortion(uint32_t view, float u, float v, XrVector2f out[3]);
@@ -166,7 +168,7 @@ private:
 	XrActionSet actionSet_ = XR_NULL_HANDLE;
 	XrPath handPaths_[2] = {};
 	XrAction gripPose_ = XR_NULL_HANDLE, trigger_ = XR_NULL_HANDLE, triggerTouch_ = XR_NULL_HANDLE,
-	         squeeze_ = XR_NULL_HANDLE, thumbstick_ = XR_NULL_HANDLE, thumbstickClick_ = XR_NULL_HANDLE,
+	         squeeze_ = XR_NULL_HANDLE, thumbstick_ = XR_NULL_HANDLE, thumbstickClick_ = XR_NULL_HANDLE, optionsClick_ = XR_NULL_HANDLE,
 	         thumbstickTouch_ = XR_NULL_HANDLE, lowerClick_ = XR_NULL_HANDLE, lowerTouch_ = XR_NULL_HANDLE,
 	         upperClick_ = XR_NULL_HANDLE, upperTouch_ = XR_NULL_HANDLE, menuClick_ = XR_NULL_HANDLE,
 	         thumbrestTouch_ = XR_NULL_HANDLE, haptic_ = XR_NULL_HANDLE;
