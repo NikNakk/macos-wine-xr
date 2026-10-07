@@ -823,21 +823,122 @@ tracking and a null display because the laptop lacks the required DisplayPort
 connection. This is a useful application baseline; binary hashes and the UGC
 probe results on that machine have not yet been compared with Wine.
 
-The tests above establish a real published cycle, a recursive main-thread stack
-overflow in the Wine setup, and recovery when those IDs are excluded. They do
-not establish why native Windows avoids the failing traversal. Home's internal
-metadata population, callback processing/order, application state, or a Wine
-compatibility difference remain possible. Do not assume installed items skip
-the traversal, or infer a platform-independent Home defect from the metadata
-probe alone. Run the standalone probe on Windows with that installation's API
-DLL, compare Home/API hashes and item states, then trace Home's internal
-traversal if the inputs match. Native Windows instructions are included with
-the probe.
+The user subsequently reports reproducing the crash on native Windows. This
+supersedes the assumption that Windows consistently avoids it, and supports a
+cross-platform application/content problem. The Windows exception code,
+recursive stack and binary hashes have not been supplied here, so an identical
+fault mechanism remains to be confirmed from that evidence.
+
+The user attempted to pre-download both resources as a workaround, but the XPS
+went to sleep before download completion or Home recovery could be confirmed.
+Record this as an attempted, unvalidated workaround, not a successful run.
+After waking, run the probe and inspect both `STATE` lines: installed is bit
+0x4; needs-update, downloading and download-pending are 0x8, 0x10 and 0x20.
+Subscription alone (0x1) does not establish completed installation. Once both
+items are installed and current, restart Home and record whether the crash
+persists. Download completion is useful evidence, but the published cycle
+remains and preinstallation is not yet proven to prevent recursive traversal.
+
+The tests above establish a published cycle, a recursive main-thread overflow
+in the Wine setup, and recovery when the two IDs are excluded. Native Windows
+probe and build/run instructions are included with the probe.
+
+### Preinstallation experiment under Wine, 2026-10-07
+
+The two resources were downloaded directly through `ISteamUGC::DownloadItem`,
+without subscribing. Completion callbacks returned `EResult=1` for both.
+`GetItemState` returned **0x4** for each, and `GetItemInstallInfo` confirmed:
+
+- 3149046643: 102,539,125 bytes in `steamapps/workshop/content/250820/3149046643`.
+- 2289310332: 509,098,326 bytes in `steamapps/workshop/content/250820/2289310332`.
+
+The prefix initially had no Workshop directory. Steam loaded AppID 250820's
+Workshop path as an empty string and attempted staging at `/downloads/250820`,
+returning I/O failure (`EResult=37`). Creating the standard
+`steamapps/workshop` directory and restarting this prefix's Steam client made
+it load the correct Windows path. Requests also need Steam to finish logging
+in; requests issued earlier returned false. The temporary download helper
+waits for login and success callbacks before accessing installation info.
+
+Home was then tested with these resources installed and **no exclusion**.
+An initial launch stopped at OpenXR initialization because the simulated
+service was tag 2151 while its x86_64 client had been rebuilt to tag 2152.
+That launch is not evidence about Home. Rebuilding the simulated service from
+its existing source checkout produced matching client/service tags
+`v25.1.0-2152-g3a3afbf2a` for the meaningful repeat; Home/API DLL hashes were
+unchanged from the previous probe.
+
+Meaningful run: `.build/steamvr-dxmt/run-mwxr-20261007-101104/`.
+Home PID `0x0bcc` (3020), original TID `0x0bd0`, started slowly and initially
+waited in SteamVR client calls. It eventually submitted **146 frames per eye**
+in emitted log windows, with no Submit errors. Once Workshop metadata was
+processed, the main stack again contained repeated `client.dll+0x4f1a1a`.
+A retained-stack read found **1,096 recursive frames**, 128 bytes apart, with
+the same object pointer and alternating IDs **3149046643 / 2289310332**.
+Both preinstalled resources therefore still participate in the recursive cycle.
+The process was stopped after capturing this evidence, before a new
+stack-overflow exception was observed: do not describe this run as a captured
+second overflow. Preinstallation did not eliminate the recursion or establish
+sustained healthy rendering. This was simulated-only, without headset validation.
+
+Evidence: `.build/steamvr-preinstall-test/download-final.log`,
+`home-trace-matched.log`, `home-trace-rendering.log`,
+`preinstalled-stack-memory.log`, `binary-hashes.json`, and temporary helper
+sources in that directory. The main thread was observed descending into the
+cycle during the second, rendering-phase trace. Diagnostic tools were stopped,
+SteamVR settings and Valve's OpenVR DLL were restored. Downloaded resources
+are retained in the test prefix; no account subscriptions were added.
+
+### General cycle guard and draft report, 2026-10-07
+
+`tools/workshop_guard` adds a standalone, opt-in Windows x64 debugger helper.
+It checks the entire recorded Home DLL hash and entry prologue, then tracks
+(manager pointer, published item ID) on each thread's active call path.
+Revisiting a pair on the same path returns unavailable state 0 / result 0;
+shared acyclic dependencies and other threads are permitted. A depth limit of
+128 provides a further bound. The implementation has no item-ID exclusion list.
+The helper stays attached; it intercepts function entry and a substituted return
+gate. Orderly detach restores the original entry and outstanding return slots.
+Home files and Workshop metadata are not edited. This is a debugger workaround
+for one verified binary, with runtime overhead and native Windows validation
+still outstanding, rather than a production Home replacement.
+
+The real Windows debugger fixture passes a shared dependency graph, a cycle,
+a too-deep graph, and 32 completed traversals on four threads: 393 entries,
+34 blocked calls, 359 normal returns, no helper failure. An active-call detach
+fixture restores the pending return address and completes normally after
+detach. The tests exposed and corrected a DLL-registration timing race:
+startup probing now reaches a stopped debug event after module registration.
+Repeatable fixture commands are in the helper README.
+
+Live Home accepted the verified entry and ordinary Workshop calls returned.
+The first run started before Steam finished login and did not reach the cycle.
+The online repeat (Home PID 2968) returned 117 ordinary calls and submitted
+frames, but did not encounter a cycle rejection during the 600-second guard
+period. Fresh and cache-allowed standalone queries for the cycle items each
+timed out after 30 seconds, unlike the successful earlier probes. A further
+90-second attachment also returned normally and restored/detached. Thus the
+live run checks attach/ordinary-call compatibility and restoration; it does
+**not** validate rejection of the actual Home cycle. Frame submission was slow
+in this simulated setup, and no headset presentation was assessed.
+
+Logs: `.build/steamvr-cycle-guard/guard-online.log`, `guard-final.log`,
+`home-online-shim.log`, `metadata-online.log`, `metadata-cached.log`, and
+`final-tests/`. The simulated launcher run is
+`.build/steamvr-dxmt/run-mwxr-20261007-102458/`. All diagnostic processes were
+stopped and the original SteamVR settings / Valve OpenVR DLL restored.
+
+A report for Valve and a separate proposed author message are prepared in
+`docs/bug-reports/steamvr-home-workshop-cycle.md`. Neither has been submitted.
+The report distinguishes captured Wine evidence from the user-reported Windows
+reproduction, and keeps the general guard's live acceptance gate explicit.
 
 ### Next steps
 
-- Resolve the published Workshop cycle or implement a maintainable exclusion/
-  cycle guard before revisiting Home's pose flags or frame transport.
+- Run the general guard against a reproducible live cycle, on Windows or with
+  responsive Steam metadata under Wine. Check sustained submits after a logged
+  rejection, then assess frame pacing. The debugger fixtures do not replace this
+  application acceptance gate.
 - PS VR2 run of the CrossOver rig, with the compositor in the service and in
   vrserver.
 - Compare the Workshop recursion under CrossOver if it remains after resolving
