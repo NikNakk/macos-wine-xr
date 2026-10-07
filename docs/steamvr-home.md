@@ -1135,8 +1135,19 @@ Leads still open:
   `50c7f8e9-a63f-4035-9801-b96e733347de` on the DXGI factory.
 - The compositor logged `VirtualDisplay CopyPixel AcquireSync FAILED`.
 
-Next: the same probe on the Wine 11.10 rig and with SteamVR's null driver,
-to separate Wine, DXMT and driver causes.
+The same probe on the Wine 11.10 rig (driver_mwxr, virtual mode) gave the
+same result. With SteamVR's null driver on that rig (its desktop window,
+watched by eye) every call again succeeded, and the dashboard reported open
+after `ShowDashboard`, but nothing appeared in the window. The null driver
+uses none of our code, so the fault is in SteamVR's compositor under Wine
+and DXMT, not in driver_mwxr, CrossOver or msync.
+
+Steam's web helper also logs `Failed to create VR overlay for browser
+valve.steam.gamepadui.mainmenu` (`BOpenVRInitialized` false). That affects
+only the dashboard's Steam pages; the probe's overlays fail without it.
+
+Next: log DXMT's shared-resource and unknown-interface paths inside
+vrcompositor, or compare with GPTK's D3DMetal.
 
 ### Next steps
 
