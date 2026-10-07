@@ -606,8 +606,88 @@ its main thread under Wine. The overlay is therefore not the cause. Next:
 trace Home's main thread (waits and exit) from launch to the freeze, or
 try other titles (Half-Life: Alyx, Unity games) first.
 
+### CrossOver 26.3 Wine with msync, 2026-10-07
+
+The CrossOver rig (`.build/steamvr-crossover`) runs the same launcher with
+CrossOver 26.3's FOSS Wine (Wine 11.0, x86_64 only) and the SteamVR-patched
+DXMT. `MWXR_WINE_TREE` and `MWXR_WINE_WRAPPER` select it. The rig's
+`run-mwxr.zsh`, `run-openvr-probe.zsh` and `stop-steamvr.zsh` set these, along
+with `WINEMSYNC=1`.
+
+Setting up the Wine tree:
+- Copy the CrossOver dependency libraries (`deps-x86_64/lib`) into the tree.
+- Link `lib/libvulkan.1.dylib` to `libMoltenVK.dylib`; D3DKMT needs it.
+- Copy DXMT's `d3d10core`, `d3d11`, `dxgi` and `winemetal` into the tree and
+  into the prefix's `system32`.
+- Run `wine wineboot` with `WINEDLLOVERRIDES="mscoree=;mshtml="`, so it does
+  not stop at the Mono dialog.
+
+**Keyed mutexes under msync.** Stock CrossOver wineserver hangs the first
+cross-process `D3DKMTAcquireKeyedMutex`: vrcompositor waits forever for
+the driver's backbuffer. msync waits in-process on internal syncs, but a
+keyed mutex's wait sync is only ever signalled by the server.
+`patches/crossover/0001-server-keyed-mutex-waits-on-server-syncs.patch` creates
+that sync with `create_server_internal_sync`, as `debugger.c` already does.
+Rebuild with the macOS 26.5 SDK, then copy `server/wineserver` into the tree:
+`SDKROOT=.../MacOSX26.5.sdk make server/wineserver`.
+`tools/keyedmutex_test` checks the fix: 2,000 cross-process round trips, no
+timeouts, where the stock server hangs on the first one.
+
+**Measurements.** Simulated service, virtual display mode, idle SteamVR with
+Home, and `tools/openvr_probe` for 14 s. CPU is per process, over 8 s.
+
+| Wine | Compositor | Probe fps | vrserver | wineserver | Service |
+| --- | --- | --- | --- | --- | --- |
+| 11.10 | in vrserver | 6–53, mean 23 | 70% | 39% | – |
+| CrossOver, msync off | in vrserver | mean 24 | 67% | 43% | – |
+| CrossOver, msync on | in vrserver | 25–88, mean 59 | 73% | 30% (earlier run) | – |
+| 11.10 | in service | mostly 90, dips to 28 | 36% | 52% | 47% |
+| CrossOver, msync on | in service | 90 throughout | 35% | 33% | 49% |
+
+"In vrserver" means `XRT_MACOS_CLIENT_COMPOSITOR=1`, which this machine sets
+globally with `launchctl setenv`. The simulated service paces at 90 Hz.
+
+Where vrserver's time goes:
+- SteamVR's own null driver uses about 4% of vrserver. The rest is the
+  mwxr driver and the Monado client it loads.
+- The driver's pose rate (`poseRateHz` 500, 250, 120) changes vrserver
+  only from 78% to 73%.
+- With the compositor in vrserver, a Time Profiler trace shows:
+  - most of the time on GCD threads submitting Metal command buffers and
+    acquiring `CAMetalLayer` drawables;
+  - the drawable pool keeps allocating new IOSurfaces;
+  - all of this runs under Rosetta, because vrserver is x86_64.
+- Metal System Trace: about 830 command buffers per second. About 700 of
+  these come from DXMT; each swapchain release commits a DXMT signal, the
+  bridge's wait and Monado's empty command buffer.
+- vrserver's main thread opens and queries other processes about 1,300
+  times a second. That is SteamVR's own process polling, and each call is a
+  wineserver round trip.
+
+Conclusions:
+- msync more than doubles the frame rate.
+- Moving the compositor back into the native service halves vrserver's
+  load and makes pacing steady.
+- For SteamVR, prefer `XRT_MACOS_CLIENT_COMPOSITOR=0` unless Game Mode
+  throttling is shown to matter. To try it on the PS VR2:
+  `XRT_MACOS_CLIENT_COMPOSITOR=0 MWXR_MONADO=isolated ...`.
+
+Home under CrossOver: `wineserver -d1` shows Home's first thread alive and
+spinning. It makes about 3,500 round trips a second on a Steam IPC pipe:
+writes of 5 and 13 bytes, then a 4-byte read. Steam's side meanwhile polls
+with `FSCTL_PIPE_PEEK`. This is a lead for the stopped game loop: Home may be
+waiting on a Steam call that never completes.
+
+A one-off vrserver crash (execute fault in `kernel32`, no driver frames)
+put SteamVR into safe mode. The launcher clears `blocked_by_safe_mode`, but
+vrserver blocks the driver once more from its saved crash timestamp; the
+next start loads it again.
+
 ### Next steps
 
+- PS VR2 run of the CrossOver rig, with the compositor in the service and in
+  vrserver.
+- Follow Home's Steam IPC loop under CrossOver.
 - PS VR2 run of virtual mode. It needs Monado built from
   `claude/display-distortion-mndx` with
   `-DXRT_FEATURE_OPENXR_MNDX_DISPLAY_DISTORTION=ON`, for both the service and
