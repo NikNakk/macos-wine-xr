@@ -990,6 +990,42 @@ stopped, and the original helper wrapper, SteamVR settings and Valve OpenVR DLL
 were verified restored. Home/guard were not relaunched because the required
 Steam sign-in gate was not met. This supersedes the earlier left-running state.
 
+### Display-image wrapper comparison, 2026-10-07
+
+The user identified the previously working command as
+`XRT_MACOS_CLIENT_COMPOSITOR=0 .build/steamvr-crossover/run-mwxr-display-image.zsh`.
+That wrapper selects isolated hardware service / virtual-display mode and
+inherits the installed service's environment. The earlier guard run selected
+simulated service / direct mode with a smaller environment. The underlying
+Steam launch command and CrossOver Wine wrapper are identical.
+
+The display-image wrapper was retried with `MONADO_SERVICE_BUILD` overridden
+to the simulated-only build and a temporary service template preserving the
+installed environment while enabling simulation. This avoids a hardware run
+while the user is away, so it does not reproduce the full prior PS VR2 setup.
+Home PID 948 loaded the supported DLL and the guard armed; all 32 ordinary
+calls returned with zero rejections. Latest simulated submission windows ran
+about 120 frames/s, without Submit errors. Steam still logged the same main-loop
+startup stall and had not completed sign-in at the checkpoint. The changed
+launch path therefore has not resolved the sign-in problem in simulation.
+The wrapper/guard are left running. Logs: `.build/steamvr-cycle-guard/crossover-display-wrapper/`
+and `.build/steamvr-crossover/run-mwxr-20261007-121237/`.
+
+### Display-image run stopped at user request, 2026-10-07
+
+At the final checkpoint Home was still submitting roughly 64–68 frames/s,
+with no Submit errors. Steam had meanwhile exited with the same fatal stalled
+cross-thread pipe assertion. The guard's later log contains repeated msync
+node-pool warnings; its last ordinary-call status was 32 calls, 32 returns,
+zero blocked. An exit record was present after shutdown. Sustained Home
+submission and these ordinary calls do not validate a live cycle rejection.
+
+Home/SteamVR were stopped at the user's request. The launcher and guard
+sessions ended; process inspection found no Wine/SteamVR/guard or simulated
+Monado service remaining. Valve's OpenVR DLL and the original SteamVR settings
+were verified restored. The wrapper retry is no longer running. The user will
+inspect the Steam issue later; the bug-report draft remains unsubmitted.
+
 ### Next steps
 
 - Run the general guard against a reproducible live cycle, on Windows or with
