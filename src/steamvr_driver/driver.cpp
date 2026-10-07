@@ -318,6 +318,27 @@ public:
 		Log("Display mode: %s%s\n", virtualDisplay_ ? "virtual display" : "direct",
 		    !strcmp(mode, "virtual") && !virtualDisplay_ ? " (virtual requested, runtime lacks display distortion)"
 		                                                : "");
+		if (virtualDisplay_) {
+			// What SteamVR will be given: the display layout and a few points of
+			// each eye's distortion (green channel), to check against the panel.
+			for (uint32_t eye = 0; eye < 2; eye++) {
+				const auto &view = xr_.display.views[eye];
+				Log("Display view %u: viewport %d,%d %dx%d, fov L%.1f R%.1f U%.1f D%.1f\n", eye,
+				    view.viewport.offset.x, view.viewport.offset.y, view.viewport.extent.width,
+				    view.viewport.extent.height, view.fov.angleLeft * 57.2958f, view.fov.angleRight * 57.2958f,
+				    view.fov.angleUp * 57.2958f, view.fov.angleDown * 57.2958f);
+				const float points[][2] = {{0.5f, 0.5f}, {0.0f, 0.5f}, {1.0f, 0.5f}, {0.5f, 0.0f}, {0.0f, 0.0f}};
+				for (const auto &point : points) {
+					XrVector2f rgb[3];
+					if (xr_.ComputeDisplayDistortion(eye, point[0], point[1], rgb)) {
+						Log("  distortion eye %u (%.1f, %.1f) -> (%.3f, %.3f)\n", eye, point[0], point[1],
+						    rgb[1].x, rgb[1].y);
+					} else {
+						Log("  distortion eye %u (%.1f, %.1f) failed\n", eye, point[0], point[1]);
+					}
+				}
+			}
+		}
 	}
 
 	// ITrackedDeviceServerDriver
@@ -480,6 +501,10 @@ public:
 		if (virtualDisplay_ && xr_.ComputeDisplayDistortion(eye, u, v, rgb)) {
 			*result = {{rgb[0].x, rgb[0].y}, {rgb[1].x, rgb[1].y}, {rgb[2].x, rgb[2].y}};
 		} else {
+			if (virtualDisplay_ && !loggedDistortionFailure_) {
+				Log("ComputeDistortion: the runtime's distortion failed; SteamVR gets none\n");
+				loggedDistortionFailure_ = true;
+			}
 			*result = {{u, v}, {u, v}, {u, v}};
 		}
 		return result;
@@ -1113,6 +1138,7 @@ private:
 	bool zeroCopy_ = true;
 
 	bool virtualDisplay_ = false;
+	bool loggedDistortionFailure_ = false;
 	char dumpDir_[512] = {};
 	std::vector<std::pair<vr::SharedTextureHandle_t, ID3D11Texture2D *>> backbuffers_;
 	uint64_t presentCount_ = 0, vsyncCount_ = 0;
