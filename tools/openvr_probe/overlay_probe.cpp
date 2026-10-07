@@ -137,6 +137,22 @@ main(int argc, char **argv)
 		Log("ShowOverlay raw: %s\n", OverlayError(overlay->ShowOverlay(raw)));
 	}
 
+	// Magenta: raw pixels, placed in the room (standing space) rather than on the
+	// headset, so it does not depend on the compositor's HMD pose.
+	vr::VROverlayHandle_t absolute = vr::k_ulOverlayHandleInvalid;
+	if (overlay->CreateOverlay("mwxr.probe.absolute", "probe absolute (magenta)", &absolute) ==
+	    vr::VROverlayError_None) {
+		std::vector<uint8_t> magenta(64 * 64 * 4);
+		for (size_t i = 0; i < magenta.size(); i += 4) {
+			magenta[i + 0] = magenta[i + 2] = magenta[i + 3] = 255;
+		}
+		overlay->SetOverlayWidthInMeters(absolute, 1.0f);
+		vr::HmdMatrix34_t place = {{{1, 0, 0, 0}, {0, 1, 0, 1.5f}, {0, 0, 1, -1.5f}}};
+		overlay->SetOverlayTransformAbsolute(absolute, vr::TrackingUniverseStanding, &place);
+		Log("SetOverlayRaw absolute: %s\n", OverlayError(overlay->SetOverlayRaw(absolute, magenta.data(), 64, 64, 4)));
+		Log("ShowOverlay absolute: %s\n", OverlayError(overlay->ShowOverlay(absolute)));
+	}
+
 	// Green: a shared D3D11 texture.
 	ID3D11Device *device = nullptr;
 	ID3D11DeviceContext *context = nullptr;
