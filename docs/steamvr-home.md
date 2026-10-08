@@ -1342,6 +1342,43 @@ crash dialog waited unseen, and SteamVR's safe mode then blocked
 been blocked". The prefix now has `HKCU\Software\Wine\WineDbg`
 `ShowCrashDialog=0`, so crash backtraces go to the run's `vrstartup.log`.
 
+### OpenXR games launched from Steam go direct to Monado, 2026-10-08 (CrossOver)
+
+Hyperbolica (app 1256230, Unity 2021.1 with the OpenXR plugin 1.2.8) uses
+OpenXR, not OpenVR. Launched from the SteamVR dashboard it came up on the
+desktop: its OpenXR loader reads the prefix's ActiveRuntime (wineopenxr, set
+by `run-in-process-openxr.zsh`), but Steam had been started without the XR
+environment, so the game failed with `XR_ERROR_RUNTIME_UNAVAILABLE`.
+
+Decision: OpenXR games go direct to Monado rather than through SteamVR's
+OpenXR runtime (no double composite, no SteamVR prediction). SteamVR's driver
+session stays connected behind the game; Monado's multi-client focus makes the
+game active and hides the driver session (`shouldRender 0`), and focus returns
+to SteamVR when the game exits. Wine clients composite in the service
+(`XRT_MACOS_CLIENT_COMPOSITOR=0`, set by the launcher; client compositing made
+Wine runs slower).
+
+Launcher changes (`8cff8f7`, `ce8fc59`, `b38fdcd`, `90dcd70`, `8f04a1d`):
+Steam starts after the service with the XR environment; a Steam the launcher
+did not start (recorded by PID in `prefix/.mwxr-steam-xr-env`) is restarted;
+the isolated service uses fixed names; the service path is made absolute.
+
+Steam's VR launch option for Hyperbolica is `Hyperbolica.exe startXR`; a plain
+`-applaunch` starts it flat, so use `APP_ARGS=startXR`.
+
+Runs:
+- 08:50, simulated, DXMT with share logging: session reached READY, then the
+  game hung with two threads in DXMT d3d11 (one called from wineopenxr);
+  Steam's crash reporter fired, Steam exited and SteamVR followed.
+- 12:22, simulated, DXMT `a7d3be9`, Steam overlay off for the game
+  (`OverlayAppEnable 0` in localconfig.vdf): FOCUSED and rendering in the
+  headset. Steam took an assert dump of the game 1.6 s after focus (no
+  exception; the game carried on).
+- 14:02, PS VR2 (isolated `monado-display-distortion/build-hw` at `5f456920d`,
+  direct display mode, DXMT `eb8af5e`): plays in the headset, including a
+  relaunch. Problem: text on the game's buttons. Which of the overlay setting
+  and the DXMT update fixed the 08:50 hang is not known.
+
 ### Next steps
 
 - Run the general guard against a reproducible live cycle, on Windows or with
