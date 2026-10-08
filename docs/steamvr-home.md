@@ -1211,10 +1211,46 @@ uninitialised under Wine, Home therefore needs the shim's pose fix, and a
 scene graph whose panels are placed relative to the head or the dashboard
 (re)latch yields no render items.
 
-Next: find where vrcompositor produces the pose it hands out as
-`TrackingResult_Uninitialized`, and whether the scene graph traversal
-checks the same pose. The traversal warns `Scene graph visited panel %s
-that did not have a valid overlay` (0x1400bfa55), which never appeared.
+### Root cause: SteamVR thinks the Windows session is locked, 2026-10-08
+
+Fixed by `patches/crossover/0003-wtsapi32-session-info-ex-and-remote-session.patch`
+(Wine's `wtsapi32`). Traced with breakpoints on CrossOver, simulated,
+direct mode:
+
+1. The compositor's own pose query (vtable +0x50, in 0x14011542d onwards)
+   returns the head as `TrackingResult_Running_OK`, valid.
+2. Before it publishes the poses for clients (shared memory, offset
+   0xad8c; vrclient's `WaitGetPoses` copies them from there), 0x14011b5b0
+   sets the head pose to `TrackingResult_Uninitialized`, not valid, with
+   display state 3, when the display is locked
+   (`steamvr.allowDisplayLockedMode` is false by default).
+3. "Display locked" is a flag set when the compositor's window is created
+   and on `WM_WTSSESSION_CHANGE`, from 0x140203470. That asks
+   `WTSQuerySessionInformationA` for `WTSIsRemoteSession` and then
+   `WTSSessionInfoEx` (`SessionFlags`, `WTS_SESSIONSTATE_UNLOCK`), and
+   counts the session as locked when a query fails.
+4. Wine implements neither class (`FIXME("Unimplemented class")`), and its
+   ANSI wrapper would have converted their results as strings.
+
+In locked mode the compositor also draws no overlays and no dashboard,
+which explains the empty scene graph render list above.
+
+The patch adds `WTSINFOEX` and `WTS_SESSIONSTATE_*` to `wtsapi32.h`, and
+implements both classes: a local session (`WTSIsRemoteSession` FALSE) that
+is active and unlocked. Only `wtsapi32.dll` changes; it is installed in
+`steamvr-crossover/wine-crossover` (the original kept as
+`wtsapi32.dll.pre-sessioninfoex`). Results, simulated:
+- `tools/openvr_probe`, direct mode: 0 invalid head poses per second (90
+  before).
+- Overlay probe, virtual mode with frame dumps: the red, blue and magenta
+  overlays are drawn, and so is SteamVR's dashboard bar. Green (the shared
+  D3D11 texture) is head-locked behind the magenta one, so these frames do
+  not show whether it works.
+
+Still open: vrwebhelper's `Got SetOverlayTexture failure
+(VROverlayError_InvalidTexture)`, which would leave its dashboard pages
+blank, and whether `MWXR_OPENVR_SHIM_FIX_POSE` is still needed for Home
+(it should not be). The Wine 11.10 rig does not have the fix.
 
 ### Next steps
 
