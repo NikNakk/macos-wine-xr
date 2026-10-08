@@ -7,7 +7,8 @@
 // and blue for a second each, for the given number of seconds.
 //
 //   x86_64-w64-mingw32-gcc -O1 -o d3d11_xproc_swapchain.exe d3d11_xproc_swapchain.c -ld3d11 -ldxgi -lgdi32 -luser32
-//   d3d11_xproc_swapchain.exe [seconds] [dll the parent loads, default d3d11.dll]
+//   d3d11_xproc_swapchain.exe [seconds] [dll the parent loads, default d3d11.dll] [normal|popup|layered]
+// popup and layered make the parent window frameless, as Steam's sign-in window is.
 #define COBJMACROS
 #include <windows.h>
 
@@ -83,8 +84,19 @@ main(int argc, char **argv)
 	wc.lpszClassName = "d3d11_xproc_swapchain";
 	wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
 	RegisterClassA(&wc);
-	HWND hwnd = CreateWindowA("d3d11_xproc_swapchain", "cross-process swapchain", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-	                          200, 200, 336, 279, NULL, NULL, wc.hInstance, NULL);
+	const char *style = argc > 3 ? argv[3] : "normal";
+	HWND hwnd;
+	if (!strcmp(style, "normal")) {
+		hwnd = CreateWindowA("d3d11_xproc_swapchain", "cross-process swapchain", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+		                     200, 200, 336, 279, NULL, NULL, wc.hInstance, NULL);
+	} else {
+		DWORD ex = !strcmp(style, "layered") ? WS_EX_LAYERED : 0;
+		hwnd = CreateWindowExA(ex, "d3d11_xproc_swapchain", "cross-process swapchain", WS_POPUP | WS_VISIBLE, 200, 200,
+		                       320, 240, NULL, NULL, wc.hInstance, NULL);
+		if (ex)
+			SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+	}
+	printf("parent: %s window %p\n", style, (void *)hwnd);
 	char cmd[MAX_PATH + 64], self[MAX_PATH];
 	GetModuleFileNameA(NULL, self, sizeof(self));
 	snprintf(cmd, sizeof(cmd), "\"%s\" --child %llx %d", self, (unsigned long long)(uintptr_t)hwnd, seconds);
