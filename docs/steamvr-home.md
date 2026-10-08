@@ -1308,10 +1308,23 @@ without it (and 2 to about 1,200 in earlier sessions). Installed in the
 CrossOver rig: d3d11, dxgi and d3d10core from this build, and
 `winemetal.so` (original `winemetal.so.pre-crossproc`).
 
-A real fix presents those frames in the other process's window: a remote
-`CAContext` layer in the GPU process, hosted with `CALayerHost` in the
-window's process. Steam's own web helper with GPU compositing on is the
-natural test, since its window would then show.
+A real fix presents those frames in the other process's window. GDI cannot
+do it: `tools/keyedmutex_test/gdi_xproc_test.c` shows another process's
+drawing never reaches a window in CrossOver's Wine, and winemac.drv has no
+OpenGL for such windows either. So the window's own process must present.
+
+DXMT `b2ac201` and `a7d3be9` do it with `CALayerHost`
+(`DXMT_CROSS_PROCESS_SWAPCHAIN=host`): the swapchain renders into a layer
+attached to a `CAContext`, sized to the window's client area, and publishes
+the context id as the window property `DXMT_REMOTE_LAYER`, signalling
+`Local\DXMT_REMOTE_LAYER_<pid>`. A thread started when d3d11.dll loads in
+the window's process shows it with a `CALayerHost` and removes it when the
+property goes; nothing is done per frame. `CAContext` and `CALayerHost` are
+private QuartzCore interfaces, checked at runtime as Chromium does.
+`tools/keyedmutex_test/d3d11_xproc_swapchain.c` (a parent's window, a
+child's swapchain) showed the child's red, green and blue frames filling the
+parent's window, confirmed by eye. This build changes winemetal.dll too.
+Steam's own web helper with GPU compositing on is the next test.
 
 During one control run, vrserver crashed (`Unhandled page fault on execute
 access to 00006FFFFF9FFB90`, thread 03f4), not reproduced since. Wine's
