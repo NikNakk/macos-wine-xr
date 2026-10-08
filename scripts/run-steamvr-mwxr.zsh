@@ -103,11 +103,14 @@ vrstartup=${steam_dir}/steamapps/common/SteamVR/bin/win64/vrstartup.exe
 
 # Whether Steam runs in this prefix: Wine names each prefix's server directory
 # after the prefix's device and inode, and its processes keep it open.
+# Sets steam_pid to that process.
+steam_pid=
 steam_running() {
   local server_dir=$(printf 'server-%x-%x' $(stat -f '%d %i' "${prefix}")) pid
   for pid in $(pgrep -f 'Steam.*\\steam\.exe'); do
-    lsof -p ${pid} 2>/dev/null | /usr/bin/grep -q "/${server_dir}/" && return 0
+    lsof -p ${pid} 2>/dev/null | /usr/bin/grep -q "/${server_dir}/" && { steam_pid=${pid}; return 0; }
   done
+  steam_pid=
   return 1
 }
 
@@ -121,7 +124,9 @@ export XRT_MACOS_CLIENT_COMPOSITOR=${MWXR_CLIENT_COMPOSITOR:-0}
 # launched from Steam inherit its environment, and use the prefix's
 # ActiveRuntime (wineopenxr), so Steam gets the XR environment to reach the same
 # Monado service as SteamVR's driver. A Steam left running with a different XR
-# environment is shut down and restarted (MWXR_STEAM_RESTART=0 keeps it).
+# environment, or started by anything else, is shut down and restarted
+# (MWXR_STEAM_RESTART=0 keeps it). The record names Steam's process, so a Steam
+# started elsewhere never inherits an earlier run's record.
 # Not -silent: in the CrossOver prefix, Steam started that way stalls at start-up.
 steam_env_file=${prefix}/.mwxr-steam-xr-env
 start_steam() {
@@ -130,7 +135,7 @@ start_steam() {
   env_now+=" xdg=${XDG_RUNTIME_DIR:-} metal=${XRT_MACOS_METAL_IPC_SERVICE_NAME:-}"
   env_now+=" client_compositor=${XRT_MACOS_CLIENT_COMPOSITOR}"
   if steam_running; then
-    if [[ $(cat "${steam_env_file}" 2>/dev/null) == "${env_now}" ]]; then
+    if [[ $(cat "${steam_env_file}" 2>/dev/null) == "pid=${steam_pid} ${env_now}" ]]; then
       print "Steam is already running in this prefix with this XR environment"; return
     fi
     if [[ ${MWXR_STEAM_RESTART:-1} != 1 ]]; then
@@ -146,8 +151,9 @@ start_steam() {
   WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' \
    -cef-disable-gpu -cef-disable-gpu-compositing -cef-in-process-gpu -cef-disable-sandbox -no-cef-sandbox \
    -noverifyfiles -norepairfiles > "${logs}/steam.log" 2>&1 &
-  print -r -- "${env_now}" > "${steam_env_file}"
+  rm -f "${steam_env_file}"
   print "Started Steam; waiting ${STEAM_WAIT_S:-40} s"; sleep ${STEAM_WAIT_S:-40}
+  steam_running && print -r -- "pid=${steam_pid} ${env_now}" > "${steam_env_file}"
 }
 
 launch_app() {
