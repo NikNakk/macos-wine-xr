@@ -1388,7 +1388,9 @@ Runs:
   exception; the game carried on).
 - 14:02, PS VR2 (isolated `monado-display-distortion/build-hw` at `5f456920d`,
   direct display mode, DXMT `eb8af5e`): plays in the headset, including a
-  relaunch. Problem: text on the game's buttons. Which of the overlay setting
+  relaunch. Problem: text on the game's buttons (labels missing, plain rounded
+  rectangles; dialogue text is fine). The same happens in flat mode, so it is a
+  D3D11/DXMT rendering issue, not the OpenXR path. Which of the overlay setting
   and the DXMT update fixed the 08:50 hang is not known.
 
 ### Next steps
