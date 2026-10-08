@@ -1168,8 +1168,42 @@ needs no pose fix there), and overlays were missing in virtual mode too.
 The renderer is not the cause either, so the D3DMetal comparison is no
 longer needed.
 
-Next: see what the compositor's threads are doing while overlays are shown,
-looking for an overlay or system-layer thread that is stuck.
+### Where overlays drop out in vrcompositor, 2026-10-08 (CrossOver)
+
+Simulated, direct mode, probe overlays shown. vrcompositor 2.17.10
+(v1789498647), loaded at its preferred base 0x140000000. Breakpoints were
+counted with `tools/winedbg_count.py`, which never interrupts the debuggee:
+quitting winedbg while attached kills the process, and an earlier attempt
+that did so killed the compositor.
+
+- Thread stacks (`winedbg`, `bt all`): all 27 threads are in ordinary waits;
+  nothing is stuck.
+- `CGraphicsDevice::DrawOverlays` (function 0x140047380) runs every frame,
+  but its list of overlays to draw (`m_vecSortedOverlays`, at +0x48 of its
+  parameter block) was empty in 300 of 300 calls.
+- That list is built in 0x1400def00 from the scene graph's render list (the
+  loop at 0x1400e15c0, items of 0x218 bytes from +0x80/+0x88 of a per-frame
+  structure). The loop body never ran: the render list is empty. Each item
+  would pass through 0x1400e3f00, which can reject it.
+- In SteamVR 2.17 overlays, standalone ones included, are drawn as nodes of
+  a scene graph that the dashboard web UI (`systemui`, in vrwebhelper)
+  sends as `update_scene_graph` mailbox messages to
+  `vrcompositor_systemlayer` (systemui.js: `owning_overlay_key:
+  VRHTML.VROverlay.ThisOverlayKey()`).
+- With a log line temporarily added to systemui.js (since removed), the web
+  UI sent many updates, 9 to 17 KB each, all with key `system.systemui`.
+  The compositor's handler (0x1400e9df0) was entered once per send (5 of 5),
+  found the owning overlay, and found a `scene_graph`. So the scene graph
+  arrives and is accepted, and the render list built from it is still
+  empty.
+- Separately, vrwebhelper logs `Got SetOverlayTexture failure
+  (VROverlayError_InvalidTexture)` about 20 times per session, so its own
+  pages (the dashboard panels) would have no image even once drawn.
+
+Next: find why an accepted scene graph yields no render items. The
+traversal warns `Scene graph visited panel %s that did not have a valid
+overlay` (0x1400bfa55), which never appeared, so the panels are probably
+dropped by a check that does not log.
 
 ### Next steps
 
