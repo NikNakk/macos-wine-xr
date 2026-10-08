@@ -43,7 +43,9 @@ What it takes:
   alternative, an IOSurface shown in a `CAMetalLayer` in the owning process,
   is the route if this goes upstream.
 - `scripts/run-steamvr-mwxr.zsh` sets direct mode on every run, links the
-  Windows core fonts into the prefix, and leaves Valve's `openvr_api.dll` in
+  Windows core fonts except Tahoma into the prefix (with both Tahoma faces
+  present Steam's window never appears: its web helper stops after creating
+  its first browser; found 2026-10-09), and leaves Valve's `openvr_api.dll` in
   place (the OpenVR shim is now only a logger: `MWXR_OPENVR_SHIM_INSTALL=1`).
 
 Kept, but not in use:
