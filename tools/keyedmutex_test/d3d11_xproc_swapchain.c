@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: BSL-1.0
 // A D3D11 swapchain on another process's window, as Chromium's GPU process
 // makes for its browser process. The parent creates a window (and loads
-// d3d11.dll, as a Chromium browser process does) and starts a child with the
+// d3d11.dll, or dxgi.dll as a Chromium browser process does) and starts a child with the
 // window handle; the child creates a swapchain on it and presents red, green
 // and blue for a second each, for the given number of seconds.
 //
 //   x86_64-w64-mingw32-gcc -O1 -o d3d11_xproc_swapchain.exe d3d11_xproc_swapchain.c -ld3d11 -ldxgi -lgdi32 -luser32
-//   d3d11_xproc_swapchain.exe [seconds]
+//   d3d11_xproc_swapchain.exe [seconds] [dll the parent loads, default d3d11.dll]
 #define COBJMACROS
 #include <windows.h>
 
@@ -74,7 +74,9 @@ main(int argc, char **argv)
 		return child((HWND)(uintptr_t)strtoull(argv[2], NULL, 16), argc > 3 ? atoi(argv[3]) : 6);
 	}
 	int seconds = argc > 1 ? atoi(argv[1]) : 6;
-	LoadLibraryA("d3d11.dll"); // DXMT's host thread starts here
+	// DXMT's host thread starts when d3d11.dll or dxgi.dll loads (a Chromium
+	// browser process loads only dxgi.dll).
+	LoadLibraryA(argc > 2 ? argv[2] : "d3d11.dll");
 	WNDCLASSA wc = {0};
 	wc.lpfnWndProc = proc;
 	wc.hInstance = GetModuleHandleA(NULL);
