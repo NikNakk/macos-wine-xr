@@ -117,26 +117,47 @@ steam_running() {
 # before Steam starts, so games launched from Steam inherit it too.
 export XRT_MACOS_CLIENT_COMPOSITOR=${MWXR_CLIENT_COMPOSITOR:-0}
 
-# Steam first (it needs no XR environment), so SteamVR and Home can reach it.
+# Steam starts before SteamVR, so SteamVR and Home can reach it. OpenXR games
+# launched from Steam inherit its environment, and use the prefix's
+# ActiveRuntime (wineopenxr), so Steam gets the XR environment to reach the same
+# Monado service as SteamVR's driver. A Steam left running with a different XR
+# environment is shut down and restarted (MWXR_STEAM_RESTART=0 keeps it).
 # Not -silent: in the CrossOver prefix, Steam started that way stalls at start-up.
-if steam_running; then
-  print "Steam is already running in this prefix"
-else
+steam_env_file=${prefix}/.mwxr-steam-xr-env
+start_steam() {
+  export WINEDLLPATH=${MWXR_IN_PROCESS_BUILD}
+  local env_now="mode=${mode} runtime=${MWXR_NATIVE_RUNTIME_JSON} dllpath=${WINEDLLPATH}"
+  env_now+=" xdg=${XDG_RUNTIME_DIR:-} metal=${XRT_MACOS_METAL_IPC_SERVICE_NAME:-}"
+  env_now+=" client_compositor=${XRT_MACOS_CLIENT_COMPOSITOR}"
+  if steam_running; then
+    if [[ $(cat "${steam_env_file}" 2>/dev/null) == "${env_now}" ]]; then
+      print "Steam is already running in this prefix with this XR environment"; return
+    fi
+    if [[ ${MWXR_STEAM_RESTART:-1} != 1 ]]; then
+      print -u2 "Steam is already running with another XR environment; OpenXR games may not reach Monado"; return
+    fi
+    print "Restarting Steam to give it this run's XR environment"
+    WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' -shutdown \
+      > "${logs}/steam-shutdown.log" 2>&1 || true
+    local i
+    for i in {1..30}; do steam_running || break; sleep 2; done
+    steam_running && { print -u2 "Steam did not shut down; quit it and run again"; exit 1; }
+  fi
   WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' \
    -cef-disable-gpu -cef-disable-gpu-compositing -cef-in-process-gpu -cef-disable-sandbox -no-cef-sandbox \
    -noverifyfiles -norepairfiles > "${logs}/steam.log" 2>&1 &
+  print -r -- "${env_now}" > "${steam_env_file}"
   print "Started Steam; waiting ${STEAM_WAIT_S:-40} s"; sleep ${STEAM_WAIT_S:-40}
-fi
+}
 
-if [[ -n ${APPID:-} ]]; then
+launch_app() {
+  [[ -n ${APPID:-} ]] || return 0
  ( sleep ${VR_WAIT_S:-60}
    WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' \
     -applaunch "${APPID}" ${=APP_ARGS:-} > "${logs}/applaunch.log" 2>&1
    print "Requested launch of app ${APPID}" ) &
-fi
+}
 
-# vrstartup.exe returns at once (exit status 3 is normal); vrserver and its
-# children inherit this environment.
 # An isolated service: own launchd label, Metal XPC name and socket directory,
 # booted out again when this script exits. (The trap is set here: in zsh, an
 # EXIT trap set inside a function fires when the function returns.)
@@ -180,9 +201,12 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 start_isolated_service() { # <service binary> <environment template plist or empty> <simulated 0|1>
-  label=org.freedesktop.monado.mwxr-test.${UID}.$$
-  export XRT_MACOS_METAL_IPC_SERVICE_NAME=org.freedesktop.monado.metal-ipc.mwxr-test.${UID}.$$
-  export XDG_RUNTIME_DIR=/private/tmp/mwxr-steamvr.${UID}.$$
+  # Fixed names (one isolated run at a time), so a Steam kept running between
+  # runs, and the games it launches, still reach the service.
+  label=org.freedesktop.monado.mwxr-test.${UID}
+  export XRT_MACOS_METAL_IPC_SERVICE_NAME=org.freedesktop.monado.metal-ipc.mwxr-test.${UID}
+  export XDG_RUNTIME_DIR=/private/tmp/mwxr-steamvr.${UID}
+  launchctl bootout "gui/${UID}/${label}" 2>/dev/null || true
   mkdir -p "${XDG_RUNTIME_DIR}"
   python3 - "${logs}" "${label}" "$1" "${MONADO_VULKAN_ICD:-/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json}" "$2" "$3" <<'PY'
 import os, plistlib, sys
@@ -218,8 +242,7 @@ export MWXR_OPENVR_SHIM_LOG="Z:${logs//\//\\}\\openvr-shim.log"
 case ${mode} in
  simulated)
   : ${MONADO_SIM_BUILD:?Configured ARM64 simulated-only Monado build}
-  start_isolated_service "${MONADO_SIM_BUILD}/src/xrt/targets/service/monado-service" "" 1
-  "${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true ;;
+  start_isolated_service "${MONADO_SIM_BUILD}/src/xrt/targets/service/monado-service" "" 1 ;;
  isolated)
   : ${MONADO_SERVICE_BUILD:?ARM64 Monado build with the PS VR2 driver}
   if pgrep -x monado-service >/dev/null; then
@@ -227,13 +250,16 @@ case ${mode} in
   fi
   unset XR_RUNTIME_JSON IPC_IGNORE_VERSION
   start_isolated_service "${MONADO_SERVICE_BUILD}/src/xrt/targets/service/monado-service" \
-    "${MWXR_SERVICE_TEMPLATE:-${HOME}/Library/LaunchAgents/org.freedesktop.monado.service.plist}" 0
-  "${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true ;;
+    "${MWXR_SERVICE_TEMPLATE:-${HOME}/Library/LaunchAgents/org.freedesktop.monado.service.plist}" 0 ;;
  hardware)
-  unset XR_RUNTIME_JSON XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR IPC_IGNORE_VERSION
-  "${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true ;;
+  unset XR_RUNTIME_JSON XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR IPC_IGNORE_VERSION ;;
  *) print -u2 "MWXR_MONADO must be simulated, isolated or hardware"; exit 2 ;;
 esac
+start_steam
+launch_app
+# vrstartup.exe returns at once (exit status 3 is normal); vrserver and its
+# children inherit this environment.
+"${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true
 print "SteamVR started; waiting for vrserver to exit (close the SteamVR status window to stop it)"
 sleep 20
 while pgrep -f 'vrserver.exe' >/dev/null; do sleep 3; done
