@@ -62,7 +62,10 @@ for profile in Path(prefix, 'drive_c/users').iterdir():
     path = profile / 'AppData/Local/openvr/openvrpaths.vrpath'
     path.parent.mkdir(parents=True, exist_ok=True)
     data = json.loads(path.read_text()) if path.exists() else {"jsonid": "vrpathreg", "version": 1}
-    data.setdefault("runtime", ["C:\\Program Files (x86)\\Steam\\steamapps\\common\\SteamVR"])
+    # Valve's loader uses the first runtime. Make SteamVR active, keeping any
+    # other registered runtime (such as xrizer) behind it.
+    steamvr = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\SteamVR"
+    data["runtime"] = [steamvr] + [r for r in data.get("runtime", []) if r.lower() != steamvr.lower()]
     data.setdefault("config", ["C:\\Program Files (x86)\\Steam\\config"])
     data.setdefault("log", ["C:\\Program Files (x86)\\Steam\\logs"])
     data["external_drivers"] = [driver]
