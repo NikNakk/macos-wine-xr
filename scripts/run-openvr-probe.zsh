@@ -6,6 +6,7 @@
 # SteamVR (started by run-steamvr-mwxr.zsh). It replaces Home until it exits.
 #
 #   MWXR_STEAMVR_ROOT  the Wine/DXMT root with Steam and SteamVR in prefix/
+#   MWXR_LOG_ROOT      where the probe and DXMT logs go (default MWXR_STEAMVR_ROOT)
 #   arguments          passed to openvr_probe.exe, for example --seconds 60 or
 #                      --explicit-timing
 #   MWXR_OPENVR_SHIM_INSTALL=1  load tools/openvr_shim in front of Valve's DLL
@@ -13,6 +14,7 @@ set -euo pipefail
 repo=${0:A:h:h}
 : ${MWXR_STEAMVR_ROOT:?Wine 11.10/current-DXMT root with Steam and SteamVR in its prefix}
 root=${MWXR_STEAMVR_ROOT}
+log_root=${MWXR_LOG_ROOT:-${root}}
 probe_dir=${MWXR_OPENVR_PROBE:-${repo}/build-in-process/openvr-probe}
 steamvr="${root}/prefix/drive_c/Program Files (x86)/Steam/steamapps/common/SteamVR"
 [[ -f ${probe_dir}/openvr_probe.exe ]] || { print -u2 "Build the probe first: ${probe_dir}"; exit 1; }
@@ -27,11 +29,11 @@ if [[ ${MWXR_OPENVR_SHIM_INSTALL:-0} == 1 ]]; then
 else
   cp "${steamvr}/bin/win64/openvr_api.dll" "${probe_dir}/"
 fi
-log=${root}/openvr-probe-$(date +%Y%m%d-%H%M%S).log
+log=${log_root}/openvr-probe-$(date +%Y%m%d-%H%M%S).log
 print "Log: ${log}"
 # MoltenVK warnings and errors only.
 export MVK_CONFIG_LOG_LEVEL=${MVK_CONFIG_LOG_LEVEL:-2}
-export DXMT_LOG_PATH=${DXMT_LOG_PATH:-Z:${root}/dxmt-logs}
+export DXMT_LOG_PATH=${DXMT_LOG_PATH:-Z:${log_root}/dxmt-logs}
 export MWXR_OPENVR_SHIM_LOG="Z:${log//\//\\}.shim"
 WINEPREFIX=${root}/prefix WINEDEBUG=-all "${MWXR_WINE_WRAPPER:-${root}/bin/wine-current-dxmt}" "${probe_dir}/openvr_probe.exe" \
   --log "Z:${log//\//\\}" "$@"
