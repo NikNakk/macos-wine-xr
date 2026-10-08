@@ -1335,6 +1335,15 @@ during start-up, each time re-hosted cleanly. The CrossOver rig's
 `run-mwxr.zsh` also exports the mode, because the launcher starts SteamVR
 through `run-in-process-openxr.zsh`, not the wrapper.
 
+Still open with the GPU web helper: Steam's 700x440 sign-in window
+(`SP DesktopLoginWindow`, frameless and transparent) stays black. No
+swapchain is ever made for it, so it is not the cross-process path: Chromium
+draws transparent windows without one (offscreen, then a bitmap the browser
+process gives to `UpdateLayeredWindow`), and that path fails here. It drew
+with the GPU helper off. The main window and menus draw. Remote layer sizing
+also follows the window's client area (DXMT `b58d7f9`), and
+`DXMT_REMOTE_LAYER_DEBUG=1` logs where each layer is hosted.
+
 During one control run, vrserver crashed (`Unhandled page fault on execute
 access to 00006FFFFF9FFB90`, thread 03f4), not reproduced since. Wine's
 crash dialog waited unseen, and SteamVR's safe mode then blocked
