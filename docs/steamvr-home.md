@@ -1162,11 +1162,9 @@ back to direct mode:
   process opens.
 
 So the compositor never gets as far as drawing an overlay, under any
-driver. The invalid HMD render pose (see "the HMD render pose is invalid
-under Wine") is not the gate: render poses are valid in virtual mode (Home
-needs no pose fix there), and overlays were missing in virtual mode too.
-The renderer is not the cause either, so the D3DMetal comparison is no
-longer needed.
+driver. The renderer is not the cause, so the D3DMetal comparison is no
+longer needed. The invalid HMD render pose (see "the HMD render pose is
+invalid under Wine") remains a candidate; see below.
 
 ### Where overlays drop out in vrcompositor, 2026-10-08 (CrossOver)
 
@@ -1200,10 +1198,23 @@ that did so killed the compositor.
   (VROverlayError_InvalidTexture)` about 20 times per session, so its own
   pages (the dashboard panels) would have no image even once drawn.
 
-Next: find why an accepted scene graph yields no render items. The
-traversal warns `Scene graph visited panel %s that did not have a valid
-overlay` (0x1400bfa55), which never appeared, so the panels are probably
-dropped by a check that does not log.
+The render pose is invalid in both display modes. `tools/openvr_probe` on
+CrossOver, simulated: every `WaitGetPoses` HMD pose was invalid (90 of 90
+per second) in direct mode, in seated, standing and raw spaces alike, and
+equally in virtual mode (worktree builds `build-sim` and `build-x64`, with
+`IPC_IGNORE_VERSION=1` for their two-commit difference). Home looked right
+in virtual mode only because it was late on most frames there, and late
+frames get client-computed poses, which are valid.
+
+So one cause may explain both problems: the compositor's own HMD pose is
+uninitialised under Wine, Home therefore needs the shim's pose fix, and a
+scene graph whose panels are placed relative to the head or the dashboard
+(re)latch yields no render items.
+
+Next: find where vrcompositor produces the pose it hands out as
+`TrackingResult_Uninitialized`, and whether the scene graph traversal
+checks the same pose. The traversal warns `Scene graph visited panel %s
+that did not have a valid overlay` (0x1400bfa55), which never appeared.
 
 ### Next steps
 
