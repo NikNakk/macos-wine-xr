@@ -16,7 +16,7 @@
 #   APP_ARGS='...'         extra arguments for that app, for example -nowindow
 #                          (no desktop companion window in Source 2 games)
 #   XRT_MACOS_REFRESH_RATE_HZ=90  PS VR2 refresh rate, passed to the service too
-#   MWXR_DISPLAY_MODE=direct|virtual  sets driver_mwxr.displayMode first
+#   MWXR_DISPLAY_MODE=direct|virtual  driver_mwxr.displayMode for this run (default direct)
 #   MWXR_OPENVR_SHIM_INSTALL=0  do not install tools/openvr_shim beside SteamVR
 #                           Home (default 1; it logs Home's frame loop to the run's
 #                           openvr-shim.log; Valve's openvr_api.dll is restored on exit)
@@ -52,7 +52,7 @@ mode=${MWXR_MONADO:-simulated}
 
 # Register the driver folder, select it, and never leave it blocked by
 # SteamVR safe mode after a failed development start.
-python3 - "${prefix}" "Z:${driver_root//\//\\}" "${steam_dir}/config/steamvr.vrsettings" "${MWXR_DISPLAY_MODE:-}" <<'PY'
+python3 - "${prefix}" "Z:${driver_root//\//\\}" "${steam_dir}/config/steamvr.vrsettings" "${MWXR_DISPLAY_MODE:-direct}" <<'PY'
 import json, sys
 from pathlib import Path
 prefix, driver, settings, display_mode = sys.argv[1:]
