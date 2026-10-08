@@ -1252,6 +1252,51 @@ Still open: vrwebhelper's `Got SetOverlayTexture failure
 blank, and whether `MWXR_OPENVR_SHIM_FIX_POSE` is still needed for Home
 (it should not be). The Wine 11.10 rig does not have the fix.
 
+### vrwebhelper's InvalidTexture failures, 2026-10-08 (CrossOver)
+
+vrwebhelper (SteamVR's CEF host for the dashboard pages) hands frames to
+SteamVR two ways, chosen per frame by CEF:
+- `OnAcceleratedPaint` (0x140008c20): CEF's GPU process shares a BGRA
+  texture by NT handle (1860x2048, misc 0x802); vrwebhelper opens it with
+  `OpenSharedResource1` and calls `IVROverlay_029::SetOverlayTexture` with
+  `TextureType_DirectX`. This works: DXMT imports it, and the probe's
+  `--cef` mode reproduces it successfully at the same size and flags,
+  through `IVROverlay_028` and `_029` and as `VRApplication_WebHelper`.
+- `OnPaint` (0x14000b220, software): vrwebhelper uploads the pixels to an
+  OpenGL texture and passes `TextureType_OpenGL`. Every failure comes from
+  here: `vrclient_vrwebhelper_main.txt` logs `wglGetCurrentContext()
+  returned NULL` once per failure, in bursts of about 115 per second while
+  a page animates.
+
+The OpenGL path cannot work in this setup:
+- vrclient adds `-forceOnPaint=gpu` to vrwebhelper's command line
+  (0x18013d85c; overridable with the string setting `steamvr.forceCEFMode`,
+  `cpu` or `gpu`). In `gpu` mode vrwebhelper creates no GL context at all.
+- In `cpu` mode it asks SDL2 for a hidden window and a 4.1 core context,
+  which failed (`Could not create GL context: Invalid parameter`).
+  `tools/openvr_probe/sdl_gl_probe.c` reproduces this. Two causes:
+  `winemac.drv` rejects `WGL_CONTEXT_OPENGL_NO_ERROR_ARB` (SDL passes it, 0,
+  because Wine advertises the extension); fixed by
+  `patches/crossover/0004-winemac-accept-wgl-context-opengl-no-error.patch`,
+  installed (original `winemac.so.pre-noerror`). And it requires the
+  forward-compatible flag for core contexts; CrossOver's own
+  `CX_FWD_COMPAT_GL_CTX=1` adds it. With both, all four probe requests
+  succeed (4.1 Metal).
+- Even with a context, vrclient then needs `WGL_NV_DX_interop` to give the
+  GL texture to the compositor (`Failed to load wglDXOpenDeviceNV!`), which
+  Wine on macOS does not provide. In `cpu` mode every page then fails.
+
+So the pages must never fall back to `OnPaint`. Why CEF paints some pages
+in software in `gpu` mode is not yet known. A candidate: CEF's GPU process
+logs DXMT's `CreateSwapChain: cross-process swapchain not supported yet`
+(and ANGLE's `eglCreateWindowSurface failed with error EGL_BAD_ALLOC`),
+which may make Chromium drop GPU compositing for some or all browsers.
+vrwebhelper also hosts desktop (windowed) pages, `settings_desktop` and
+`pairing`, which would need such swapchains.
+
+No record of a vrwebhelper crash was found: no dumps, and the logs SteamVR
+keeps (current and previous) end normally.
+
 ### Next steps
 
 - Run the general guard against a reproducible live cycle, on Windows or with

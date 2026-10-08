@@ -8,11 +8,21 @@
 //         SteamVR and Steam web helpers do)
 //   blue  SetOverlayFromFile: a BMP the compositor loads itself
 // With --dashboard it also asks SteamVR to show its dashboard after 10 s.
+// With --cef it adds yellow overlays below, fed as SteamVR's web helper feeds
+// CEF's frames: a texture shared by NT handle, opened on a second device with
+// OpenSharedResource1, then given to SetOverlayTexture.
 //
-//   overlay_probe.exe [--seconds N] [--dashboard] [--log FILE]
+// --app-type N connects as that EVRApplicationType (SteamVR's web helper is
+// VRApplication_WebHelper, 8) instead of VRApplication_Overlay.
+//
+// --overlay-029 gives the --cef textures to IVROverlay_029's SetOverlayTexture
+// (vtable slot 61, as the web helper calls it) instead of IVROverlay_028's.
+//
+//   overlay_probe.exe [--seconds N] [--dashboard] [--cef] [--app-type N] [--overlay-029] [--log FILE]
 #include <windows.h>
 
-#include <d3d11.h>
+#include <d3d10.h>
+#include <d3d11_1.h>
 
 #include <chrono>
 #include <cstdarg>
@@ -104,18 +114,27 @@ main(int argc, char **argv)
 {
 	double seconds = 60;
 	bool dashboard = false;
+	bool cef = false;
+	int appType = vr::VRApplication_Overlay;
+	bool overlay029 = false;
 	for (int i = 1; i < argc; ++i) {
 		if (!strcmp(argv[i], "--seconds") && i + 1 < argc) {
 			seconds = atof(argv[++i]);
 		} else if (!strcmp(argv[i], "--dashboard")) {
 			dashboard = true;
+		} else if (!strcmp(argv[i], "--cef")) {
+			cef = true;
+		} else if (!strcmp(argv[i], "--overlay-029")) {
+			overlay029 = true;
+		} else if (!strcmp(argv[i], "--app-type") && i + 1 < argc) {
+			appType = atoi(argv[++i]);
 		} else if (!strcmp(argv[i], "--log") && i + 1 < argc) {
 			g_log = fopen(argv[++i], "w");
 		}
 	}
 
 	vr::EVRInitError initError = vr::VRInitError_None;
-	vr::VR_Init(&initError, vr::VRApplication_Overlay);
+	vr::VR_Init(&initError, (vr::EVRApplicationType)appType);
 	if (initError != vr::VRInitError_None) {
 		Log("VR_Init failed: %d %s\n", initError, vr::VR_GetVRInitErrorAsEnglishDescription(initError));
 		return 1;
@@ -188,6 +207,116 @@ main(int argc, char **argv)
 			Log("SetOverlayTexture: %s\n", OverlayError(overlay->SetOverlayTexture(texture, &t)));
 			Log("ShowOverlay texture: %s\n", OverlayError(overlay->ShowOverlay(texture)));
 		}
+	}
+
+	// Yellow: CEF-style frames (see --cef above), one overlay per sharing flag set.
+	struct CefVariant
+	{
+		const char *name;
+		UINT miscFlags;
+		bool reopen;
+		UINT width, height; // CEF's dashboard frames are 1860x2048
+	};
+	const CefVariant cefVariants[] = {
+	    {"nt+keyedmutex reopened", D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX, true, 64, 64},
+	    {"nt+shared reopened", D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED, true, 64, 64},
+	    {"nt+shared direct", D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED, false, 64, 64},
+	    {"nt+shared reopened 1860x2048", D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED, true, 1860, 2048},
+	};
+	ID3D11Device1 *consumer = nullptr;
+	if (cef && device) {
+		ID3D11Device *base = nullptr;
+		if (SUCCEEDED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0,
+		                                D3D11_SDK_VERSION, &base, nullptr, nullptr))) {
+			base->QueryInterface(__uuidof(ID3D11Device1), (void **)&consumer);
+			base->Release();
+		}
+		Log("Consumer ID3D11Device1: %p\n", (void *)consumer);
+	}
+	for (size_t v = 0; cef && device && consumer && v < sizeof(cefVariants) / sizeof(cefVariants[0]); ++v) {
+		const CefVariant &variant = cefVariants[v];
+		char key[64];
+		snprintf(key, sizeof(key), "mwxr.probe.cef%zu", v);
+		vr::VROverlayHandle_t handle = MakeOverlay(key, variant.name, -0.5f + 0.5f * v);
+		if (handle == vr::k_ulOverlayHandleInvalid) {
+			continue;
+		}
+		vr::HmdMatrix34_t below = {{{1, 0, 0, -0.5f + 0.5f * v}, {0, 1, 0, -0.5f}, {0, 0, 1, -1.5f}}};
+		overlay->SetOverlayTransformTrackedDeviceRelative(handle, vr::k_unTrackedDeviceIndex_Hmd, &below);
+		D3D11_TEXTURE2D_DESC desc = {};
+		desc.Width = variant.width;
+		desc.Height = variant.height;
+		desc.MipLevels = desc.ArraySize = 1;
+		desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; // CEF's frame format
+		desc.SampleDesc.Count = 1;
+		desc.Usage = D3D11_USAGE_DEFAULT;
+		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+		desc.MiscFlags = variant.miscFlags;
+		std::vector<uint8_t> yellow((size_t)variant.width * variant.height * 4);
+		for (size_t i = 0; i < yellow.size(); i += 4) {
+			yellow[i + 1] = yellow[i + 2] = yellow[i + 3] = 255; // B G R A
+		}
+		D3D11_SUBRESOURCE_DATA data = {yellow.data(), variant.width * 4, 0};
+		ID3D11Texture2D *produced = nullptr;
+		HRESULT hr = device->CreateTexture2D(&desc, &data, &produced);
+		Log("cef %s: CreateTexture2D 0x%08lx\n", variant.name, (unsigned long)hr);
+		if (FAILED(hr)) {
+			continue;
+		}
+		ID3D11Texture2D *given = produced;
+		if (variant.reopen) {
+			IDXGIResource1 *resource = nullptr;
+			HANDLE nt = nullptr;
+			hr = produced->QueryInterface(__uuidof(IDXGIResource1), (void **)&resource);
+			if (SUCCEEDED(hr)) {
+				hr = resource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
+				                                  nullptr, &nt);
+				resource->Release();
+			}
+			Log("cef %s: CreateSharedHandle 0x%08lx handle %p\n", variant.name, (unsigned long)hr, nt);
+			given = nullptr;
+			if (SUCCEEDED(hr)) {
+				hr = consumer->OpenSharedResource1(nt, __uuidof(ID3D11Texture2D), (void **)&given);
+				Log("cef %s: OpenSharedResource1 0x%08lx\n", variant.name, (unsigned long)hr);
+			}
+			if (!given) {
+				continue;
+			}
+			D3D11_TEXTURE2D_DESC opened;
+			given->GetDesc(&opened);
+			Log("cef %s: opened %ux%u format %d bind 0x%x misc 0x%x\n", variant.name, opened.Width,
+			    opened.Height, opened.Format, opened.BindFlags, opened.MiscFlags);
+		}
+		{
+			// vrclient picks its texture path by QueryInterface: ID3D10Texture2D with a device first.
+			ID3D10Texture2D *d3d10 = nullptr;
+			ID3D10Device *d3d10Device = nullptr;
+			HRESULT qi = given->QueryInterface(__uuidof(ID3D10Texture2D), (void **)&d3d10);
+			if (SUCCEEDED(qi)) {
+				d3d10->GetDevice(&d3d10Device);
+				d3d10->Release();
+			}
+			Log("cef %s: QI ID3D10Texture2D 0x%08lx, its device %p\n", variant.name, (unsigned long)qi,
+			    (void *)d3d10Device);
+			if (d3d10Device) {
+				d3d10Device->Release();
+			}
+		}
+		vr::Texture_t t = {given, vr::TextureType_DirectX, vr::ColorSpace_Auto};
+		vr::EVROverlayError result;
+		if (overlay029) {
+			using SetTexture = vr::EVROverlayError(__thiscall *)(void *, vr::VROverlayHandle_t, const vr::Texture_t *);
+			vr::EVRInitError error = vr::VRInitError_None;
+			void *latest = vr::VR_GetGenericInterface("IVROverlay_029", &error);
+			if (latest && v == 0) {
+				Log("IVROverlay_029 %p, SetOverlayTexture %p\n", latest, (void *)(*(SetTexture **)latest)[61]);
+			}
+			result = latest ? (*(SetTexture **)latest)[61](latest, handle, &t) : vr::VROverlayError_RequestFailed;
+		} else {
+			result = overlay->SetOverlayTexture(handle, &t);
+		}
+		Log("cef %s: SetOverlayTexture%s %s\n", variant.name, overlay029 ? " (029)" : "", OverlayError(result));
+		Log("cef %s: ShowOverlay %s\n", variant.name, OverlayError(overlay->ShowOverlay(handle)));
 	}
 
 	// Blue: a file the compositor loads.
