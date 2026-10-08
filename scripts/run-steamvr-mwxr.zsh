@@ -219,7 +219,8 @@ start_isolated_service() { # <service binary> <environment template plist or emp
   export XDG_RUNTIME_DIR=/private/tmp/mwxr-steamvr.${UID}
   launchctl bootout "gui/${UID}/${label}" 2>/dev/null || true
   mkdir -p "${XDG_RUNTIME_DIR}"
-  python3 - "${logs}" "${label}" "$1" "${MONADO_VULKAN_ICD:-/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json}" "$2" "$3" <<'PY'
+  # Absolute: launchd runs the job from /, so a relative build path fails silently.
+  python3 - "${logs}" "${label}" "${1:A}" "${MONADO_VULKAN_ICD:-/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json}" "$2" "$3" <<'PY'
 import os, plistlib, sys
 root, label, service, icd, template, simulated = sys.argv[1:]
 env = {}
