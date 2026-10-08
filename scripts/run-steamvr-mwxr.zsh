@@ -17,8 +17,8 @@
 #                          (no desktop companion window in Source 2 games)
 #   XRT_MACOS_REFRESH_RATE_HZ=90  PS VR2 refresh rate, passed to the service too
 #   MWXR_DISPLAY_MODE=direct|virtual  driver_mwxr.displayMode for this run (default direct)
-#   MWXR_OPENVR_SHIM_INSTALL=0  do not install tools/openvr_shim beside SteamVR
-#                           Home (default 1; it logs Home's frame loop to the run's
+#   MWXR_OPENVR_SHIM_INSTALL=1  install tools/openvr_shim beside SteamVR Home
+#                           (default 0; it logs Home's frame loop to the run's
 #                           openvr-shim.log; Valve's openvr_api.dll is restored on exit)
 #   MWXR_OPENVR_SHIM_APP_DIRS='Half-Life Alyx/game/bin/win64'  also install it in these
 #                           folders (colon-separated, relative to steamapps/common)
@@ -181,7 +181,7 @@ shim_dirs=("${steam_dir}/steamapps/common/SteamVR/tools/steamvr_environments/gam
 for dir in ${(s.:.)MWXR_OPENVR_SHIM_APP_DIRS:-}; do shim_dirs+=("${steam_dir}/steamapps/common/${dir}"); done
 shim_installed=()
 install_shim() {
-  [[ ${MWXR_OPENVR_SHIM_INSTALL:-1} == 1 && -f ${shim} ]] || return 0
+  [[ ${MWXR_OPENVR_SHIM_INSTALL:-0} == 1 && -f ${shim} ]] || return 0
   local dir
   for dir in "${shim_dirs[@]}"; do
     [[ -f ${dir}/openvr_api.dll ]] || { print -u2 "No openvr_api.dll in ${dir}; shim not installed there"; continue; }
