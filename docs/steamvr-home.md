@@ -6,6 +6,61 @@ poses from Monado and receiving composited frames through
 `IVRVirtualDisplay`. OpenComposite and xrizer cannot provide this: they
 implement only the application side of OpenVR.
 
+## Current status, 2026-10-08
+
+The rest of this document is a dated record of how each problem was found;
+this section is the summary.
+
+Working, on the PS VR2 in direct mode, with the CrossOver rig
+(`.build/steamvr-crossover`):
+
+- SteamVR, SteamVR Home with controllers, the dashboard and overlays, and
+  launching games from Home or the dashboard.
+- Half-Life: Alyx through SteamVR: a full play session went well (user,
+  2026-10-08).
+- OpenXR games launched from Steam (Hyperbolica) go direct to Monado through
+  wineopenxr, not through SteamVR.
+- Steam with its GPU web helper on: the main window, menus and sign-in window
+  all draw.
+
+What it takes:
+
+- CrossOver 26.3 FOSS Wine with msync and the four patches in
+  `patches/crossover/`:
+  - 0001: keyed-mutex waits on server syncs, or the first cross-process
+    acquire hangs;
+  - 0002: msync's leaked wait registrations, which slowed the wineserver
+    over long sessions;
+  - 0003: `WTSSessionInfoEx` and `WTSIsRemoteSession`. Without it SteamVR
+    believes the session is locked: an uninitialised head pose, and no
+    overlays or dashboard;
+  - 0004: winemac accepts `WGL_CONTEXT_OPENGL_NO_ERROR_ARB`.
+- DXMT from `NikNakk/dxmt` branch `steamvr-in-process`: cross-process shared
+  textures and keyed mutexes, and swapchains for another process's window
+  shown through `CALayerHost` (`DXMT_CROSS_PROCESS_SWAPCHAIN=host`, the
+  rig wrapper's default). `CALayerHost` and `CAContext` are private
+  QuartzCore API, checked for at run time as Chromium does. The public
+  alternative, an IOSurface shown in a `CAMetalLayer` in the owning process,
+  is the route if this goes upstream.
+- `scripts/run-steamvr-mwxr.zsh` sets direct mode on every run, links the
+  Windows core fonts into the prefix, and leaves Valve's `openvr_api.dll` in
+  place (the OpenVR shim is now only a logger: `MWXR_OPENVR_SHIM_INSTALL=1`).
+
+Kept, but not in use:
+
+- Virtual-display mode (SteamVR as the only compositor) works, but too much
+  of the frame path then runs as x86_64 code under Rosetta. Preserved to try
+  again once Wine for ARM64 with FEX is possible. That needs an entitlement
+  that only a paid Apple Developer account can grant, or protections turned
+  off that the user prefers to keep on, so it is deferred.
+- The Workshop cycle guard (`tools/workshop_guard`) is not needed in live
+  runs now. The same recursion was reported on Windows, so it stays until a
+  clean install, on Windows and under Wine, shows whether Home still needs it.
+- The Wine 11.10 rig (`.build/steamvr-dxmt`) is for comparisons only. It
+  lacks patch 0003, so its poses still need the shim's pose fix.
+
+Not being pursued for now: Game Mode with SteamVR and Steam.
+
 ## Spike 1: null driver under GPTK/D3DMetal, 2026-10-06
 
 Setup: SteamVR 2.17.10 (build 25330290), installed through Windows Steam in
@@ -328,21 +383,15 @@ PS VR2 (installed service v25.1.0-2146, `XRT_MACOS_CLIENT_COMPOSITOR=1`):
 
 ### Open issues
 
-- Controllers were not drawn in Home and Home did not react to them, although
-  their values reached the driver. With simulated WMR controllers
-  (`SIMULATED_LEFT=wmr SIMULATED_RIGHT=wmr`, bound through the driver's
-  `khr/simple_controller` fallback), SteamVR presents both as `oculus_touch`,
-  builds the Quest 2 render-model templates, and loads Home's
-  `bindings_touch.json`; Home loads the model components and processes the
-  actions, with no input errors. The binding chain therefore works. The
-  likely cause on the headset was the missing universe: with the eyes at
-  floor level, the hands were below Home's floor. Recheck on the PS VR2 after
-  the `jsonid` fix.
+As of 2026-10-08 (originally written on 2026-10-06):
+
+- Controllers work in Home. What was missing earlier was the dashboard,
+  caused by SteamVR treating the session as locked; see "Root cause" below.
 - SteamVR's 41-45 ms prediction on the PS VR2 is long, and comes from the
   vsync timing the driver reports. Worth tuning with real pacing data.
 - "WaitForAcquire timed out" appears occasionally during hitches.
-- Game Mode: frames now pass through `vrserver`, which macOS may throttle like
-  `monado-service`. Not yet measured.
+- Game Mode: frames pass through `vrserver`, which macOS may throttle like
+  `monado-service`. Not being pursued for now.
 - No skeletal input, battery or proximity.
 
 ### Virtual-display mode: SteamVR as the only compositor, 2026-10-06
@@ -1399,28 +1448,18 @@ Runs:
 
 ### Next steps
 
-- Run the general guard against a reproducible live cycle, on Windows or with
-  responsive Steam metadata under Wine. Check sustained submits after a logged
-  rejection, then assess frame pacing. The debugger fixtures do not replace this
-  application acceptance gate.
-- PS VR2 run of the CrossOver rig, with the compositor in the service and in
-  vrserver.
-- Compare the Workshop recursion under CrossOver if it remains after resolving
-  the dependency/cache issue.
-- PS VR2 run of virtual mode. It needs Monado built from
-  `claude/display-distortion-mndx` with
+Updated 2026-10-08.
+
+- Workshop cycle: on a clean install (Windows, then CrossOver), check whether
+  Home still recurses. That decides whether `tools/workshop_guard` and the
+  draft report in `docs/bug-reports/` are still needed.
+- Virtual mode: retry when Wine for ARM64 with FEX can run here; see Current
+  status. It also needs Monado from `claude/display-distortion-mndx` with
   `-DXRT_FEATURE_OPENXR_MNDX_DISPLAY_DISTORTION=ON`, for both the service and
-  the x86_64 client. `MWXR_MONADO=isolated` runs such a service
-  (`MONADO_SERVICE_BUILD`) under its own launchd label and socket, with the
-  installed LaunchAgent's environment. The agent is left alone, but must not
-  be running, because the service claims the headset's USB.
-  `MWXR_DISPLAY_MODE=virtual` selects the mode. Checks:
-  - the image is correctly distorted;
-  - a dump matches the panel;
-  - latency and pacing compared with direct mode and the xrizer path.
+  the x86_64 client; `MWXR_MONADO=isolated` runs such a service under its own
+  launchd label, and `MWXR_DISPLAY_MODE=virtual` selects the mode.
 - PS VR2 check of the zero-copy path.
-- Raise SteamVR's resolve resolution towards the runtime's recommendation, if
-  SteamVR allows it (its supersampling settings), to reduce the loss in the
-  extra composite.
-- Measure latency and Game Mode behaviour against the direct
-  OpenComposite/xrizer path before choosing defaults per game.
+- Pacing: SteamVR's prediction and the resolve resolution against the
+  runtime's recommendation (its supersampling settings).
+- Measure latency against the direct OpenComposite/xrizer path before
+  choosing defaults per game.
