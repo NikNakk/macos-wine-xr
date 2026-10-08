@@ -84,9 +84,16 @@ PY
 # Windows core fonts, linked from macOS's copies. Wine registers the Mac's fonts
 # by Z: path only, and Unity finds OS fonts in C:\windows\Fonts: without Arial,
 # Unity's default UI font, button labels draw as nothing (Hyperbolica).
+# Not Tahoma: with both Tahoma faces present, Steam's web helper stops after
+# creating its first browser and the Steam window never appears (2026-10-09).
+# Either face alone, and every other font here, is fine. Links from earlier
+# runs are removed.
 link_core_fonts() {
-  local dir=${prefix}/drive_c/windows/Fonts src=/System/Library/Fonts/Supplemental pair
+  local dir=${prefix}/drive_c/windows/Fonts src=/System/Library/Fonts/Supplemental pair face
   mkdir -p "${dir}"
+  for face in tahoma:Tahoma tahomabd:'Tahoma Bold'; do
+    [[ $(readlink "${dir}/${face%%:*}.ttf" 2>/dev/null) == "${src}/${face#*:}.ttf" ]] && rm -f "${dir}/${face%%:*}.ttf"
+  done
   for pair in arial:Arial arialbd:'Arial Bold' ariali:'Arial Italic' arialbi:'Arial Bold Italic' \
       ariblk:'Arial Black' times:'Times New Roman' timesbd:'Times New Roman Bold' \
       timesi:'Times New Roman Italic' timesbi:'Times New Roman Bold Italic' cour:'Courier New' \
@@ -94,7 +101,7 @@ link_core_fonts() {
       verdana:Verdana verdanab:'Verdana Bold' verdanai:'Verdana Italic' verdanaz:'Verdana Bold Italic' \
       georgia:Georgia georgiab:'Georgia Bold' georgiai:'Georgia Italic' georgiaz:'Georgia Bold Italic' \
       trebuc:'Trebuchet MS' trebucbd:'Trebuchet MS Bold' trebucit:'Trebuchet MS Italic' \
-      trebucbi:'Trebuchet MS Bold Italic' tahoma:Tahoma tahomabd:'Tahoma Bold' comic:'Comic Sans MS' \
+      trebucbi:'Trebuchet MS Bold Italic' comic:'Comic Sans MS' \
       comicbd:'Comic Sans MS Bold' impact:Impact webdings:Webdings; do
     [[ -e ${dir}/${pair%%:*}.ttf || ! -f ${src}/${pair#*:}.ttf ]] || ln -s "${src}/${pair#*:}.ttf" "${dir}/${pair%%:*}.ttf"
   done
