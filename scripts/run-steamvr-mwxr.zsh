@@ -81,6 +81,26 @@ s.setdefault("power", {}).update({"pauseCompositorOnStandby": False, "turnOffScr
 path.write_text(json.dumps(s, indent=3))
 PY
 
+# Windows core fonts, linked from macOS's copies. Wine registers the Mac's fonts
+# by Z: path only, and Unity finds OS fonts in C:\windows\Fonts: without Arial,
+# Unity's default UI font, button labels draw as nothing (Hyperbolica).
+link_core_fonts() {
+  local dir=${prefix}/drive_c/windows/Fonts src=/System/Library/Fonts/Supplemental pair
+  mkdir -p "${dir}"
+  for pair in arial:Arial arialbd:'Arial Bold' ariali:'Arial Italic' arialbi:'Arial Bold Italic' \
+      ariblk:'Arial Black' times:'Times New Roman' timesbd:'Times New Roman Bold' \
+      timesi:'Times New Roman Italic' timesbi:'Times New Roman Bold Italic' cour:'Courier New' \
+      courbd:'Courier New Bold' couri:'Courier New Italic' courbi:'Courier New Bold Italic' \
+      verdana:Verdana verdanab:'Verdana Bold' verdanai:'Verdana Italic' verdanaz:'Verdana Bold Italic' \
+      georgia:Georgia georgiab:'Georgia Bold' georgiai:'Georgia Italic' georgiaz:'Georgia Bold Italic' \
+      trebuc:'Trebuchet MS' trebucbd:'Trebuchet MS Bold' trebucit:'Trebuchet MS Italic' \
+      trebucbi:'Trebuchet MS Bold Italic' tahoma:Tahoma tahomabd:'Tahoma Bold' comic:'Comic Sans MS' \
+      comicbd:'Comic Sans MS Bold' impact:Impact webdings:Webdings; do
+    [[ -e ${dir}/${pair%%:*}.ttf || ! -f ${src}/${pair#*:}.ttf ]] || ln -s "${src}/${pair#*:}.ttf" "${dir}/${pair%%:*}.ttf"
+  done
+}
+link_core_fonts
+
 export MWXR_IN_PROCESS_BUILD=${MWXR_IN_PROCESS_BUILD:-${repo}/build-in-process/gate-steamvr}
 export MWXR_IN_PROCESS_WINE=${MWXR_WINE_TREE:-${root}/wine-11.10}
 wine_wrapper=${MWXR_WINE_WRAPPER:-${root}/bin/wine-current-dxmt}

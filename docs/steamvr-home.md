@@ -1389,8 +1389,12 @@ Runs:
 - 14:02, PS VR2 (isolated `monado-display-distortion/build-hw` at `5f456920d`,
   direct display mode, DXMT `eb8af5e`): plays in the headset, including a
   relaunch. Problem: text on the game's buttons (labels missing, plain rounded
-  rectangles; dialogue text is fine). The same happens in flat mode, so it is a
-  D3D11/DXMT rendering issue, not the OpenXR path. Which of the overlay setting
+  rectangles; dialogue text is fine). Same in flat mode, with the original
+  DXMT and with GPTK's D3DMetal, so not graphics. Cause: no Arial in the
+  prefix's C:\windows\Fonts (Wine registers macOS fonts by Z: path only).
+  Unity's default UI font is Arial, looked up there; the dialogue uses fonts
+  bundled with the game. Fixed by linking macOS's copies of the Windows core
+  fonts into the prefix, which the launcher now does. Which of the overlay setting
   and the DXMT update fixed the 08:50 hang is not known.
 
 ### Next steps
