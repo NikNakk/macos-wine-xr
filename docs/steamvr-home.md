@@ -1297,6 +1297,29 @@ vrwebhelper also hosts desktop (windowed) pages, `settings_desktop` and
 No record of a vrwebhelper crash was found: no dumps, and the logs SteamVR
 keeps (current and previous) end normally.
 
+Confirmed cause of the fallback (DXMT `7d4a400`). The swapchain error now
+names the process and window: vrwebhelper's GPU process creates swapchains
+for two 800x600 `Chrome_WidgetWin_0` windows of its browser process (the
+desktop pages), about 13 s before the first software paint. With
+`DXMT_CROSS_PROCESS_SWAPCHAIN=offscreen` (opt-in; such a swapchain presents
+to a layer in no window, so the desktop pages stay blank), two 4-minute
+simulated runs on CrossOver had 0 failures, against 18 in the same run
+without it (and 2 to about 1,200 in earlier sessions). Installed in the
+CrossOver rig: d3d11, dxgi and d3d10core from this build, and
+`winemetal.so` (original `winemetal.so.pre-crossproc`).
+
+A real fix presents those frames in the other process's window: a remote
+`CAContext` layer in the GPU process, hosted with `CALayerHost` in the
+window's process. Steam's own web helper with GPU compositing on is the
+natural test, since its window would then show.
+
+During one control run, vrserver crashed (`Unhandled page fault on execute
+access to 00006FFFFF9FFB90`, thread 03f4), not reproduced since. Wine's
+crash dialog waited unseen, and SteamVR's safe mode then blocked
+`driver_mwxr` (`blocked_by_safe_mode`), shown as "some SteamVR add-ons have
+been blocked". The prefix now has `HKCU\Software\Wine\WineDbg`
+`ShowCrashDialog=0`, so crash backtraces go to the run's `vrstartup.log`.
+
 ### Next steps
 
 - Run the general guard against a reproducible live cycle, on Windows or with
