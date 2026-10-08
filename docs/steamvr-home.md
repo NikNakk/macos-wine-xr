@@ -1324,7 +1324,16 @@ private QuartzCore interfaces, checked at runtime as Chromium does.
 `tools/keyedmutex_test/d3d11_xproc_swapchain.c` (a parent's window, a
 child's swapchain) showed the child's red, green and blue frames filling the
 parent's window, confirmed by eye. This build changes winemetal.dll too.
-Steam's own web helper with GPU compositing on is the next test.
+
+Steam with its GPU web helper on (`steamwebhelper-gpu.zsh on`, Steam
+started by hand: the launcher passes `-cef-disable-gpu`), 2026-10-08: the
+first attempt stayed black, because Steam's browser process loads dxgi.dll
+but not d3d11.dll, so nothing hosted the layers (`process 300 is not hosting
+remote layers`). With the host thread started from either DLL (DXMT
+`eb8af5e`), Steam's window draws. Chromium recreated the swapchain six times
+during start-up, each time re-hosted cleanly. The CrossOver rig's
+`run-mwxr.zsh` also exports the mode, because the launcher starts SteamVR
+through `run-in-process-openxr.zsh`, not the wrapper.
 
 During one control run, vrserver crashed (`Unhandled page fault on execute
 access to 00006FFFFF9FFB90`, thread 03f4), not reproduced since. Wine's
