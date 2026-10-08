@@ -11,8 +11,11 @@ implement only the application side of OpenVR.
 The rest of this document is a dated record of how each problem was found;
 this section is the summary.
 
-Working, on the PS VR2 in direct mode, with the CrossOver rig
-(`.build/steamvr-crossover`):
+Working, on the PS VR2 in direct mode, with the CrossOver rig (`~/Windows`:
+the prefix, the `bin/wine-crossover-dxmt` wrapper and `run-mwxr.zsh`; its Wine
+tree is `~/Code/wine-crossover/runtime`). Until 2026-10-09 the rig was
+`.build/steamvr-crossover` in the Monado workspace, as the dated sections below
+say; their cited evidence is now in `~/Code/monado-2-archive/evidence/`:
 
 - SteamVR, SteamVR Home with controllers, the dashboard and overlays, and
   launching games from Home or the dashboard.
@@ -58,8 +61,12 @@ Kept, but not in use:
 - The Workshop cycle guard (`tools/workshop_guard`) is not needed in live
   runs now. The same recursion was reported on Windows, so it stays until a
   clean install, on Windows and under Wine, shows whether Home still needs it.
-- The Wine 11.10 rig (`.build/steamvr-dxmt`) is for comparisons only. It
-  lacks patch 0003, so its poses still need the shim's pose fix.
+- The Wine 11.10 comparison rig (`.build/steamvr-dxmt`) was deleted on
+  2026-10-09; `scripts/build-current-dxmt.zsh` can rebuild one. It lacked
+  patch 0003, so its poses needed the shim's pose fix.
+
+`MWXR_STEAM_ONLY=1` (the rig's `run-steam.zsh`) starts Steam with the same
+XR environment but no SteamVR, for OpenXR games that go straight to Monado.
 
 Not being pursued for now: Game Mode with SteamVR and Steam.
 

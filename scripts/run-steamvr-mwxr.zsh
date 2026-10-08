@@ -12,7 +12,11 @@
 #                          under its own launchd label and socket with the
 #                          installed LaunchAgent's environment; the agent itself
 #                          is left alone but must not be running (USB)
-#   APPID=<steam app id>   optionally launch a Steam app once SteamVR is up
+#   MWXR_STEAM_ONLY=1      start Steam with the XR environment but not SteamVR, so
+#                          OpenXR games launched from it reach Monado directly; the
+#                          script then waits until Steam exits
+#   APPID=<steam app id>   optionally launch a Steam app once SteamVR (or, with
+#                          MWXR_STEAM_ONLY=1, Steam) is up
 #   APP_ARGS='...'         extra arguments for that app, for example -nowindow
 #                          (no desktop companion window in Source 2 games)
 #   XRT_MACOS_REFRESH_RATE_HZ=90  PS VR2 refresh rate, passed to the service too
@@ -25,6 +29,7 @@
 #   MWXR_HOME_CONSOLE=0     do not record SteamVR Home's developer console (by default
 #                           tools/vconsole_capture writes it to the run's home-console.log;
 #                           Home listens on -vconport 29009, set in SteamVR's tools.vrmanifest)
+#   MWXR_LOG_ROOT           where run and DXMT logs go (default ${MWXR_STEAMVR_ROOT})
 #   MWXR_CAFFEINATE=0       let macOS sleep the displays during the run (by default
 #                           they stay awake: display sleep turns the headset's display
 #                           off, and a service with XRT_MACOS_EXIT_ON_DISPLAY_LOSS=1 exits)
@@ -46,6 +51,7 @@ driver_root=${MWXR_STEAMVR_DRIVER:-${repo}/build-in-process/steamvr-driver/mwxr}
 prefix=${root}/prefix
 steam_dir="${prefix}/drive_c/Program Files (x86)/Steam"
 mode=${MWXR_MONADO:-simulated}
+steam_only=${MWXR_STEAM_ONLY:-0}
 
 [[ -f ${driver_root}/bin/win64/driver_mwxr.dll ]] || { print -u2 "Build the driver first: ${driver_root}"; exit 1; }
 [[ -d ${steam_dir}/steamapps/common/SteamVR ]] || { print -u2 "No SteamVR in ${prefix}"; exit 1; }
@@ -117,14 +123,15 @@ wine_wrapper=${MWXR_WINE_WRAPPER:-${root}/bin/wine-current-dxmt}
 export MWXR_IN_PROCESS_PREFIX=${prefix}
 export MWXR_NATIVE_RUNTIME_JSON
 export DXMT_LOG_LEVEL=${DXMT_LOG_LEVEL:-info}
-export DXMT_LOG_PATH=${DXMT_LOG_PATH:-Z:${root}/dxmt-logs}
-mkdir -p "${root}/dxmt-logs"
-logs=${root}/run-mwxr-$(date +%Y%m%d-%H%M%S); mkdir -p "${logs}"; print "Logs: ${logs}"
+log_root=${MWXR_LOG_ROOT:-${root}}
+export DXMT_LOG_PATH=${DXMT_LOG_PATH:-Z:${log_root}/dxmt-logs}
+mkdir -p "${log_root}/dxmt-logs"
+logs=${log_root}/run-mwxr-$(date +%Y%m%d-%H%M%S); mkdir -p "${logs}"; print "Logs: ${logs}"
 # Keep the displays (the headset's included) awake until this script exits.
 [[ ${MWXR_CAFFEINATE:-1} == 1 ]] && caffeinate -d -w $$ &!
 # Record Home's console for the whole run (it reconnects when Home restarts).
 console_pid=
-if [[ ${MWXR_HOME_CONSOLE:-1} == 1 ]]; then
+if [[ ${steam_only} != 1 && ${MWXR_HOME_CONSOLE:-1} == 1 ]]; then
   python3 "${repo}/tools/vconsole_capture/vconsole_capture.py" --port ${MWXR_HOME_CONSOLE_PORT:-29009} \
     --out "${logs}/home-console.log" &!
   console_pid=$!
@@ -193,7 +200,9 @@ start_steam() {
 
 launch_app() {
   [[ -n ${APPID:-} ]] || return 0
- ( sleep ${VR_WAIT_S:-60}
+ local wait_s=${VR_WAIT_S:-60}
+ [[ ${steam_only} == 1 ]] && wait_s=${VR_WAIT_S:-0}
+ ( sleep ${wait_s}
    WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' \
     -applaunch "${APPID}" ${=APP_ARGS:-} > "${logs}/applaunch.log" 2>&1
    print "Requested launch of app ${APPID}" ) &
@@ -299,6 +308,13 @@ case ${mode} in
 esac
 start_steam
 launch_app
+if [[ ${steam_only} == 1 ]]; then
+  # Stay until Steam exits, so an isolated service outlives the games using it.
+  print "Steam started without SteamVR; waiting for Steam to exit"
+  while steam_running; do sleep 5; done
+  print "Steam exited"
+  exit 0
+fi
 # vrstartup.exe returns at once (exit status 3 is normal); vrserver and its
 # children inherit this environment.
 "${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true
