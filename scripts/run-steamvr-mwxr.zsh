@@ -108,7 +108,8 @@ steam_pid=
 steam_running() {
   local server_dir=$(printf 'server-%x-%x' $(stat -f '%d %i' "${prefix}")) pid
   for pid in $(pgrep -f 'Steam.*\\steam\.exe'); do
-    lsof -p ${pid} 2>/dev/null | /usr/bin/grep -q "/${server_dir}/" && { steam_pid=${pid}; return 0; }
+    # Not lsof | grep -q: with pipefail, lsof's SIGPIPE would fail the match.
+    [[ $(lsof -p ${pid} 2>/dev/null) == *"/${server_dir}/"* ]] && { steam_pid=${pid}; return 0; }
   done
   steam_pid=
   return 1
@@ -153,7 +154,11 @@ start_steam() {
    -noverifyfiles -norepairfiles > "${logs}/steam.log" 2>&1 &
   rm -f "${steam_env_file}"
   print "Started Steam; waiting ${STEAM_WAIT_S:-40} s"; sleep ${STEAM_WAIT_S:-40}
-  steam_running && print -r -- "pid=${steam_pid} ${env_now}" > "${steam_env_file}"
+  if steam_running; then
+    print -r -- "pid=${steam_pid} ${env_now}" > "${steam_env_file}"
+  else
+    print -u2 "Steam is not running after ${STEAM_WAIT_S:-40} s; see ${logs}/steam.log"
+  fi
 }
 
 launch_app() {
