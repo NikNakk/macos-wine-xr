@@ -111,6 +111,12 @@ steam_running() {
   return 1
 }
 
+# Client-side compositing made Wine runs slower (twice the vrserver CPU and
+# uneven pacing), so Wine clients composite in the service. This overrides a
+# global launchctl setting; MWXR_CLIENT_COMPOSITOR=1 turns it back on. Set
+# before Steam starts, so games launched from Steam inherit it too.
+export XRT_MACOS_CLIENT_COMPOSITOR=${MWXR_CLIENT_COMPOSITOR:-0}
+
 # Steam first (it needs no XR environment), so SteamVR and Home can reach it.
 # Not -silent: in the CrossOver prefix, Steam started that way stalls at start-up.
 if steam_running; then
@@ -222,11 +228,9 @@ case ${mode} in
   unset XR_RUNTIME_JSON IPC_IGNORE_VERSION
   start_isolated_service "${MONADO_SERVICE_BUILD}/src/xrt/targets/service/monado-service" \
     "${MWXR_SERVICE_TEMPLATE:-${HOME}/Library/LaunchAgents/org.freedesktop.monado.service.plist}" 0
-  export XRT_MACOS_CLIENT_COMPOSITOR=${XRT_MACOS_CLIENT_COMPOSITOR:-1}
   "${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true ;;
  hardware)
   unset XR_RUNTIME_JSON XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR IPC_IGNORE_VERSION
-  export XRT_MACOS_CLIENT_COMPOSITOR=${XRT_MACOS_CLIENT_COMPOSITOR:-1}
   "${repo}/scripts/run-in-process-openxr.zsh" "${vrstartup}" > "${logs}/vrstartup.log" 2>&1 || true ;;
  *) print -u2 "MWXR_MONADO must be simulated, isolated or hardware"; exit 2 ;;
 esac
