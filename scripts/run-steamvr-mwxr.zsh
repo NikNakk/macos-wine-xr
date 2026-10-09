@@ -186,9 +186,12 @@ start_steam() {
     for i in {1..30}; do steam_running || break; sleep 2; done
     steam_running && { print -u2 "Steam did not shut down; quit it and run again"; exit 1; }
   fi
+  # No -cef-disable-gpu: Steam's windows are drawn by its GPU web helper,
+  # through DXMT's cross-process swapchains (DXMT_CROSS_PROCESS_SWAPCHAIN=host).
+  # With it, Chromium falls back to SwiftShader and the windows stay black.
+  # steamwebhelper-gpu.zsh off restores the --disable-gpu wrapper if needed.
   WINEPREFIX=${prefix} WINEDEBUG=-all "${wine_wrapper}" 'C:\Program Files (x86)\Steam\steam.exe' \
-   -cef-disable-gpu -cef-disable-gpu-compositing -cef-in-process-gpu -cef-disable-sandbox -no-cef-sandbox \
-   -noverifyfiles -norepairfiles > "${logs}/steam.log" 2>&1 &
+   -cef-disable-sandbox -no-cef-sandbox -noverifyfiles -norepairfiles > "${logs}/steam.log" 2>&1 &
   rm -f "${steam_env_file}"
   print "Started Steam; waiting ${STEAM_WAIT_S:-40} s"; sleep ${STEAM_WAIT_S:-40}
   if steam_running; then

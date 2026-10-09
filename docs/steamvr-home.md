@@ -24,7 +24,9 @@ say; their cited evidence is now in `~/Code/monado-2-archive/evidence/`:
 - OpenXR games launched from Steam (Hyperbolica) go direct to Monado through
   wineopenxr, not through SteamVR.
 - Steam with its GPU web helper on: the main window, menus and sign-in window
-  all draw.
+  all draw. The launcher no longer passes `-cef-disable-gpu` (2026-10-09):
+  with it Chromium used SwiftShader, which bypasses DXMT, and the windows were
+  black.
 
 What it takes:
 
