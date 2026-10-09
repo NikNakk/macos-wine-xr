@@ -1,0 +1,73 @@
+--- a/dlls/winemac.drv/cocoa_app.m
++++ b/dlls/winemac.drv/cocoa_app.m
+@@ -23,6 +23,7 @@
+ #import "cocoa_event.h"
+ #import "cocoa_window.h"
+ #import "cocoa_icon_utils.h"
++#include <dlfcn.h>
+ 
+ #pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
+ 
+@@ -53,6 +54,47 @@
+ static NSString* const WineExternalQuitNotificationSourcePIDKey = @"SourcePID";
+ static NSString* const WineExternalQuitNotificationWineConfigDirKey = @"WineConfigDir";
+ static NSString* const WineExternalQuitNotificationWinePrefixKey = @"WinePrefix";
++
++/* The macOS name for this process from WINEMAC_APP_NAMES, a list such as
++ * "steamwebhelper.exe=Steam;vrmonitor.exe=SteamVR" (executable names compared
++ * case-insensitively), or nil. */
++static NSString* configured_app_name(NSString* exeName)
++{
++    const char* names = getenv("WINEMAC_APP_NAMES");
++    if (!names || !*names || ![exeName length]) return nil;
++
++    for (NSString* entry in [@(names) componentsSeparatedByString:@";"])
++    {
++        NSRange equals = [entry rangeOfString:@"="];
++        if (equals.location == NSNotFound) continue;
++        NSString* exe = [[entry substringToIndex:equals.location]
++                         stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
++        NSString* name = [[entry substringFromIndex:NSMaxRange(equals)]
++                          stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
++        if ([name length] && [exe caseInsensitiveCompare:exeName] == NSOrderedSame)
++            return name;
++    }
++    return nil;
++}
++
++/* Rename the process for the menu bar, Dock, Force Quit and the app switcher,
++ * as an app bundle's CFBundleName would. An unbundled process otherwise shows
++ * its executable's name. LaunchServices has no public call for this, so look
++ * up the private one (used the same way by Chromium) and skip it if absent. */
++static void set_display_name(NSString* name)
++{
++    typedef CFTypeRef (*get_asn_func)(void);
++    typedef OSStatus (*set_item_func)(int, CFTypeRef, CFStringRef, CFStringRef, CFDictionaryRef*);
++    get_asn_func get_asn = (get_asn_func)dlsym(RTLD_DEFAULT, "_LSGetCurrentApplicationASN");
++    set_item_func set_item = (set_item_func)dlsym(RTLD_DEFAULT, "_LSSetApplicationInformationItem");
++    CFStringRef* display_name_key = (CFStringRef*)dlsym(RTLD_DEFAULT, "_kLSDisplayNameKey");
++    CFTypeRef asn;
++
++    if (!get_asn || !set_item || !display_name_key || !*display_name_key) return;
++    if (!(asn = get_asn())) return;
++    /* -2 is kLSDefaultSessionID. */
++    set_item(-2, asn, *display_name_key, (CFStringRef)name, NULL);
++}
+ 
+ bool macdrv_err_on;
+ 
+@@ -341,6 +383,14 @@
+             // Application menu
+             submenu = [[[NSMenu alloc] initWithTitle:WineLocalizedString(STRING_MENU_WINE)] autorelease];
+             bundleName = [[NSBundle mainBundle] objectForInfoDictionaryKey:(NSString*)kCFBundleNameKey];
++            {
++                NSString* appName = configured_app_name([NSRunningApplication currentApplication].executableURL.lastPathComponent);
++                if (appName)
++                {
++                    set_display_name(appName);
++                    bundleName = appName;
++                }
++            }
+ 
+             if ([bundleName length])
+                 title = [NSString stringWithFormat:WineLocalizedString(STRING_MENU_ITEM_HIDE_APPNAME), bundleName];

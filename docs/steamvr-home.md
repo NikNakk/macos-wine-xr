@@ -38,7 +38,7 @@ say; their cited evidence is now in `~/Code/monado-2-archive/evidence/`:
 
 What it takes:
 
-- CrossOver 26.3 FOSS Wine with msync and the four patches in
+- CrossOver 26.3 FOSS Wine with msync and the five patches in
   `patches/crossover/`:
   - 0001: keyed-mutex waits on server syncs, or the first cross-process
     acquire hangs;
@@ -48,6 +48,14 @@ What it takes:
     believes the session is locked: an uninitialised head pose, and no
     overlays or dashboard;
   - 0004: winemac accepts `WGL_CONTEXT_OPENGL_NO_ERROR_ARB`.
+  - 0005: winemac names a process for the menu bar and Dock from
+    `WINEMAC_APP_NAMES` (`exe=Name;...`), through LaunchServices' private
+    display-name call as Chromium does. The rig sets Steam's and SteamVR's
+    processes, so Steam's windows show as Steam rather than steamwebhelper.
+    Rebuild with `make dlls/winemac.drv/winemac.so` in
+    `~/Code/wine-crossover/build` and copy it into the runtime's
+    `lib/wine/x86_64-unix`. Steam's own menus are HTML inside its window, so
+    they cannot move to the macOS menu bar.
 - DXMT from `NikNakk/dxmt` branch `steamvr-in-process`: cross-process shared
   textures and keyed mutexes, and swapchains for another process's window
   shown through `CALayerHost` (`DXMT_CROSS_PROCESS_SWAPCHAIN=host`, the
