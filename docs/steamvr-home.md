@@ -48,14 +48,17 @@ What it takes:
     believes the session is locked: an uninitialised head pose, and no
     overlays or dashboard;
   - 0004: winemac accepts `WGL_CONTEXT_OPENGL_NO_ERROR_ARB`.
-  - 0005: winemac names a process for the menu bar and Dock from
-    `WINEMAC_APP_NAMES` (`exe=Name;...`), through LaunchServices' private
-    display-name call as Chromium does. The rig sets Steam's and SteamVR's
-    processes, so Steam's windows show as Steam rather than steamwebhelper.
-    Rebuild with `make dlls/winemac.drv/winemac.so` in
-    `~/Code/wine-crossover/build` and copy it into the runtime's
-    `lib/wine/x86_64-unix`. Steam's own menus are HTML inside its window, so
-    they cannot move to the macOS menu bar.
+  - 0005: names a program for the Dock and menu bar from `WINEMAC_APP_NAMES`
+    (`exe=Name;...`). CrossOver runs each program through a link to the
+    loader named after its executable (CW hack 22144) and passes that name to
+    the loader as `CFBundleName`; the patch substitutes the configured name.
+    The rig maps Steam's and SteamVR's processes, so Steam's windows show as
+    Steam rather than steamwebhelper.exe. A first attempt in winemac, through
+    LaunchServices' private display-name call, renamed the menu bar but not
+    the Dock tooltip, which reads `CFBundleName`. Rebuild with
+    `make dlls/ntdll/ntdll.so` in `~/Code/wine-crossover/build` and copy it
+    into the runtime's `lib/wine/x86_64-unix`. Steam's own menus are HTML
+    inside its window, so they cannot move to the macOS menu bar.
 - DXMT from `NikNakk/dxmt` branch `steamvr-in-process`: cross-process shared
   textures and keyed mutexes, and swapchains for another process's window
   shown through `CALayerHost` (`DXMT_CROSS_PROCESS_SWAPCHAIN=host`, the
