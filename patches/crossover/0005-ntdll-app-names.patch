@@ -1,0 +1,46 @@
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -630,10 +630,43 @@
+     free(linkpath);
+     return NULL;
+ }
++
++/* The name WINEMAC_APP_NAMES gives this executable, a list such as
++ * "steamwebhelper.exe=Steam;vrmonitor.exe=SteamVR" (executable names compared
++ * case-insensitively), or the executable name itself. It names the preloader
++ * link and, through WINEPRELOADERAPPNAME, CFBundleName, which the Dock and the
++ * menu bar show. */
++static char *configured_app_name(char *exe_name)
++{
++    const char *entry = getenv("WINEMAC_APP_NAMES");
++    size_t exe_len = strlen(exe_name);
+ 
++    while (entry && *entry)
++    {
++        const char *end = strchr(entry, ';'), *equals;
++        size_t len = end ? (size_t)(end - entry) : strlen(entry);
++
++        equals = memchr(entry, '=', len);
++        if (equals && (size_t)(equals - entry) == exe_len && !strncasecmp(entry, exe_name, exe_len) &&
++            equals + 1 < entry + len && !memchr(equals + 1, '/', entry + len - equals - 1))
++        {
++            char *name = strndup(equals + 1, entry + len - equals - 1);
++            if (name)
++            {
++                free(exe_name);
++                return name;
++            }
++        }
++        entry = end ? end + 1 : NULL;
++    }
++    return exe_name;
++}
++
+ static void replace_wineloader_path_with_link(char **wineloader_path, const char *image_path)
+ {
+     char *app_name = extract_exe_name(image_path);
++
++    if (app_name) app_name = configured_app_name(app_name);
+     if (app_name)
+     {
+         char *preloader_path = create_preloader_link(*wineloader_path, app_name);
