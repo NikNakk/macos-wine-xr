@@ -47,6 +47,14 @@ What it takes:
   QuartzCore API, checked for at run time as Chromium does. The public
   alternative, an IOSurface shown in a `CAMetalLayer` in the owning process,
   is the route if this goes upstream.
+  The hosting view follows its content view's size (DXMT `756a657`):
+  Wine's content views do not autoresize subviews and start at 0x0, so
+  Steam's sign-in and launch-options windows were black when hosted early
+  (fixed 2026-10-09). Build: `~/Code/dxmt/build` (meson, `build-win64.txt`),
+  with LLVM 15 in `~/Code/dxmt-toolchains/llvm-darwin` and the CrossOver
+  runtime as `wine_install_path`. Unix-only changes need just
+  `x86_64-unix/winemetal.so` copied into the runtime; PE changes also need the
+  DLLs in the runtime and the prefix's `system32`.
 - `scripts/run-steamvr-mwxr.zsh` sets direct mode on every run, links the
   Windows core fonts except Tahoma into the prefix (with both Tahoma faces
   present Steam's window never appears: its web helper stops after creating
