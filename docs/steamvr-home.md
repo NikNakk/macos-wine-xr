@@ -11,6 +11,14 @@ implement only the application side of OpenVR.
 The rest of this document is a dated record of how each problem was found;
 this section is the summary.
 
+The built `wineopenxr.so` files under `build-in-process/` find the x86_64
+OpenXR loader through an absolute rpath. After this checkout moved out of the
+Monado workspace (2026-10-09) they still named the old location, so SteamVR's
+driver failed with `XR_ERROR_RUNTIME_UNAVAILABLE` (-51) and reported no
+headset. Their rpaths now name `build-in-process/openxr-loader-x64` and the
+CrossOver runtime; moving the checkout again needs the same
+`install_name_tool -rpath` change, or a rebuild.
+
 Working, on the PS VR2 in direct mode, with the CrossOver rig (`~/Windows`:
 the prefix, the `bin/wine-crossover-dxmt` wrapper and `run-mwxr.zsh`; its Wine
 tree is `~/Code/wine-crossover/runtime`). Until 2026-10-09 the rig was
