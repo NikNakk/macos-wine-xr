@@ -304,6 +304,11 @@ zero-copy, Home's were shared textures, with no copies or `xrEndFrame` errors.
   setting (default 0) overrides it. It then follows the shortest
   `predictedDisplayPeriod` seen, because late frames report multiples of the
   refresh period.
+- **Frame trace.** `MWXR_DRIVER_FRAME_TRACE=1` (launcher) writes each OpenXR
+  frame's stages, GPU fence times after the source wait and the copies, and
+  vsync events to the run's `driver-frames.csv` (see `frame_trace.h`). Monado's
+  `scripts/macos/analyze-steamvr-driver-pacing.py` joins it with Monado's
+  `app_pacing` trace.
 - **Controllers.** One action set with bindings suggested for
   `oculus/touch_controller` (fallback `khr/simple_controller`); Monado binds
   PS VR2 Sense controllers to Touch. Both hands are presented as

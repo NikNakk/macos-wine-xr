@@ -35,7 +35,7 @@ if(MINGW)
 	target_compile_definitions(openxr_loader PRIVATE WINAPI_PARTITION_SYSTEM=0)
 endif()
 
-add_library(driver_mwxr SHARED driver.cpp xr_backend.cpp)
+add_library(driver_mwxr SHARED driver.cpp frame_trace.cpp xr_backend.cpp)
 set_target_properties(driver_mwxr PROPERTIES PREFIX "")
 # .. for in_process/mndx_display_distortion.h (Monado's experimental extension).
 target_include_directories(driver_mwxr PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
