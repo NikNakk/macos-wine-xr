@@ -294,8 +294,16 @@ zero-copy, Home's were shared textures, with no copies or `xrEndFrame` errors.
   locates views only in a begun session). The reference space is STAGE when
   offered, otherwise LOCAL. Distortion is identity, and its inverse is left to
   SteamVR (returning an identity inverse fails `BatchedComputeDistortion`). The
-  display frequency follows the shortest `predictedDisplayPeriod` seen, because
-  late frames report multiples of the refresh period.
+  display frequency starts at the runtime's current refresh rate
+  (`XR_FB_display_refresh_rate`, or, as through the Wine bridge which does not
+  pass that extension, the shortest period of eight empty frames at start-up),
+  because SteamVR's compositor reads it once
+  at start-up and paces applications to it. Before 2026-10-13 it started at
+  90 Hz on the 120 Hz PS VR2; see Monado's
+  `doc/macos-steamvr-keyed-ownership-followup.md`. The `displayFrequency`
+  setting (default 0) overrides it. It then follows the shortest
+  `predictedDisplayPeriod` seen, because late frames report multiples of the
+  refresh period.
 - **Controllers.** One action set with bindings suggested for
   `oculus/touch_controller` (fallback `khr/simple_controller`); Monado binds
   PS VR2 Sense controllers to Touch. Both hands are presented as

@@ -48,7 +48,7 @@ XrBackend::Init(std::string &error)
 		return false;
 	}
 	// Optional: without it, the current XrTime is estimated from the frame loop.
-	const char *required[4] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
+	const char *required[5] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
 	uint32_t enabledCount = 1;
 	bool timeConversion = HasExtension(extensions, XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME);
 	if (timeConversion) {
@@ -64,6 +64,12 @@ XrBackend::Init(std::string &error)
 	hasPsvr2Interaction = HasExtension(extensions, "XR_MNDX_psvr2_interaction");
 	if (hasPsvr2Interaction) {
 		required[enabledCount++] = "XR_MNDX_psvr2_interaction";
+	}
+	// Optional: SteamVR needs the display frequency before its compositor
+	// starts, and a guess makes it pace applications to the wrong refresh.
+	bool hasRefreshRate = HasExtension(extensions, XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
+	if (hasRefreshRate) {
+		required[enabledCount++] = XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME;
 	}
 
 	XrInstanceCreateInfo instanceInfo = {XR_TYPE_INSTANCE_CREATE_INFO};
@@ -155,6 +161,15 @@ XrBackend::Init(std::string &error)
 	sessionInfo.next = &binding;
 	sessionInfo.systemId = system_;
 	XR_CHECK(xrCreateSession(instance_, &sessionInfo, &session_));
+	if (hasRefreshRate) {
+		PFN_xrGetDisplayRefreshRateFB getRefreshRate = nullptr;
+		xrGetInstanceProcAddr(instance_, "xrGetDisplayRefreshRateFB", (PFN_xrVoidFunction *)&getRefreshRate);
+		XrResult result = getRefreshRate ? getRefreshRate(session_, &refreshRate) : XR_ERROR_FUNCTION_UNSUPPORTED;
+		if (XR_FAILED(result)) {
+			refreshRate = 0;
+		}
+		Log("Display refresh rate: %.2f Hz (%d)\n", refreshRate, result);
+	}
 
 	// STAGE gives SteamVR a floor-level standing universe when available.
 	uint32_t spaceCount = 0;
@@ -223,6 +238,32 @@ XrBackend::Init(std::string &error)
 		endInfo.displayTime = state.predictedDisplayTime;
 		endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
 		XR_CHECK(xrEndFrame(session_, &endInfo));
+	}
+
+	// Without XR_FB_display_refresh_rate (the Wine bridge does not pass it
+	// through), measure the refresh from a few empty frames. Late frames
+	// report multiples of it, so keep the shortest period.
+	if (refreshRate <= 0) {
+		XrDuration shortest = 0;
+		for (int i = 0; i < 8; ++i) {
+			XrFrameState state = {XR_TYPE_FRAME_STATE};
+			if (XR_FAILED(xrWaitFrame(session_, nullptr, &state)) || XR_FAILED(xrBeginFrame(session_, nullptr))) {
+				break;
+			}
+			XrFrameEndInfo endInfo = {XR_TYPE_FRAME_END_INFO};
+			endInfo.displayTime = state.predictedDisplayTime;
+			endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+			if (XR_FAILED(xrEndFrame(session_, &endInfo))) {
+				break;
+			}
+			if (state.predictedDisplayPeriod > 0 && (!shortest || state.predictedDisplayPeriod < shortest)) {
+				shortest = state.predictedDisplayPeriod;
+			}
+		}
+		if (shortest > 0) {
+			refreshRate = (float)(1e9 / (double)shortest);
+		}
+		Log("Display refresh rate: %.2f Hz, from the shortest frame period\n", refreshRate);
 	}
 
 	// Eye poses relative to the head and field of view, from the views now.

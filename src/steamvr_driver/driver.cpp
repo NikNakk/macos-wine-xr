@@ -400,9 +400,16 @@ public:
 		objectId_ = objectId;
 		auto container = vr::VRProperties()->TrackedDeviceToPropertyContainer(objectId);
 		auto *props = vr::VRProperties();
+		// SteamVR's compositor reads the display frequency once, when it
+		// starts, and paces applications to it; later changes do not reach
+		// that pacing. So report the runtime's current refresh rate here,
+		// unless the displayFrequency setting overrides it.
 		frequency_ = vr::VRSettings()->GetFloat(kSettingsSection, "displayFrequency");
-		if (virtualDisplay_ && xr_.display.nominalRefreshRate > 0) {
-			frequency_ = xr_.display.nominalRefreshRate; // the runtime's display, not a guess
+		if (frequency_ <= 0) {
+			frequency_ = xr_.refreshRate;
+		}
+		if (frequency_ <= 0 && xr_.hasDisplayDistortion) {
+			frequency_ = xr_.display.nominalRefreshRate;
 		}
 		if (frequency_ <= 0) {
 			frequency_ = 90.0f;

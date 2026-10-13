@@ -65,6 +65,8 @@ public:
 	XrPosef eyeInHead[2] = {};
 	std::string systemName, runtimeName;
 	float playAreaWidth = 0, playAreaDepth = 0; // STAGE bounds, 0 if unavailable
+	// XR_FB_display_refresh_rate's current rate, 0 if unavailable.
+	float refreshRate = 0;
 
 	// XR_MNDX_display_distortion, for SteamVR's virtual-display mode in which
 	// SteamVR's compositor produces the panel image itself.
