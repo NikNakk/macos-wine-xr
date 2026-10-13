@@ -1501,3 +1501,435 @@ Updated 2026-10-08.
   runtime's recommendation (its supersampling settings).
 - Measure latency against the direct OpenComposite/xrizer path before
   choosing defaults per game.
+
+
+### User follow-up, 2026-10-09
+
+The user reports occasional checkerboards in both Hyperbolica (direct Wine
+OpenXR) and SteamVR Home (driver through OpenXR), variable Home frame pacing,
+and a failed attempt to recenter Home. Steam launching SteamVR displayed an
+"Invalid handle" error but SteamVR subsequently started successfully. Settings
+and other SteamVR menus now work. CEF work is a plausible explanation for the
+menu improvement, not an isolated causal test. Tested commit hashes and a
+matched frame trace were not supplied; do not attribute these observations to
+a specific build or claim a synchronization diagnosis from appearance alone.
+
+Recentring now belongs to Monado's service: enable
+`XRT_PSSENSE_STAGE_RECENTER=1` there, with optional
+`XRT_PSSENSE_STAGE_RECENTER_HOLD_MS` (1000 by default, clamped to 100–10000).
+The driver-only hold/offset is removed. Use a Monado build containing the
+2026-10-09 service gesture; an older isolated service does not implement it.
+The launcher forwards these options into isolated services, and installed
+services read their LaunchAgent environment. The gesture preserves floor
+height, centres STAGE under the current head and aligns yaw. It is independent
+of SteamVR and OpenXR action bindings; hardware validation remains pending.
+
+Keep existing GPU producer-ready and compositor-read completion guards. Compare
+producer signaling, swapchain reuse and physical presentation in a matched
+buffered capture of each application before changing synchronization or pacing
+defaults. The user recalls a dialog but is uncertain of the exact invalid-handle wording. Its source remains unknown; the text was not
+found in the latest launcher logs inspected during this follow-up.
+
+
+### DXMT protected fence fix, 2026-10-10
+
+DXMT `381052e` emitted immediate-context fence operations outside the device
+mutex. `Signal` could record a completion event while another thread held
+`ID3D11Multithread::Enter`, then block in `Flush`; the app's own flush could
+submit that event before its final texture writes. `Wait` also emitted outside
+the mutex. The DXMT fork now locks each full method with the existing recursive
+mutex. The production bridge backend stays unchanged; protection remains an
+application choice.
+
+The extended graphics-interop probe gates the final app clear with a native
+Metal event, using the production backend on two threads. The matched pre-fix
+DLL signals too early for both private Metal and IOSurface images (2 failures).
+The fixed build and stripped installation artifact pass all cases (0 failures)
+with Metal validation enabled. Results are in
+[the evidence directory](results/dxmt-protected-fence-2026-10-10/).
+Use an isolated Wine runtime with correctly named builtin DLL exports to select
+matched builds; prefix copies alone may resolve back to installed builtins.
+
+The corrected `d3d11.dll` is installed in the CrossOver Wine runtime and Steam
+prefix; original copies are in `/tmp/monado-sync-dxmt-backup/`. SHA-256 is
+`f9b30d0f241230560e9a734b0d360703fbd284dd885775580a6fd88b88d52540`.
+Restart the applications for hardware testing. These tests confirm a real
+protected-context defect but do not establish whether Home/Hyperbolica exercise
+it. Checkerboards and variable pacing remain pending headset validation.
+
+
+### Matching presentation dependencies, 2026-10-10
+
+The D3D11-only fence-fix deployment was incomplete: the user reported black
+Steam output and an apparent SteamVR crash, and the launch log records a Wine
+abort on unimplemented `winemetal.dll.WMTMetalViewSubmitted`. The installed
+WineMetal DLL was older than the newly built D3D11 presentation caller. The
+texture-only probe did not cover window presentation. Previous D3D11 copies
+were restored, then a complete D3D11/DXGI/WineMetal PE/native set was built.
+
+In an isolated runtime/prefix, the matched set passes ordinary presentation,
+renderer-owned child presentation, sibling replacement/resize and the fence
+probe. The sibling fixture pixel capture has 20 samples: 10 valid, none
+near-black; the 10 changing-geometry samples are excluded. Evidence and the
+complete installed-module manifest are in
+[the results directory](results/dxmt-protected-fence-2026-10-10/).
+
+The complete matching set is now installed in the primary runtime, with the
+three PE DLLs also installed in the Steam prefix. This supersedes the partial
+installation and D3D11 hash above. Originals are saved in
+`/tmp/monado-sync-fullset-backup/`. Fully exit Steam/SteamVR and relaunch before
+checking recovery and headset synchronization. No application recovery or
+headset result is yet claimed. Deploy matching D3D11, DXGI and both WineMetal
+modules together, after testing presentation as well as texture interop.
+
+
+The subsequent user screenshot confirms the startup Error dialog reads exactly
+"Invalid handle.". During the 2026-10-10 00:11:10 Steam-triggered launch,
+vrmonitor reaches Ready at 00:11:15.399 and the driver submits projected frames
+at 00:11:28.283. The dialog is nonfatal for this launch; its process/handle
+source remains unidentified. No new WineMetal missing-export abort appears in
+the launch log. Successful frame submission does not establish visual recovery
+or resolve the reported headset synchronization/pacing issues.
+
+
+### Persistent Home corruption and sync failure diagnostics, 2026-10-10
+
+The user still sees checkerboards and now completely black frames after the
+matched DXMT installation. The 00:11–00:13 session logs sync-texture acquire
+failures (first at 00:11:57.404) that make the driver submit zero layers, plus
+repeated compositor WaitForAcquire failures. This can explain black output;
+no pixel/time correlation or cause of the failed handoff is yet established.
+
+The rebuilt driver preserves the wait and records acquire HRESULT, elapsed
+milliseconds, sync handle, layer count and cumulative failure count, as well as
+release HRESULTs. Logs are bounded to the first five failures and every 128th
+failure afterward. The launcher driver copy is updated. No protection is bypassed.
+
+For the next user-run hardware comparison, fully exit SteamVR, then run
+`python3 /tmp/steamvr-home-copy-sync-test.py`. It temporarily selects the existing
+`zeroCopy=false` path, launches `~/Windows/run-mwxr.zsh`, and restores only that
+setting when SteamVR exits, preserving other updated settings. Script syntax
+and the driver build pass; hardware results remain pending. Compare checkerboards
+and black frames separately. The copied path retains the sync wait and completion
+fence while using separate resolve/runtime image allocations.
+
+
+The 00:17:30 comparison run has `zeroCopy=false`; the user reports black frames
+more frequently at first, then settling down. Driver acquire logs confirm
+WAIT_TIMEOUT (`0x102`) after 100.08–100.33 ms. SteamVR also records AcquireSync
+WAIT_TIMEOUT and ReleaseSync E_FAIL through 00:19:53, beyond startup.
+Both this and the prior 00:11 run log ordinary shared texture sets, so the
+prior run was already using the copy fallback: this was not an effective
+zero-copy/copy A/B test. Do not infer a zero-copy regression from this result.
+The driver now also logs slow mutex holds (at least 10 ms) and release duration,
+first five and every 128th, to check runtime submission delaying ownership
+handoff. Build passes; those measurements require a fresh driver launch.
+
+
+### Earlier handoff and restored presentation baseline, 2026-10-10
+
+The user still reports black frames in the 00:22:26 launch and additionally a
+nonworking dashboard whose panels show Steam logos. Helper D3D/CEF startup is
+not evidence of correct overlay pixels. The new logs show sync ownership lasting
+roughly 10–19 ms, while ReleaseSync itself takes only 0.06–0.15 ms.
+
+The backend's synchronous images-ready callback now queues the driver's
+ReleaseSync after source copies and swapchain completion signals, before
+xrEndFrame and frame diagnostic logging. The signal follows source reads on
+the D3D context; producer GPU waits remain active. The callback is never
+retained and a caller fallback releases at most once on early return.
+Driver build passes and the launcher DLL is updated. The remaining time spent
+acquiring/copying images is not removed; hardware validation remains pending.
+
+All matching presentation modules are restored from
+`/tmp/monado-sync-fullset-backup/` to isolate the new dashboard regression.
+This supersedes the broader DXMT deployment; the fence patch remains in DXMT
+source but is not currently deployed. Hashes are recorded in the evidence
+[manifest](results/dxmt-protected-fence-2026-10-10/restored-baseline-manifest.json).
+Fully exit Steam/SteamVR and relaunch to validate dashboard recovery, black
+frames and checkerboards separately. Do not claim recovery from the rollback
+alone. Future fence deployment should target the previously validated
+presentation baseline rather than incorporating unrelated branch changes.
+
+
+The user subsequently suggests Steam was absent and confirms white checkerboards.
+The 00:22 session logs "Please start Steam" at 00:25:12, then a successful
+Steam connection at 00:25:57 after Steam was started separately at 00:24:59.
+This supports a missing/delayed Steam explanation for panels; it does not
+establish a DXMT presentation regression. The rollback remains an isolation
+step, not a proven dashboard fix. The logs are still from the 00:22 SteamVR
+session, which predates the rebuilt early-handoff driver: restarting Steam
+alone did not test the new driver. The old session later records a 54.587 ms
+ReleaseSync, so earlier sub-millisecond samples do not cover every handoff.
+
+The next rebuilt driver activation logs "Direct-mode sync: release after image
+reads, before frame commit" and the configured zeroCopy value. Verify that
+marker in a fresh SteamVR session before judging the change. Assess dashboard
+panels with Steam connected; report white checkerboards and black frames
+separately. Both visual issues remain unresolved.
+
+
+The fresh 00:33 session confirms the early-handoff driver is loaded, but black
+frames persist even while relatively still. Some source holds are below
+0.4 ms while ReleaseSync takes 17.4–193 ms; acquire timeouts still produce
+zero-layer fallback. This change has not resolved the visual issue.
+
+A minimal DXMT rebuild from the previous `steamvr-in-process` presentation
+baseline (`756a657`) now deploys the proven Signal/Wait locks plus bounded
+ReleaseSync phase diagnostics. Matching D3D11, DXGI and WineMetal PE/native
+modules are installed in the runtime and prefix, superseding the plain
+rollback without importing the broader presentation branch. The graphics
+fence probe, ordinary two-window fixture and 200-frame GPU keyed handoff
+between two devices in one process all pass. Logs, source and hashes are in
+[the minimal-baseline evidence](results/dxmt-protected-fence-2026-10-10/minimal-baseline/README.md).
+
+Fully quit Steam and SteamVR before relaunching to load the new libraries.
+Warnings split ReleaseSync into `lock_ms`, `enqueue_ms`, `owner_ms` and
+`signal_queued` (first five slow/failing calls, then every 128th). No headset
+result for this build is claimed; black frames and checkerboards remain open.
+
+
+### Dynamic-resolution copy allocation, 2026-10-10
+
+The 07:19 Home capture created 80 copied-eye destination swapchains while
+Home retained its 2019x2058 source allocations. The driver sized destinations
+to changing rendered bounds, so dynamic resolution repeatedly destroyed and
+recreated swapchains while holding SteamVR's sync texture. 25 of 28 logged
+compositor timeout lines were within 100 ms of a creation. This identifies a
+concrete source of handoff delay, but does not explain every visual fault.
+
+The copied-eye path now allocates from the source texture descriptor. The
+copy box and submitted imageRect continue to follow rendered bounds, so
+resolution changes within the same source allocation reuse the swapchain.
+Actual source size/format changes still recreate it; zero-copy is unchanged.
+The driver build passes and the launcher DLL is updated.
+
+The 10:14 comparison is not valid headset evidence: Monado lost its session
+after reporting the selected display unavailable. A successful connected
+headset run is required before claiming timeout or visual improvement.
+
+
+### Opt-in three-image service compatibility, 2026-10-10
+
+The service Metal runtime can now request three dynamic images explicitly
+with `MWXR_STEAMVR_THREE_IMAGES=1`. The launcher maps that to the native
+client's `XRT_MACOS_METAL_THREE_IMAGE_SWAPCHAINS=1`, and records it in Steam's
+XR environment identity so changing modes restarts Steam when necessary.
+The default remains off. The service validates the image count and enables
+latest-completed scheduling for that session: producer-ready frames promptly
+replace an older scheduled frame and latch on the next compositor tick,
+including when the submitted display timestamp is still in the future.
+This avoids retaining three generations and future-frame starvation. The
+delivered source remains available for reprojection, and producer fences,
+native renderer claims and service GPU completion waits remain active.
+
+Both runtime architectures build; all 48 runnable Monado CTests pass, with
+one optional skip. Lifecycle tests exercise count rejection, ordinary frame
+gating, delayed producer completion and retirement of superseded references.
+There is no GPU-pixel or headset result for three-image mode yet. The native
+service/runtime and normal x86_64 build runtime are updated. An old running
+service must exit before testing; no service or headset was started by this
+implementation step. The fixed-allocation copy driver is already installed.
+
+Fully stop SteamVR between these trials. After stopping VR, let Monado exit
+or restart the installed service once so it loads the new binary.
+
+```sh
+# Copy path with stable-size destinations and ordinary runtime scheduling.
+MWXR_STEAMVR_ZERO_COPY=0 MWXR_STEAMVR_THREE_IMAGES=0 ~/Windows/run-mwxr.zsh
+
+# Opt-in three-image mode; try zero-copy compositor resolve sets.
+MWXR_STEAMVR_ZERO_COPY=1 MWXR_STEAMVR_THREE_IMAGES=1 ~/Windows/run-mwxr.zsh
+```
+
+Verify `zero-copy (first image ...)` for compositor-owned resolve sets in
+vrserver.txt and `Three-image compatibility` in Monado's service log; settings
+alone do not prove zero-copy. Home's own application textures stay plain
+shared textures. Unsupported formats/export/sample counts may still fall back
+to copying. Record checkerboards, black frames and panels separately.
+
+`MWXR_STEAMVR_ZERO_COPY=0|1` updates the persistent driver setting; unset keeps
+its previous value. `MWXR_STEAMVR_THREE_IMAGES` is launch-specific and also
+affects Metal clients launched from Steam with that environment. No public
+OpenXR image-count extension or create flag is exposed, and client-hosted
+compositing is not covered by this toggle. The normal Wine launcher uses
+service compositing.
+
+
+### Steam/Home failure and copy capacity follow-up, 2026-10-10 22:24
+
+The user reports worse pacing/checkerboards, then Home and apparently Steam
+crashing while SteamVR continues. The launcher record has three_images=0;
+zeroCopy=1 falls back on four-image mismatch. The three-image scheduler was
+not active. Home disconnects at 22:25:36 after Steam pipe disconnects; its
+crash-named dump records CClientPipe::BWriteAndReadResult (BWrite failed),
+with related dashboard/server assertions. The Steam root exit reason is not
+established. Treat this separately from the unresolved graphics sync fault.
+
+The initial fixed-source copy allocation still recreates slots when Home
+(2019x2058 source) alternates with the system scene (1440x1468). The copy
+slots now retain their largest required dimensions for a matching runtime
+format. They grow only as needed; copies and imageRect stay at the actual
+rendered extent. Zero-copy and display-image paths are unchanged. The build
+passes and the launcher DLL matches the build. New activation logs include
+`copy capacity=largest source`. The active session was not interrupted;
+no improved pacing/visual result is claimed before a fresh launch.
+
+DXMT phase samples place successful 10–37 ms ReleaseSync delays almost
+entirely in owner-thread handoff/release work, with tiny lock/enqueue times.
+This does not distinguish owner scheduling delay from Wine server RPC delay.
+Driver acquire timeouts of 100–110 ms also produce empty-layer submissions.
+Detailed raw evidence is retained in Monado
+`doc/results/steamvr-home-sync-20261010-222320/`.
+
+
+### Source ownership shortened, 2026-10-10
+
+The direct driver now prepares copy destinations (including OpenXR image waits)
+before acquiring SteamVR's keyed source mutex. The marker includes
+`destination wait before source lock`. Source GPU waits, copy/read protection,
+zero-copy release ordering and producer reuse signals remain intact. Failure
+to acquire source ownership submits no projections and returns prepared copy
+images without reading the source. Four-image defaults and the three-image
+trial toggle are unchanged. Restart SteamVR to load the new driver; restart
+Steam as well to load the new DXMT diagnostics across both processes.
+
+`tests/in_process/steamvr_present_lifecycle.py --openxr-includes <headers>`
+compiles the production Present body against lifecycle mocks (six cases pass).
+The minimal DXMT baseline has bounded, timestamped owner-phase diagnostics;
+controlled timeout/cross-thread release recovery and 200 GPU handoffs pass,
+and the graphics interop probe has zero failures. Seven matched runtime/prefix
+modules are installed, with backups in `/tmp/monado-sync-owner-phases-backup`.
+Existing processes were left running. Hardware effects remain unvalidated.
+Monado retains the evidence in `doc/results/steamvr-source-lock-20261010/` and
+records the remaining limitation: time inside Wine does not identify the
+remote owner; if that phase dominates, trace Wine's mutex ownership next.
+
+
+### Wine ownership capture ready, 2026-10-10
+
+The user confirms the source-lock run is definitely better, with occasional
+black frames and no checkerboards so far. Current DXMT remains the minimal
+presentation baseline; its hardened cross-process presentation branch is a
+separate planned migration. Wine ownership history is now installed without
+changing DXMT or the driver. Fully close all applications in this Wine
+prefix before the next launch so the old wineserver exits; restarting Home
+alone cannot load the diagnostic server. Verify `mwxr-keyed-history active`
+in the first Wine launch's stderr log. Sampled failures then dump the last
+64 ownership/release/signal events, including owner hold duration and queued
+waiter IDs. This should distinguish long-held ownership, contention and key
+mismatch; hardware attribution is pending. Existing user processes were left
+running. Original wineserver is backed up at
+`~/Code/wine-crossover/deployment-backups/keyed-history-20261010/wineserver`.
+
+Controlled cross-process owner/wrong-key timeouts and recovery pass; three
+same-key processes each complete 10,000 acquisitions with no timeouts; the
+200-frame GPU handoff and cross-caller-thread recovery also pass. No fairness
+fix or GPU ordering change is made based solely on isolated CPU results.
+After this capture, stage the hardened DXMT as a complete matched set with
+validated fence corrections, run sharing/window/CEF checks, then compare on
+hardware. Evidence lives in Monado's
+`doc/results/wine-keyed-owner-history-20261010/`.
+
+
+### Longer ownership capture, 2026-10-10
+
+The 23:42:07 run loads the Wine ownership-history server. The user reports
+occasional black frames, particularly later. Home (Wine PID 1712) owns mutex
+0x40000cc2 in 20 of 22 sampled timeout snapshots; one late driver timeout
+finds its ownership at 155.706 ms. The driver then submits no layers.
+Failure-triggered, deduplicated history windows show sampled Home release
+hold medians of 22.932 ms earlier and 42.927 ms later; these are not all-frame
+pacing statistics. Matching keys and successful signal/acquisition sequences
+are present. Two timeout records show a now-free matching-key mutex, which
+can reflect timeout status reported after release rather than a missed wake.
+
+The resource syncTexture handle differs from its keyed-mutex handle; driver
+0x40000d02 and mutex 0x40000cc2 are not evidence of different paths. Longer
+Home ownership includes possible rendering/GPU backpressure, scheduling and
+Wine client/request delays; the trace does not yet separate those causes.
+Successful slow Wine release calls also remain, including a 102 ms sample
+on a different system-scene mutex. Keep current DXMT; next correlate Home's
+work and client release request timing with server history. Evidence is in
+Monado `doc/results/steamvr-home-sync-20261010-234207/`.
+
+
+### Home ownership attribution ready, 2026-10-10
+
+Additional bounded clocks are installed on the same minimal DXMT baseline:
+GPU-wait setup after ownership is returned, application-owned interval,
+release-signal enqueue and owner/Wine handoff. PID/mutex/fence/tick values
+allow joining those samples to the existing Wine server history. The clocks
+do not measure GPU execution or separate rendering from sleep/scheduling.
+Timeout recovery, 200 GPU pixel handoffs and graphics interop regression pass;
+Monado retains results in `doc/results/dxmt-owner-intervals-20261010/`.
+
+Restart Steam and SteamVR to load the new diagnostic DLLs, then take early
+and late five-second Home stack samples with
+`tools/keyedmutex_test/capture_home_stacks.py`; its README has commands.
+Capture while Home is still running. Those stacks can distinguish CPU render
+work from OpenVR waits, command-queue/Metal waits and Wine IPC. Current DXMT
+presentation code stays in place; hardened migration remains separate.
+
+
+### Producer ownership wait diagnostics installed, 2026-10-11
+
+The first native stack capture was already symptomatic, per the user's
+correction. A second is taken with black frames reported every 2–3 seconds;
+there is no clear-period stack baseline. Home's sampled ownership gap is much
+longer than release handoff, and many Windows stacks remain unresolved.
+The next-launch minimal DXMT therefore adds device-wide owned wait counters
+for context contention, flush, command capacity, CPU fence and frame latency,
+joined to server history by shared handle/PID/fence. Categories can overlap;
+remaining time cannot be labelled CPU rendering. The helper retains these
+records. Isolated contention, timeout recovery, 200 pixel handoffs and the
+protected-fence interop regression pass. Seven matched modules are installed;
+WineMetal and driver are unchanged. Restart Steam/SteamVR before the next
+user-run test. No visual improvement is claimed; hardened DXMT stays separate.
+
+
+### Separate DXGI pacing counters installed, 2026-10-11
+
+The first owned-wait hardware snapshot leaves most Home ownership time
+unexplained; its measured context/flush/capacity/CPU-fence waits are tiny.
+The next-launch minimal DXMT adds full Present1 timing and the separate
+waitable-swapchain SyncFrame fence. Existing queue frame-latency timing remains
+separate. The real-window fixture validates six presents/five swapchain waits,
+with 22.334 ms separate pacing inside 41.642 ms total Present. GPU handoff and
+protected-fence checks pass. Seven matched modules are installed with backups;
+WineMetal/driver are unchanged. Restart Steam/SteamVR before the next capture.
+This is additional attribution, not a proven visual fix or hardened migration.
+
+
+### Requested hardware attribution test, 2026-10-11 01:03
+
+The user-requested PS VR2 Home test runs about two minutes with the new fields
+active and installed hashes verified. Thirty post-initial bounded samples
+show median ownership 24.010 ms and median total Present 0.052 ms; separate
+swapchain pacing is unused, queue pacing median zero/max 2.747 ms, and other
+measured producer waits are tiny. This excludes these DXMT dependencies as
+the bulk of the selected gap, not all possible application waits. Compositor
+mutex acquisition timeouts persist. Home reports 5879 presents; no visual
+observation or physical scanout timing claim is made. The test session is
+closed gracefully. Next probe should cover Home/OpenVR work/waits during
+ownership. The matched minimal baseline remains installed; hardened migration
+is separate. Monado evidence: `doc/results/steamvr-present-headset-20261011-010342/`.
+
+
+### OpenVR ownership-interval tracer prepared, 2026-10-11
+
+The existing opt-in shim now adds opt-in per-call QPC timestamps for pose
+queries and submissions, rather than only five-second averages. On this
+CrossOver build its microsecond timestamps share the server history's
+mach_continuous_time epoch, enabling joins to keyed grant/release events.
+Forwarding, pose/error preservation and controlled wait timing pass in an
+isolated fixture. Buffered writes/flushes can perturb timing and are recorded.
+See tools/openvr_shim/README.md for the reversible launcher command.
+
+The requested first trace attempt (run-mwxr-20261011-011242) was blocked
+before Home started: Monado reports the selected display unavailable, exits,
+and the driver loses its XR session; the compositor cannot create distortion
+surfaces. No Home/OpenVR attribution result was obtained. The failed session
+was closed and Valve's original DLL restored/hash-verified. Headset display
+availability is required before retrying. No graphics synchronization policy,
+pose correction or DXMT hardening migration was changed.
