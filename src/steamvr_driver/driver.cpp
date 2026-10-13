@@ -484,6 +484,8 @@ public:
 		Log("HMD '%s' active: IPD %.1f mm, %.0f Hz\n", xr_.systemName.c_str(), ipd * 1000, frequency_);
 
 		zeroCopy_ = vr::VRSettings()->GetBool(kSettingsSection, "zeroCopy");
+		Log("Direct-mode sync: release after image reads, before frame commit; zeroCopy setting=%d; copy capacity=largest source; destination wait before source lock\n",
+		    zeroCopy_);
 		virtualPhotonRefreshes_ = vr::VRSettings()->GetFloat(kSettingsSection, "virtualPhotonRefreshes");
 		if (virtualPhotonRefreshes_ < 0) {
 			virtualPhotonRefreshes_ = 1.0f;
@@ -789,15 +791,26 @@ public:
 			submitted.swap(submittedSets_);
 		}
 		IDXGIKeyedMutex *mutex = SyncMutex(syncTexture);
-		bool locked = mutex && mutex->AcquireSync(0, 100) == S_OK;
-		if (mutex && !locked) {
-			static int failures = 0;
-			if (failures++ < 5) {
-				Log("Sync texture AcquireSync failed; submitting no layers this frame\n");
+		bool locked = false;
+		auto acquiredAt = std::chrono::steady_clock::now();
+		auto acquireSources = [&] {
+			auto acquireStart = std::chrono::steady_clock::now();
+			HRESULT acquireResult = mutex ? mutex->AcquireSync(0, 100) : E_NOINTERFACE;
+			locked = acquireResult == S_OK;
+			acquiredAt = std::chrono::steady_clock::now();
+			if (mutex && !locked) {
+				static uint64_t failures = 0;
+				++failures;
+				if (failures <= 5 || failures % 128 == 0) {
+					double elapsedMs = std::chrono::duration<double, std::milli>(
+					                       std::chrono::steady_clock::now() - acquireStart).count();
+					Log("Sync texture AcquireSync failed: handle=%p hr=%#lx wait=%.3f ms failures=%llu "
+					    "layers=%zu; submitting no layers this frame\n", (void *)syncTexture,
+					    (unsigned long)acquireResult, elapsedMs, (unsigned long long)failures, layers.size());
+				}
 			}
-			layers.clear(); // zero-copy images stay acquired for the next frame
-			submitted.clear();
-		}
+			return locked;
+		};
 		auto now = std::chrono::steady_clock::now();
 		if (!layers.empty() && now - lastPresentLog_ > std::chrono::seconds(5)) {
 			lastPresentLog_ = now;
@@ -813,16 +826,47 @@ public:
 				    lastPrediction_ * 1000, degrees, angular.x, angular.y, angular.z);
 			}
 		}
-		xr_.Present(layers); // releases the submitted zero-copy images
+		bool syncReleased = false;
+		auto releaseSync = [&] {
+			if (!locked || syncReleased) {
+				return;
+			}
+			syncReleased = true;
+			auto releaseStart = std::chrono::steady_clock::now();
+			HRESULT releaseResult = mutex->ReleaseSync(0);
+			double heldMs = std::chrono::duration<double, std::milli>(releaseStart - acquiredAt).count();
+			double releaseMs = std::chrono::duration<double, std::milli>(
+			                       std::chrono::steady_clock::now() - releaseStart).count();
+			if (heldMs + releaseMs >= 10.0) {
+				static uint64_t slowHolds = 0;
+				++slowHolds;
+				if (slowHolds <= 5 || slowHolds % 128 == 0) {
+					Log("Sync texture slow handoff: handle=%p held=%.3f ms release=%.3f ms hr=%#lx "
+					    "count=%llu\n", (void *)syncTexture, heldMs, releaseMs,
+					    (unsigned long)releaseResult, (unsigned long long)slowHolds);
+				}
+			}
+			if (releaseResult != S_OK) {
+				static uint64_t failures = 0;
+				++failures;
+				if (failures <= 5 || failures % 128 == 0) {
+					Log("Sync texture ReleaseSync failed: handle=%p hr=%#lx failures=%llu\n",
+					    (void *)syncTexture, (unsigned long)releaseResult, (unsigned long long)failures);
+				}
+			}
+		};
+		xr_.Present(layers, releaseSync, acquireSources);
+		if (!locked) {
+			submitted.clear(); // zero-copy images stay acquired for retry
+		}
+		releaseSync(); // early-return fallback; releases at most once
 		{
 			std::lock_guard<std::mutex> lock(texturesMutex_);
 			for (auto &set : submitted) {
 				set->acquired = -1;
 			}
 		}
-		if (locked) {
-			mutex->ReleaseSync(0);
-		}
+
 	}
 
 	void

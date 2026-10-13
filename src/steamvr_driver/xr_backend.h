@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <d3d11.h>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -105,9 +106,13 @@ public:
 	std::string currentProfile[2];
 
 	// Frame loop, all on the compositor's present thread.
-	// Present: copies and submits; begins a frame first if none is open.
+	// Present: prepares destination images before acquiring source ownership.
+	// acquireSources runs synchronously once after preparation; false skips reads.
+	// Called synchronously after source reads and producer fences are queued,
+	// before runtime frame submission. The callback is never retained.
 	void
-	Present(const std::vector<LayerSubmit> &layers);
+	Present(const std::vector<LayerSubmit> &layers, const std::function<void()> &imagesReady = {},
+	        const std::function<bool()> &acquireSources = {});
 	// Virtual-display mode: copies SteamVR's final backbuffer (guarded by its
 	// keyed mutex) into a display-sized swapchain and submits it as the frame's
 	// display image (XR_MNDX_display_distortion), which the runtime presents
