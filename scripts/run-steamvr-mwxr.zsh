@@ -20,6 +20,9 @@
 #   APP_ARGS='...'         extra arguments for that app, for example -nowindow
 #                          (no desktop companion window in Source 2 games)
 #   XRT_MACOS_REFRESH_RATE_HZ=90  PS VR2 refresh rate, passed to the service too
+#   MWXR_STEAMVR_THREE_IMAGES=1  opt-in three-image Metal service compatibility
+#   MWXR_STEAMVR_ZERO_COPY=0|1  explicitly select copying or zero-copy attempts
+#                          (persists in driver settings; unset preserves the setting)
 #   MWXR_DISPLAY_MODE=direct|virtual  driver_mwxr.displayMode for this run (default direct)
 #   MWXR_OPENVR_SHIM_INSTALL=1  install tools/openvr_shim beside SteamVR Home
 #                           (default 0; it logs Home's frame loop to the run's
@@ -58,10 +61,12 @@ steam_only=${MWXR_STEAM_ONLY:-0}
 
 # Register the driver folder, select it, and never leave it blocked by
 # SteamVR safe mode after a failed development start.
-python3 - "${prefix}" "Z:${driver_root//\//\\}" "${steam_dir}/config/steamvr.vrsettings" "${MWXR_DISPLAY_MODE:-direct}" <<'PY'
+python3 - "${prefix}" "Z:${driver_root//\//\\}" "${steam_dir}/config/steamvr.vrsettings" "${MWXR_DISPLAY_MODE:-direct}" "${MWXR_STEAMVR_ZERO_COPY:-}" <<'PY'
 import json, sys
 from pathlib import Path
-prefix, driver, settings, display_mode = sys.argv[1:]
+prefix, driver, settings, display_mode, zero_copy = sys.argv[1:]
+if zero_copy not in ("", "0", "1"):
+    raise SystemExit("MWXR_STEAMVR_ZERO_COPY must be 0 or 1")
 for profile in Path(prefix, 'drive_c/users').iterdir():
     if profile.name == 'Public' or not profile.is_dir():
         continue
@@ -83,6 +88,8 @@ s.setdefault("driver_null", {})["enable"] = False
 s.setdefault("driver_mwxr", {}).update({"enable": True, "blocked_by_safe_mode": False})
 if display_mode:
     s["driver_mwxr"]["displayMode"] = display_mode
+if zero_copy:
+    s["driver_mwxr"]["zeroCopy"] = zero_copy == "1"
 # The desktop view needs Windows.Graphics.Capture (useNewDesktop) or real
 # desktop duplication; neither works under Wine.
 s.setdefault("dashboard", {}).update({"showDesktop": False, "enableWindowView": False, "useNewDesktop": False})
@@ -157,6 +164,9 @@ steam_running() {
 # global launchctl setting; MWXR_CLIENT_COMPOSITOR=1 turns it back on. Set
 # before Steam starts, so games launched from Steam inherit it too.
 export XRT_MACOS_CLIENT_COMPOSITOR=${MWXR_CLIENT_COMPOSITOR:-0}
+# Opt-in until the three-image service path is validated on the headset.
+# Read by the native Metal client inside Wine; no LaunchAgent edit is needed.
+export XRT_MACOS_METAL_THREE_IMAGE_SWAPCHAINS=${MWXR_STEAMVR_THREE_IMAGES:-0}
 
 # Steam starts before SteamVR, so SteamVR and Home can reach it. OpenXR games
 # launched from Steam inherit its environment, and use the prefix's
@@ -172,6 +182,7 @@ start_steam() {
   local env_now="mode=${mode} runtime=${MWXR_NATIVE_RUNTIME_JSON} dllpath=${WINEDLLPATH}"
   env_now+=" xdg=${XDG_RUNTIME_DIR:-} metal=${XRT_MACOS_METAL_IPC_SERVICE_NAME:-}"
   env_now+=" client_compositor=${XRT_MACOS_CLIENT_COMPOSITOR}"
+  env_now+=" three_images=${XRT_MACOS_METAL_THREE_IMAGE_SWAPCHAINS}"
   if steam_running; then
     if [[ $(cat "${steam_env_file}" 2>/dev/null) == "pid=${steam_pid} ${env_now}" ]]; then
       print "Steam is already running in this prefix with this XR environment"; return
