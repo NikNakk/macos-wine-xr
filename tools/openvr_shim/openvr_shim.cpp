@@ -16,6 +16,13 @@
 // before it), and logs the application's frame loop every 5 s to
 // MWXR_OPENVR_SHIM_LOG.
 //
+// It also hooks PostPresentHandoff (slot 7) to trace it. The application keeps
+// SteamVR's sync texture from its last Submit until it calls either that or
+// its next WaitGetPoses, and the compositor waits for it meanwhile. With
+// MWXR_OPENVR_SHIM_HANDOFF=1 the shim calls PostPresentHandoff itself, on the
+// submitting thread, once both eyes of a frame are submitted, unless the
+// application has already called it for that frame.
+//
 // With MWXR_OPENVR_SHIM_FIX_POSE=1 it also marks an HMD pose that is
 // "uninitialised" but has a proper rotation valid and running. That did not
 // change SteamVR Home, so it is off by default.
@@ -40,11 +47,13 @@ using PoseForDeviceFn = vr::EVRCompositorError (*)(void *, vr::TrackedDeviceInde
                                                    vr::TrackedDevicePose_t *);
 using SubmitFn = vr::EVRCompositorError (*)(void *, vr::EVREye, const vr::Texture_t *, const vr::VRTextureBounds_t *,
                                             vr::EVRSubmitFlags);
+using HandoffFn = void (*)(void *);
 
 constexpr int kWaitGetPosesSlot = 2;
 constexpr int kGetLastPosesSlot = 3;
 constexpr int kGetLastPoseForDeviceSlot = 4;
 constexpr int kSubmitSlot = 5;
+constexpr int kPostPresentHandoffSlot = 7; // after ClearLastSubmittedFrame
 
 // One entry per patched vtable: interface versions have their own vtables.
 struct Patched
@@ -54,6 +63,7 @@ struct Patched
 	PosesFn getLastPoses;
 	PoseForDeviceFn getLastPoseForDevice;
 	SubmitFn submit;
+	HandoffFn postPresentHandoff;
 };
 
 SRWLOCK g_lock = SRWLOCK_INIT;
@@ -61,6 +71,21 @@ Patched g_patched[16];
 int g_patchedCount = 0;
 GetGenericInterfaceFn g_getGenericInterface = nullptr;
 volatile LONG g_fixes = 0;
+
+// The current frame's submitted eyes (bits 0 and 1) and whether it has been
+// handed off (bit 2). WaitGetPoses starts a new frame.
+constexpr LONG kHandedOff = 4;
+volatile LONG g_frame = 0;
+
+bool
+InjectHandoff()
+{
+	static const bool enabled = [] {
+		const char *value = getenv("MWXR_OPENVR_SHIM_HANDOFF");
+		return value && !strcmp(value, "1");
+	}();
+	return enabled;
+}
 
 // WaitGetPoses statistics, logged every 5 s: the application's own view of
 // its frame loop.
@@ -71,6 +96,7 @@ struct Stats
 	uint32_t calls = 0, errors = 0, lastError = 0, invalidHmd = 0, fixed = 0;
 	uint32_t submits[2] = {}, submitErrors = 0, lastSubmitError = 0, lastType = 0, lastColorSpace = 0,
 	         lastFlags = 0, distinctHandles = 0;
+	uint32_t appHandoffs = 0, injectedHandoffs = 0;
 	void *handles[8] = {};
 	double submitTotalMs = 0, submitMaxMs = 0, submitGapMaxMs = 0;
 	LONGLONG lastSubmit = 0;
@@ -259,6 +285,9 @@ Record(LONGLONG begin, LONGLONG end, vr::EVRCompositorError error, const vr::Tra
 		    s.submits[0], s.submits[1], submits ? s.submitTotalMs / submits : 0.0, s.submitMaxMs,
 		    s.submitGapMaxMs, s.submitErrors, s.lastSubmitError, s.lastType, s.lastColorSpace, s.lastFlags,
 		    s.distinctHandles);
+		Log("PostPresentHandoff: application %u, injected %u%s\n", s.appHandoffs, s.injectedHandoffs,
+		    InjectHandoff() ? "" : " (injection off)");
+		s.appHandoffs = s.injectedHandoffs = 0;
 		s.windowStart = end;
 		s.calls = s.errors = s.lastError = s.invalidHmd = s.fixed = 0;
 		s.submits[0] = s.submits[1] = s.submitErrors = s.lastSubmitError = s.distinctHandles = 0;
@@ -274,6 +303,7 @@ WaitGetPosesHook(void *self, vr::TrackedDevicePose_t *render, uint32_t renderCou
                  uint32_t gameCount)
 {
 	const Patched *p = Find(self);
+	InterlockedExchange(&g_frame, 0);
 	LARGE_INTEGER begin, end;
 	QueryPerformanceCounter(&begin);
 	vr::EVRCompositorError error = p->waitGetPoses(self, render, renderCount, game, gameCount);
@@ -369,7 +399,38 @@ SubmitHook(void *self, vr::EVREye eye, const vr::Texture_t *texture, const vr::V
 	}
 	s.lastFlags = flags;
 	ReleaseSRWLockExclusive(&g_stats.lock);
+	if (error == vr::VRCompositorError_None && (eye == vr::Eye_Left || eye == vr::Eye_Right) && InjectHandoff() &&
+	    p->postPresentHandoff) {
+		LONG bit = 1 << eye;
+		LONG frame = InterlockedOr(&g_frame, bit) | bit;
+		if ((frame & 3) == 3 && !(InterlockedOr(&g_frame, kHandedOff) & kHandedOff)) {
+			LARGE_INTEGER handoffBegin, handoffEnd;
+			QueryPerformanceCounter(&handoffBegin);
+			p->postPresentHandoff(self);
+			QueryPerformanceCounter(&handoffEnd);
+			TraceCall("InjectedPostPresentHandoff", handoffBegin.QuadPart, handoffEnd.QuadPart,
+			          vr::VRCompositorError_None);
+			AcquireSRWLockExclusive(&g_stats.lock);
+			++g_stats.injectedHandoffs;
+			ReleaseSRWLockExclusive(&g_stats.lock);
+		}
+	}
 	return error;
+}
+
+void
+PostPresentHandoffHook(void *self)
+{
+	const Patched *p = Find(self);
+	InterlockedOr(&g_frame, kHandedOff);
+	LARGE_INTEGER begin, end;
+	QueryPerformanceCounter(&begin);
+	p->postPresentHandoff(self);
+	QueryPerformanceCounter(&end);
+	TraceCall("PostPresentHandoff", begin.QuadPart, end.QuadPart, vr::VRCompositorError_None);
+	AcquireSRWLockExclusive(&g_stats.lock);
+	++g_stats.appHandoffs;
+	ReleaseSRWLockExclusive(&g_stats.lock);
 }
 
 void
@@ -393,13 +454,16 @@ Patch(void *compositor, const char *version)
 	p.getLastPoses = reinterpret_cast<PosesFn>(vtable[kGetLastPosesSlot]);
 	p.getLastPoseForDevice = reinterpret_cast<PoseForDeviceFn>(vtable[kGetLastPoseForDeviceSlot]);
 	p.submit = reinterpret_cast<SubmitFn>(vtable[kSubmitSlot]);
+	p.postPresentHandoff = reinterpret_cast<HandoffFn>(vtable[kPostPresentHandoffSlot]);
+	constexpr SIZE_T kPatchedBytes = (kPostPresentHandoffSlot - kWaitGetPosesSlot + 1) * sizeof(void *);
 	DWORD old = 0;
-	if (VirtualProtect(&vtable[kWaitGetPosesSlot], 4 * sizeof(void *), PAGE_READWRITE, &old)) {
+	if (VirtualProtect(&vtable[kWaitGetPosesSlot], kPatchedBytes, PAGE_READWRITE, &old)) {
 		vtable[kWaitGetPosesSlot] = reinterpret_cast<void *>(&WaitGetPosesHook);
 		vtable[kGetLastPosesSlot] = reinterpret_cast<void *>(&GetLastPosesHook);
 		vtable[kGetLastPoseForDeviceSlot] = reinterpret_cast<void *>(&GetLastPoseForDeviceHook);
 		vtable[kSubmitSlot] = reinterpret_cast<void *>(&SubmitHook);
-		VirtualProtect(&vtable[kWaitGetPosesSlot], 4 * sizeof(void *), old, &old);
+		vtable[kPostPresentHandoffSlot] = reinterpret_cast<void *>(&PostPresentHandoffHook);
+		VirtualProtect(&vtable[kWaitGetPosesSlot], kPatchedBytes, old, &old);
 		++g_patchedCount;
 		Log("patched %s (vtable %p)\n", version, (void *)vtable);
 	} else {
