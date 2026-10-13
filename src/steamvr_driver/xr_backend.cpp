@@ -3,6 +3,8 @@
 #include "xr_backend.h"
 #include "log.h"
 
+#include <chrono>
+
 #include <cstring>
 #include <dxgi.h>
 
@@ -677,7 +679,18 @@ XrBackend::SwapchainFor(size_t layer, int eye, uint32_t width, uint32_t height, 
 	}
 	char label[32];
 	snprintf(label, sizeof(label), "layer %zu eye %d", layer, eye);
-	return EnsureSwapchain(swapchains_[index], width, height, sourceFormat,
+	EyeSwapchain &swapchain = swapchains_[index];
+	// Home and SteamVR's system scene can alternate in the same layer slot.
+	// Retain capacity across both source allocations, not just rendered bounds.
+	// Copies and imageRect still describe only the current source region.
+	if (swapchain.handle && swapchain.format == ChooseFormat(sourceFormat)) {
+		if (swapchain.width >= width && swapchain.height >= height) {
+			return &swapchain;
+		}
+		width = std::max(width, swapchain.width);
+		height = std::max(height, swapchain.height);
+	}
+	return EnsureSwapchain(swapchain, width, height, sourceFormat,
 	                       XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT, label);
 }
 
@@ -811,30 +824,73 @@ XrBackend::AcquireImage(XrSwapchain swapchain)
 }
 
 void
-XrBackend::Present(const std::vector<LayerSubmit> &layers)
+XrBackend::Present(const std::vector<LayerSubmit> &layers, const std::function<void()> &imagesReady,
+                   const std::function<bool()> &acquireSources)
 {
 	if (!frameBegun_) {
 		double offset, period;
 		WaitAndBeginFrame(offset, period);
 	}
 	std::lock_guard<std::mutex> lock(mutex_);
-	// Zero-copy images: released after the caller's sync, so the runtime's
-	// GPU wait follows the application's rendering.
-	std::set<XrSwapchain> released;
-	for (const auto &layer : layers) {
-		for (const auto &eye : layer.eye) {
-			if (eye.swapchain && released.insert(eye.swapchain).second) {
-				xrReleaseSwapchainImage(eye.swapchain, nullptr);
+	if (!running_ || !frameBegun_) {
+		return;
+	}
+	// Waiting for a destination image must not block SteamVR from reusing
+	// its source. Metadata is immutable; no source pixels are read here.
+	struct PreparedEye
+	{
+		XrSwapchain handle = XR_NULL_HANDLE;
+		ID3D11Texture2D *texture = nullptr;
+	};
+	std::vector<PreparedEye> prepared(layers.size() * 2);
+	auto preparationStart = std::chrono::steady_clock::now();
+	if (frameState_.shouldRender) {
+		for (size_t i = 0; i < layers.size(); ++i) {
+			for (int eye = 0; eye < 2; ++eye) {
+				const EyeSubmit &submit = layers[i].eye[eye];
+				if (submit.swapchain) {
+					continue;
+				}
+				D3D11_TEXTURE2D_DESC desc;
+				submit.texture->GetDesc(&desc);
+				EyeSwapchain *swapchain = SwapchainFor(i, eye, desc.Width, desc.Height, desc.Format);
+				uint32_t image = 0;
+				XrSwapchainImageWaitInfo waitInfo = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+				waitInfo.timeout = XR_INFINITE_DURATION;
+				if (!swapchain || XR_FAILED(xrAcquireSwapchainImage(swapchain->handle, nullptr, &image)) ||
+				    XR_FAILED(xrWaitSwapchainImage(swapchain->handle, &waitInfo))) {
+					continue;
+				}
+				prepared[i * 2 + eye] = {swapchain->handle, swapchain->images[image].texture};
 			}
 		}
 	}
-	if (!running_ || !frameBegun_) {
-		return;
+	double preparationMs = std::chrono::duration<double, std::milli>(
+	                          std::chrono::steady_clock::now() - preparationStart).count();
+	if (preparationMs >= 10.0) {
+		static uint64_t slowPreparations = 0;
+		++slowPreparations;
+		if (slowPreparations <= 5 || slowPreparations % 128 == 0) {
+			Log("Copy destination preparation: %.3f ms before source ownership; count=%llu\n",
+			    preparationMs, (unsigned long long)slowPreparations);
+		}
+	}
+	bool sourcesOwned = !acquireSources || acquireSources();
+	// Runtime producer fences follow the source GPU wait from AcquireSync.
+	std::set<XrSwapchain> released;
+	if (sourcesOwned) {
+		for (const auto &layer : layers) {
+			for (const auto &eye : layer.eye) {
+				if (eye.swapchain && released.insert(eye.swapchain).second) {
+					xrReleaseSwapchainImage(eye.swapchain, nullptr);
+				}
+			}
+		}
 	}
 	std::vector<XrCompositionLayerProjection> projections;
 	std::vector<XrCompositionLayerProjectionView> views(layers.size() * 2);
 	projections.reserve(layers.size());
-	if (frameState_.shouldRender) {
+	if (frameState_.shouldRender && sourcesOwned) {
 		for (size_t i = 0; i < layers.size(); ++i) {
 			bool complete = true;
 			for (int eye = 0; eye < 2 && complete; ++eye) {
@@ -852,21 +908,14 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers)
 					view.subImage.imageRect.offset = {(int32_t)submit.box.left, (int32_t)submit.box.top};
 					continue;
 				}
-				D3D11_TEXTURE2D_DESC desc;
-				submit.texture->GetDesc(&desc);
-				EyeSwapchain *swapchain = SwapchainFor(i, eye, width, height, desc.Format);
-				uint32_t image = 0;
-				XrSwapchainImageWaitInfo waitInfo = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-				waitInfo.timeout = XR_INFINITE_DURATION;
-				if (!swapchain || XR_FAILED(xrAcquireSwapchainImage(swapchain->handle, nullptr, &image)) ||
-				    XR_FAILED(xrWaitSwapchainImage(swapchain->handle, &waitInfo))) {
+				const PreparedEye &destination = prepared[i * 2 + eye];
+				if (!destination.texture) {
 					complete = false;
 					break;
 				}
-				context_->CopySubresourceRegion(swapchain->images[image].texture, 0, 0, 0, 0, submit.texture,
+				context_->CopySubresourceRegion(destination.texture, 0, 0, 0, 0, submit.texture,
 				                                0, &submit.box);
-				xrReleaseSwapchainImage(swapchain->handle, nullptr);
-				view.subImage.swapchain = swapchain->handle;
+				view.subImage.swapchain = destination.handle;
 			}
 			if (!complete) {
 				continue;
@@ -880,6 +929,20 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers)
 			}
 			projections.push_back(projection);
 		}
+	}
+	// Return every prepared image, including unused eyes after an acquisition
+	// failure or incomplete layer. Never read unowned source textures.
+	for (const auto &destination : prepared) {
+		if (destination.handle) {
+			xrReleaseSwapchainImage(destination.handle, nullptr);
+		}
+	}
+	// Copies and xrReleaseSwapchainImage completion signals precede this
+	// handoff on the D3D context. ReleaseSync queues its GPU signal after
+	// them, so the producer still waits for source reads to complete.
+	// Runtime compositing/IPC submission must not extend mutex ownership.
+	if (imagesReady) {
+		imagesReady();
 	}
 	LARGE_INTEGER now, frequency;
 	QueryPerformanceCounter(&now);
