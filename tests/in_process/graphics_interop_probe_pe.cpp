@@ -13,7 +13,9 @@ extern "C" {
 }
 #include <d3d11_4.h>
 #include <stdio.h>
+#include <string.h>
 #include "graphics_interop.h"
+#include "dxmt_native_interop.h"
 #include "graphics_interop_native.h"
 #include "graphics_interop_probe.h"
 
@@ -31,6 +33,98 @@ static void check(bool ok, const char *what, unsigned kind, unsigned slice, uint
 {
     printf("%s kind=%u slice=%u pixel=%08x %s\n", ok ? "PASS" : "FAIL", kind, slice, pixel, what);
     failures += !ok;
+}
+
+struct ProtectedSignal
+{
+    GraphicsInterop *interop;
+    uint64_t value;
+    HANDLE started;
+    HRESULT result;
+};
+
+static DWORD WINAPI protected_signal_thread(void *ptr)
+{
+    auto *signal = (ProtectedSignal *)ptr;
+    SetEvent(signal->started);
+    signal->result = signal->interop->signal_completion(signal->value);
+    return 0;
+}
+
+// Exercise the production backend on two threads with a real D3D11 context
+// and Metal allocation. A fence issued while the app holds Enter must stay
+// behind the render work that the app records before Leave.
+static void check_protected_signal(ID3D11Device *device, ID3D11DeviceContext *context, GraphicsInterop *interop,
+                                   GraphicsImage &image, graphics_probe_params &native, graphics_probe_params &event)
+{
+    ID3D11Multithread *multithread = nullptr;
+    ID3D11RenderTargetView *rtv = nullptr;
+    HRESULT hr = context->QueryInterface(__uuidof(ID3D11Multithread), (void **)&multithread);
+    if (SUCCEEDED(hr)) hr = device->CreateRenderTargetView(image.texture, nullptr, &rtv);
+    if (FAILED(hr)) {
+        check(false, "protected-context test setup", native.kind, 0, 0);
+        if (multithread) multithread->Release();
+        return;
+    }
+    // A GPU gate between a prematurely recorded completion signal and the
+    // final clear makes premature signaling observable without racing readback.
+    graphics_probe_params gate = {(uint64_t)interop->metal_device()};
+    gate.kind = PROBE_EVENT;
+    WINE_UNIX_CALL(PROBE_CREATE, &gate);
+    IDXMTNativeDevice2 *native_device = nullptr;
+    ID3D11DeviceContext4 *context4 = nullptr;
+    ID3D11Fence *gate_fence = nullptr;
+    hr = gate.status ? E_FAIL : device->QueryInterface(DXMT_IID_NATIVE_DEVICE2, (void **)&native_device);
+    if (SUCCEEDED(hr)) hr = native_device->ImportMetalSharedEvent(gate.object, &gate_fence);
+    if (SUCCEEDED(hr)) hr = context->QueryInterface(__uuidof(ID3D11DeviceContext4), (void **)&context4);
+    if (FAILED(hr)) {
+        check(false, "GPU gate setup", native.kind, 0, 0);
+        if (context4) context4->Release();
+        if (gate_fence) gate_fence->Release();
+        if (native_device) native_device->Release();
+        if (gate.object) WINE_UNIX_CALL(PROBE_RELEASE, &gate);
+        rtv->Release(); multithread->Release();
+        return;
+    }
+    BOOL previous = multithread->SetMultithreadProtected(TRUE);
+    ProtectedSignal signal = {interop, ++event.value, CreateEventW(nullptr, TRUE, FALSE, nullptr), E_FAIL};
+    multithread->Enter();
+    HANDLE worker = signal.started ? CreateThread(nullptr, 0, protected_signal_thread, &signal, 0, nullptr) : nullptr;
+    bool started = worker && WaitForSingleObject(signal.started, 5000) == WAIT_OBJECT_0;
+    DWORD early = started ? WaitForSingleObject(worker, 100) : WAIT_FAILED;
+    check(started && early == WAIT_TIMEOUT, "signal waits for the app's protected rendering section", native.kind, 0, 0);
+    hr = context4->Wait(gate_fence, 1);
+    check(SUCCEEDED(hr), "GPU gate wait", native.kind, 0, 0);
+    const float green[4] = {0.f, 1.f, 0.f, 1.f};
+    context->ClearRenderTargetView(rtv, green);
+    context->Flush();
+    graphics_probe_params pending = event;
+    pending.event = event.object; pending.value = signal.value; pending.timeout_ms = 100;
+    WINE_UNIX_CALL(PROBE_WAIT_EVENT, &pending);
+    check(pending.status == 2, "completion remains unsignalled while the final app write is GPU-blocked", native.kind, 0, 0);
+    mw_gfx_native_params open = {MW_GFX_NATIVE_SIGNAL_EVENT};
+    open.object = gate.object; open.value = 1;
+    interop_call(&open);
+    multithread->Leave();
+    if (worker && WaitForSingleObject(worker, 5000) != WAIT_OBJECT_0) {
+        // The worker holds references to stack state; cannot clean up under it.
+        printf("FAIL protected signal thread did not finish\n");
+        ExitProcess(1);
+    }
+    check(worker && SUCCEEDED(signal.result), "protected signal completes after Leave", native.kind, 0, 0);
+    if (worker && SUCCEEDED(signal.result)) {
+        graphics_probe_params read = native;
+        read.event = event.object; read.value = signal.value; read.timeout_ms = 5000; read.pixel_in = 0xff00ff00u;
+        WINE_UNIX_CALL(PROBE_VERIFY, &read);
+        check(!read.status, "protected fence covers the app's final texture write", native.kind, 0, read.pixel_out);
+    }
+    if (worker) CloseHandle(worker);
+    if (signal.started) CloseHandle(signal.started);
+    multithread->SetMultithreadProtected(previous);
+    context4->Release(); gate_fence->Release(); native_device->Release();
+    WINE_UNIX_CALL(PROBE_RELEASE, &gate);
+    rtv->Release();
+    multithread->Release();
 }
 
 static int run_case(ID3D11Device *device, ID3D11DeviceContext *context, GraphicsInterop *interop,
@@ -82,6 +176,8 @@ static int run_case(ID3D11Device *device, ID3D11DeviceContext *context, Graphics
         WINE_UNIX_CALL(PROBE_VERIFY, &read);
         check(!read.status, "native Metal reads D3D11 writes after the completion event", kind, slice, read.pixel_out);
     }
+    if (kind != PROBE_PRIVATE_ARRAY && !strcmp(interop->name(), "dxmt"))
+        check_protected_signal(device, context, interop, image, native, event);
     // Reverse: native writes the same object, D3D11 reads it through a staging copy (test readback only).
     D3D11_TEXTURE2D_DESC staging_desc = desc;
     staging_desc.Usage = D3D11_USAGE_STAGING; staging_desc.BindFlags = 0; staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
