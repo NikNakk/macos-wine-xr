@@ -59,8 +59,8 @@ XrBackend::Init(std::string &error)
 	if (hasDisplayDistortion) {
 		required[enabledCount++] = XR_MNDX_DISPLAY_DISTORTION_EXTENSION_NAME;
 	}
-	// Optional: the PS Sense controllers' own profile, whose Options button
-	// (absent from the Touch profile) recentres.
+	// Optional: the PS Sense profile exposes Options separately from Touch.
+	// The Monado service owns the stage-recenter gesture.
 	hasPsvr2Interaction = HasExtension(extensions, "XR_MNDX_psvr2_interaction");
 	if (hasPsvr2Interaction) {
 		required[enabledCount++] = "XR_MNDX_psvr2_interaction";
