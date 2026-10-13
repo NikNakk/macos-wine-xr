@@ -1,7 +1,7 @@
 {
 	"driver_mwxr": {
 		"enable": true,
-		"displayFrequency": 90.0,
+		"displayFrequency": 0.0,
 		"poseRateHz": 500,
 		"zeroCopy": true,
 		"displayMode": "direct",
