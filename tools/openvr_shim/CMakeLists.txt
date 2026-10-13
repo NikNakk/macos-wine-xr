@@ -16,3 +16,8 @@ add_library(openvr_api SHARED openvr_shim.cpp openvr_api.def)
 set_target_properties(openvr_api PROPERTIES PREFIX "" OUTPUT_NAME openvr_api)
 target_include_directories(openvr_api PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../src/steamvr_driver)
 target_link_options(openvr_api PRIVATE -static)
+
+# Explicit diagnostic fixture; does not run against SteamVR or hardware.
+add_executable(openvr_trace_forwarding_test EXCLUDE_FROM_ALL trace_forwarding_test.cpp)
+target_include_directories(openvr_trace_forwarding_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../src/steamvr_driver)
+target_link_options(openvr_trace_forwarding_test PRIVATE -static)
