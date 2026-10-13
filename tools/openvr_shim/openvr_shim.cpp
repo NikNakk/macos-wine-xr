@@ -81,11 +81,12 @@ struct Stats
 double
 QpcMs(LONGLONG ticks)
 {
-	static LARGE_INTEGER frequency = {};
-	if (!frequency.QuadPart) {
-		QueryPerformanceFrequency(&frequency);
-	}
-	return (double)ticks * 1000.0 / (double)frequency.QuadPart;
+	static const LONGLONG frequency = [] {
+		LARGE_INTEGER value;
+		QueryPerformanceFrequency(&value);
+		return value.QuadPart;
+	}();
+	return (double)ticks * 1000.0 / (double)frequency;
 }
 
 void
@@ -120,6 +121,58 @@ Log(const char *format, ...)
 	vfprintf(f, format, args);
 	va_end(args);
 	fclose(f);
+}
+
+// Opt-in complete call intervals, buffered separately from aggregate logs.
+// On this CrossOver macOS build QPC and server history use the same
+// mach_continuous_time epoch. Keep frequency conversion explicit.
+void
+TraceCall(const char *call, LONGLONG begin, LONGLONG end, vr::EVRCompositorError error,
+          int eye = -1, const void *texture = nullptr)
+{
+	static const bool enabled = [] {
+		const char *value = getenv("MWXR_OPENVR_SHIM_TRACE");
+		return value && !strcmp(value, "1");
+	}();
+	if (!enabled) return;
+	static SRWLOCK lock = SRWLOCK_INIT;
+	static FILE *file = nullptr;
+	static bool attempted = false;
+	static LONGLONG lastFlush = 0;
+	AcquireSRWLockExclusive(&lock);
+	if (!attempted) {
+		attempted = true;
+		const char *path = getenv("MWXR_OPENVR_SHIM_LOG");
+		if (path && *path) {
+			char tracePath[32768];
+			if (snprintf(tracePath, sizeof(tracePath), "%s.trace", path) < (int)sizeof(tracePath)) {
+				file = fopen(tracePath, "a");
+				if (file) {
+					setvbuf(file, nullptr, _IOFBF, 65536);
+					LARGE_INTEGER frequency;
+					QueryPerformanceFrequency(&frequency);
+					fprintf(file, "trace_active pid=%lu frequency=%lld tick_ms=%llu qpc_us=%.0f\n",
+					        GetCurrentProcessId(), frequency.QuadPart, GetTickCount64(), QpcMs(begin) * 1000.0);
+				}
+			}
+		}
+	}
+	if (file) {
+		fprintf(file, "call=%s pid=%lu tid=%lu begin_us=%.0f end_us=%.0f duration_ms=%.6f eye=%d texture=%p error=%u\n",
+		        call, GetCurrentProcessId(), GetCurrentThreadId(), QpcMs(begin) * 1000.0,
+		        QpcMs(end) * 1000.0, QpcMs(end - begin), eye, texture, (unsigned)error);
+		if (!lastFlush || QpcMs(end - lastFlush) >= 1000.0) {
+			LARGE_INTEGER flushBegin, flushEnd;
+			QueryPerformanceCounter(&flushBegin);
+			fflush(file);
+			QueryPerformanceCounter(&flushEnd);
+			fprintf(file, "trace_flush pid=%lu begin_us=%.0f end_us=%.0f duration_ms=%.6f\n",
+			        GetCurrentProcessId(), QpcMs(flushBegin.QuadPart) * 1000.0,
+			        QpcMs(flushEnd.QuadPart) * 1000.0, QpcMs(flushEnd.QuadPart - flushBegin.QuadPart));
+			lastFlush = end;
+		}
+	}
+	ReleaseSRWLockExclusive(&lock);
 }
 
 const Patched *
@@ -225,6 +278,7 @@ WaitGetPosesHook(void *self, vr::TrackedDevicePose_t *render, uint32_t renderCou
 	QueryPerformanceCounter(&begin);
 	vr::EVRCompositorError error = p->waitGetPoses(self, render, renderCount, game, gameCount);
 	QueryPerformanceCounter(&end);
+	TraceCall("WaitGetPoses", begin.QuadPart, end.QuadPart, error);
 	bool haveHmd = render && renderCount > vr::k_unTrackedDeviceIndex_Hmd;
 	vr::TrackedDevicePose_t before = haveHmd ? render[vr::k_unTrackedDeviceIndex_Hmd] : vr::TrackedDevicePose_t{};
 	bool fixed = haveHmd && FixHmd(&render[vr::k_unTrackedDeviceIndex_Hmd]);
@@ -240,7 +294,11 @@ GetLastPosesHook(void *self, vr::TrackedDevicePose_t *render, uint32_t renderCou
                  uint32_t gameCount)
 {
 	const Patched *p = Find(self);
+	LARGE_INTEGER begin, end;
+	QueryPerformanceCounter(&begin);
 	vr::EVRCompositorError error = p->getLastPoses(self, render, renderCount, game, gameCount);
+	QueryPerformanceCounter(&end);
+	TraceCall("GetLastPoses", begin.QuadPart, end.QuadPart, error);
 	if (render && renderCount > vr::k_unTrackedDeviceIndex_Hmd) {
 		FixHmd(&render[vr::k_unTrackedDeviceIndex_Hmd]);
 	}
@@ -255,7 +313,11 @@ GetLastPoseForDeviceHook(void *self, vr::TrackedDeviceIndex_t device, vr::Tracke
                          vr::TrackedDevicePose_t *game)
 {
 	const Patched *p = Find(self);
+	LARGE_INTEGER begin, end;
+	QueryPerformanceCounter(&begin);
 	vr::EVRCompositorError error = p->getLastPoseForDevice(self, device, render, game);
+	QueryPerformanceCounter(&end);
+	TraceCall("GetLastPoseForDevice", begin.QuadPart, end.QuadPart, error);
 	if (device == vr::k_unTrackedDeviceIndex_Hmd) {
 		FixHmd(render);
 		FixHmd(game);
@@ -273,6 +335,7 @@ SubmitHook(void *self, vr::EVREye eye, const vr::Texture_t *texture, const vr::V
 	QueryPerformanceCounter(&begin);
 	vr::EVRCompositorError error = p->submit(self, eye, texture, bounds, flags);
 	QueryPerformanceCounter(&end);
+	TraceCall("Submit", begin.QuadPart, end.QuadPart, error, (int)eye, texture ? texture->handle : nullptr);
 	AcquireSRWLockExclusive(&g_stats.lock);
 	Stats &s = g_stats;
 	double inCallMs = QpcMs(end.QuadPart - begin.QuadPart);
