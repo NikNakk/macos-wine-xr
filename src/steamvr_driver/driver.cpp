@@ -839,7 +839,12 @@ public:
 		}
 		AdoptPeriod(period);
 		// The vsync that has just occurred, as an offset from now (<= 0).
-		vr::VRServerDriverHost()->VsyncEvent(-UpdateVsyncTiming(vsyncOffset, period));
+		double sinceVsync = UpdateVsyncTiming(vsyncOffset, period);
+		vr::VRServerDriverHost()->VsyncEvent(-sinceVsync);
+		if (FrameTrace *trace = xr_.Trace()) {
+			trace->Write("vsync,%lld,%lld,%lld\n", QpcMicroseconds(), (long long)(-sinceVsync * 1e6),
+			             (long long)(vsyncToPhotons_ * 1e6));
+		}
 	}
 
 	// predictedDisplayPeriod becomes a multiple of the refresh when frames are

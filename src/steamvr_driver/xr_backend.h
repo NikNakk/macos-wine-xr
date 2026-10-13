@@ -7,6 +7,7 @@
 #include <atomic>
 #include <d3d11.h>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -16,6 +17,7 @@
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 
+#include "frame_trace.h"
 #include "in_process/mndx_display_distortion.h"
 
 namespace mwxr {
@@ -126,7 +128,24 @@ public:
 	bool
 	WaitAndBeginFrame(double &vsyncOffsetSeconds, double &framePeriodSeconds);
 
+	// Opt-in frame trace (MWXR_DRIVER_FRAME_TRACE), or null.
+	FrameTrace *
+	Trace()
+	{
+		return trace_ && trace_->Enabled() ? trace_.get() : nullptr;
+	}
+
 private:
+	// CPU stage times of the open frame, in QPC microseconds.
+	struct FrameStamps
+	{
+		uint64_t frame = 0;
+		LONGLONG waitBegin = 0, waitEnd = 0, beginEnd = 0, presentBegin = 0, prepared = 0, acquireEnd = 0,
+		         released = 0, endBegin = 0, endEnd = 0;
+		bool acquired = false;
+		size_t layers = 0;
+	};
+
 	struct EyeSwapchain
 	{
 		XrSwapchain handle = XR_NULL_HANDLE;
@@ -168,6 +187,10 @@ private:
 	bool running_ = false, frameBegun_ = false;
 	XrFrameState frameState_ = {XR_TYPE_FRAME_STATE};
 	ID3D11DeviceContext *context_ = nullptr;
+	std::unique_ptr<FrameTrace> trace_;
+	int64_t xrTimeOffsetNs_ = 0; // XrTime - QPC us * 1000
+	uint64_t frameCount_ = 0;
+	FrameStamps stamps_;
 	std::vector<int64_t> formats_;
 	std::vector<EyeSwapchain> swapchains_; // [layer * 2 + eye]
 	EyeSwapchain displaySwapchain_;

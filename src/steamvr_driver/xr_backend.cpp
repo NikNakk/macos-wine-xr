@@ -266,6 +266,16 @@ XrBackend::Init(std::string &error)
 		Log("Display refresh rate: %.2f Hz, from the shortest frame period\n", refreshRate);
 	}
 
+	if (qpcToTime_) {
+		LONGLONG qpcUs = QpcMicroseconds();
+		XrTime now = NowXrTime();
+		xrTimeOffsetNs_ = now - qpcUs * 1000;
+	}
+	trace_ = std::make_unique<FrameTrace>();
+	if (!trace_->Open(device, context_, xrTimeOffsetNs_)) {
+		trace_.reset();
+	}
+
 	// Eye poses relative to the head and field of view, from the views now.
 	XrViewLocateInfo locateInfo = {XR_TYPE_VIEW_LOCATE_INFO};
 	locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -531,6 +541,7 @@ void
 XrBackend::Shutdown()
 {
 	std::lock_guard<std::mutex> lock(mutex_);
+	trace_.reset();
 	for (auto &swapchain : swapchains_) {
 		if (swapchain.handle) {
 			xrDestroySwapchain(swapchain.handle);
@@ -665,15 +676,20 @@ XrBackend::WaitAndBeginFrame(double &vsyncOffsetSeconds, double &framePeriodSeco
 		return false;
 	}
 	frameState_ = {XR_TYPE_FRAME_STATE};
+	stamps_ = {};
+	stamps_.frame = ++frameCount_;
+	stamps_.waitBegin = QpcMicroseconds();
 	if (XR_FAILED(xrWaitFrame(session_, nullptr, &frameState_))) {
 		return false;
 	}
+	stamps_.waitEnd = QpcMicroseconds();
 	if (!qpcToTime_) {
 		AnchorTime(frameState_.predictedDisplayTime);
 	}
 	if (XR_FAILED(xrBeginFrame(session_, nullptr))) {
 		return false;
 	}
+	stamps_.beginEnd = QpcMicroseconds();
 	frameBegun_ = true;
 	framePeriodSeconds = frameState_.predictedDisplayPeriod / 1e9;
 	XrTime vsync = frameState_.predictedDisplayTime - frameState_.predictedDisplayPeriod;
@@ -868,6 +884,7 @@ void
 XrBackend::Present(const std::vector<LayerSubmit> &layers, const std::function<void()> &imagesReady,
                    const std::function<bool()> &acquireSources)
 {
+	LONGLONG presentBegin = QpcMicroseconds();
 	if (!frameBegun_) {
 		double offset, period;
 		WaitAndBeginFrame(offset, period);
@@ -876,6 +893,8 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers, const std::function<v
 	if (!running_ || !frameBegun_) {
 		return;
 	}
+	stamps_.presentBegin = presentBegin;
+	stamps_.layers = layers.size();
 	// Waiting for a destination image must not block SteamVR from reusing
 	// its source. Metadata is immutable; no source pixels are read here.
 	struct PreparedEye
@@ -916,7 +935,13 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers, const std::function<v
 			    preparationMs, (unsigned long long)slowPreparations);
 		}
 	}
+	stamps_.prepared = QpcMicroseconds();
 	bool sourcesOwned = !acquireSources || acquireSources();
+	stamps_.acquireEnd = QpcMicroseconds();
+	stamps_.acquired = sourcesOwned;
+	if (trace_ && sourcesOwned) {
+		trace_->SignalGpu(stamps_.frame, false);
+	}
 	// Runtime producer fences follow the source GPU wait from AcquireSync.
 	std::set<XrSwapchain> released;
 	if (sourcesOwned) {
@@ -971,6 +996,9 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers, const std::function<v
 			projections.push_back(projection);
 		}
 	}
+	if (trace_ && sourcesOwned) {
+		trace_->SignalGpu(stamps_.frame, true);
+	}
 	// Return every prepared image, including unused eyes after an acquisition
 	// failure or incomplete layer. Never read unowned source textures.
 	for (const auto &destination : prepared) {
@@ -985,6 +1013,7 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers, const std::function<v
 	if (imagesReady) {
 		imagesReady();
 	}
+	stamps_.released = QpcMicroseconds();
 	LARGE_INTEGER now, frequency;
 	QueryPerformanceCounter(&now);
 	QueryPerformanceFrequency(&frequency);
@@ -1007,7 +1036,18 @@ XrBackend::Present(const std::vector<LayerSubmit> &layers, const std::function<v
 	for (auto &projection : projections) {
 		headers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader *>(&projection));
 	}
+	stamps_.endBegin = QpcMicroseconds();
 	EndFrameLocked(headers);
+	stamps_.endEnd = QpcMicroseconds();
+	if (trace_) {
+		const FrameStamps &f = stamps_;
+		trace_->Write("frame,%llu,%lld,%lld,%lld,%lld,%d,%lld,%lld,%lld,%lld,%d,%lld,%lld,%lld,%zu\n",
+		              (unsigned long long)f.frame, f.waitBegin, f.waitEnd,
+		              (long long)((frameState_.predictedDisplayTime - xrTimeOffsetNs_) / 1000),
+		              (long long)(frameState_.predictedDisplayPeriod / 1000), frameState_.shouldRender ? 1 : 0,
+		              f.beginEnd, f.presentBegin, f.prepared, f.acquireEnd, f.acquired ? 1 : 0, f.released,
+		              f.endBegin, f.endEnd, f.layers);
+	}
 }
 
 void

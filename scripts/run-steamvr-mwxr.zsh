@@ -29,6 +29,8 @@
 #                           openvr-shim.log; Valve's openvr_api.dll is restored on exit)
 #   MWXR_OPENVR_SHIM_APP_DIRS='Half-Life Alyx/game/bin/win64'  also install it in these
 #                           folders (colon-separated, relative to steamapps/common)
+#   MWXR_DRIVER_FRAME_TRACE=1  the driver writes each OpenXR frame's stages, GPU
+#                           fence times and vsync events to the run's driver-frames.csv
 #   MWXR_HOME_CONSOLE=0     do not record SteamVR Home's developer console (by default
 #                           tools/vconsole_capture writes it to the run's home-console.log;
 #                           Home listens on -vconport 29009, set in SteamVR's tools.vrmanifest)
@@ -303,6 +305,11 @@ PY
 
 install_shim
 export MWXR_OPENVR_SHIM_LOG="Z:${logs//\//\\}\\openvr-shim.log"
+if [[ ${MWXR_DRIVER_FRAME_TRACE:-0} == 1 ]]; then
+  export MWXR_DRIVER_FRAME_TRACE="Z:${logs//\//\\}\\driver-frames.csv"
+elif [[ ${MWXR_DRIVER_FRAME_TRACE:-0} == 0 ]]; then
+  unset MWXR_DRIVER_FRAME_TRACE
+fi
 
 case ${mode} in
  simulated)
