@@ -1,0 +1,3 @@
+User: Steam black screen again, SteamVR apparently crashed on launch.
+Launch: ~/Windows/logs/run-mwxr-20261010-000322/vrstartup.log
+wine: Call from 00006FFFFFC3EBAA to unimplemented function winemetal.dll.WMTMetalViewSubmitted, aborting

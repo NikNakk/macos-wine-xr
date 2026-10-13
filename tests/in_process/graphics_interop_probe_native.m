@@ -104,4 +104,15 @@ static int32_t release(void *args)
     return 0;
 }
 
-const unixlib_entry_t __wine_unix_call_funcs[] = {mw_graphics_native_call, create, verify, fill, release};
+static int32_t wait_event(void *args)
+{
+    struct graphics_probe_params *p = args;
+    @autoreleasepool {
+        id<MTLSharedEvent> event = (id<MTLSharedEvent>)p->event;
+        for (uint32_t i = 0; event.signaledValue < p->value && i < p->timeout_ms; ++i) usleep(1000);
+        p->status = event.signaledValue >= p->value ? 0 : 2;
+    }
+    return 0;
+}
+
+const unixlib_entry_t __wine_unix_call_funcs[] = {mw_graphics_native_call, create, verify, fill, release, wait_event};

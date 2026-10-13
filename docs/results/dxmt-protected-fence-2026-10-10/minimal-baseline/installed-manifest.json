@@ -1,0 +1,9 @@
+{
+  "/Users/nickkennedy/Code/wine-crossover/runtime/lib/wine/x86_64-windows/d3d11.dll": "4f056969a25cb5788185fe6170f0810c61805c2f7b5ac896e26416c9d02fd340",
+  "/Users/nickkennedy/Code/wine-crossover/runtime/lib/wine/x86_64-windows/dxgi.dll": "023267675a449186b4f217feb35bdebaa8629c6fa450f36e432b010e6c6e8677",
+  "/Users/nickkennedy/Code/wine-crossover/runtime/lib/wine/x86_64-windows/winemetal.dll": "17c1533d2dcd6b2b8b1705bdb0b2f762b5ced4893c038f0f8014034961fa59fa",
+  "/Users/nickkennedy/Windows/prefix/drive_c/windows/system32/d3d11.dll": "4f056969a25cb5788185fe6170f0810c61805c2f7b5ac896e26416c9d02fd340",
+  "/Users/nickkennedy/Windows/prefix/drive_c/windows/system32/dxgi.dll": "023267675a449186b4f217feb35bdebaa8629c6fa450f36e432b010e6c6e8677",
+  "/Users/nickkennedy/Windows/prefix/drive_c/windows/system32/winemetal.dll": "17c1533d2dcd6b2b8b1705bdb0b2f762b5ced4893c038f0f8014034961fa59fa",
+  "/Users/nickkennedy/Code/wine-crossover/runtime/lib/wine/x86_64-unix/winemetal.so": "2e194b2291c87df7d185c772b24f1993425848e41a27cc78f0ceadd9d1574af2"
+}
