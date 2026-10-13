@@ -1,0 +1,160 @@
+--- a/server/d3dkmt.c
++++ b/server/d3dkmt.c
+@@ -2,6 +2,7 @@
+  * Server-side D3DKMT resource management
+  *
+  * Copyright 2025 Rémi Bernon for CodeWeavers
++ * Copyright 2026 Nick Kennedy
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -33,6 +34,7 @@
+ #include "file.h"
+ #include "handle.h"
+ #include "request.h"
++#include "process.h"
+ #include "security.h"
+ 
+ struct d3dkmt_object
+@@ -103,6 +105,14 @@
+     struct object  *sync;
+ };
+ 
++#define MUTEX_HISTORY_SIZE 64
++struct mutex_history
++{
++    unsigned __int64 tick_us, fence, held_us;
++    unsigned int pid, tid, owner_pid, owner_tid, key, released_key, status, waiters, queued_pid, queued_tid;
++    const char *operation;
++};
++
+ struct d3dkmt_mutex
+ {
+     struct d3dkmt_object base;
+@@ -112,7 +122,50 @@
+     struct thread       *owner;          /* current owner thread */
+     struct list          waits;          /* list of pending keyed_waits */
+     struct list          entry;          /* entry in owner d3dkmt_mutexes */
+-};
++    unsigned __int64     owned_since_us;
++    unsigned int         history_count, timeout_count;
++    struct mutex_history history[MUTEX_HISTORY_SIZE];
++};
++
++/* Retain ownership history without per-frame file writes. Only sampled
++ * timeouts/errors dump it, so a capture can distinguish a long-held owner
++ * from repeated acquisitions by competing processes. Server access is serial. */
++static void mutex_trace( struct d3dkmt_mutex *mutex, const char *operation,
++                         unsigned int key, unsigned int status )
++{
++    struct keyed_wait *wait;
++    struct mutex_history *record = &mutex->history[mutex->history_count++ % MUTEX_HISTORY_SIZE];
++    unsigned int i, count;
++    record->tick_us = monotonic_counter() / 10;
++    record->fence = mutex->fence_value;
++    record->held_us = mutex->owner ? record->tick_us - mutex->owned_since_us : 0;
++    record->pid = current ? current->process->id : 0;
++    record->tid = current ? current->id : 0;
++    record->owner_pid = mutex->owner ? mutex->owner->process->id : 0;
++    record->owner_tid = mutex->owner ? mutex->owner->id : 0;
++    record->operation = operation;
++    record->key = key;
++    record->released_key = mutex->key_value;
++    record->status = status;
++    record->waiters = 0;
++    record->queued_pid = record->queued_tid = 0;
++    LIST_FOR_EACH_ENTRY( wait, &mutex->waits, struct keyed_wait, entry ) record->waiters += wait->waiters;
++    if (status != STATUS_TIMEOUT && status != STATUS_INVALID_PARAMETER && status != STATUS_ABANDONED) return;
++    if (++mutex->timeout_count > 3 && mutex->timeout_count % 128) return;
++    fprintf( stderr, "mwxr-keyed-history handle=%#x sample=%u records=%u\n", mutex->base.global,
++             mutex->timeout_count, mutex->history_count < MUTEX_HISTORY_SIZE ? mutex->history_count : MUTEX_HISTORY_SIZE );
++    count = mutex->history_count < MUTEX_HISTORY_SIZE ? mutex->history_count : MUTEX_HISTORY_SIZE;
++    for (i = mutex->history_count - count; i != mutex->history_count; ++i)
++    {
++        record = &mutex->history[i % MUTEX_HISTORY_SIZE];
++        fprintf( stderr, "mwxr-keyed tick_us=%llu handle=%#x op=%s pid=%u tid=%u owner_pid=%u owner_tid=%u "
++                 "held_us=%llu key=%u released_key=%u fence=%llu status=%#x waiters=%u queued_pid=%u queued_tid=%u\n",
++                 (unsigned long long)record->tick_us, mutex->base.global, record->operation,
++                 record->pid, record->tid, record->owner_pid, record->owner_tid,
++                 (unsigned long long)record->held_us, record->key, record->released_key,
++                 (unsigned long long)record->fence, record->status, record->waiters, record->queued_pid, record->queued_tid );
++    }
++}
+ 
+ static void d3dkmt_mutex_dump( struct object *obj, int verbose );
+ static void d3dkmt_mutex_destroy( struct object *obj );
+@@ -446,7 +499,13 @@
+ static struct d3dkmt_object *d3dkmt_mutex_create( unsigned int key_value, data_size_t runtime_size, const void *runtime )
+ {
+     struct d3dkmt_mutex *object;
+-
++    static bool history_announced;
++
++    if (!history_announced)
++    {
++        fprintf( stderr, "mwxr-keyed-history active: 64 buffered events per mutex; sampled timeouts/errors\n" );
++        history_announced = true;
++    }
+     if (!(object = alloc_object( &d3dkmt_mutex_ops ))) return NULL;
+     object->base.type            = D3DKMT_MUTEX;
+     object->base.global          = 0;
+@@ -456,6 +515,9 @@
+     object->fence_value          = 0;
+     object->abandoned            = false;
+     object->owner                = NULL;
++    object->owned_since_us       = 0;
++    object->history_count        = 0;
++    object->timeout_count        = 0;
+     list_init( &object->waits );
+ 
+     if (!(object->base.runtime = memdup( runtime, runtime_size )) ||
+@@ -515,16 +577,30 @@
+     grab_object( mutex );
+     list_add_tail( &current->d3dkmt_mutexes, &mutex->entry );
+     mutex->owner = current;
++    mutex->owned_since_us = monotonic_counter() / 10;
+ }
+ 
+ static void mutex_release( struct d3dkmt_mutex *mutex, bool abandon )
+ {
+     struct keyed_wait *wait;
+ 
++    if (abandon) mutex_trace( mutex, "abandon", mutex->key_value, STATUS_ABANDONED );
+     LIST_FOR_EACH_ENTRY( wait, &mutex->waits, struct keyed_wait, entry )
+     {
+         if (abandon || wait->key == mutex->key_value)
+         {
++            struct wait_queue_entry *entry;
++            struct mutex_history *record;
++            mutex_trace( mutex, "signal", wait->key, 0 );
++            record = &mutex->history[(mutex->history_count - 1) % MUTEX_HISTORY_SIZE];
++            if (!list_empty( &wait->sync->wait_queue ))
++            {
++                struct thread *thread;
++                entry = LIST_ENTRY( list_head( &wait->sync->wait_queue ), struct wait_queue_entry, entry );
++                thread = get_wait_queue_thread( entry );
++                record->queued_pid = thread->process->id;
++                record->queued_tid = thread->id;
++            }
+             signal_sync( wait->sync );
+             if (!abandon) break;
+         }
+@@ -771,6 +847,7 @@
+         release_object( sync );
+     }
+ 
++    mutex_trace( mutex, "acquire", req->key_value, get_error() );
+     release_object( mutex );
+ 
+ done:
+@@ -794,8 +871,10 @@
+     {
+         mutex->key_value = req->key_value;
+         mutex->fence_value = req->fence_value;
++        mutex_trace( mutex, "release", req->key_value, 0 );
+         mutex_release( mutex, req->abandon );
+     }
+ 
++    if (get_error()) mutex_trace( mutex, "release", req->key_value, get_error() );
+     release_object( mutex );
+ }
