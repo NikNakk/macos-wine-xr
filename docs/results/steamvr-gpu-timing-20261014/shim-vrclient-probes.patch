@@ -1,0 +1,214 @@
+diff --git a/tools/openvr_shim/openvr_shim.cpp b/tools/openvr_shim/openvr_shim.cpp
+index 708f8be..8dd86a3 100644
+--- a/tools/openvr_shim/openvr_shim.cpp
++++ b/tools/openvr_shim/openvr_shim.cpp
+@@ -34,6 +34,7 @@
+ #include <cstring>
+ 
+ #include "third_party/openvr/openvr.h"
++#include "submit_trace_blocks.h"
+ 
+ // Lets the launcher tell this DLL from Valve's.
+ extern "C" __attribute__((used)) const char mwxr_openvr_shim_marker[] = "mwxr-openvr-shim";
+@@ -322,10 +323,82 @@ LogFrameTiming(const Patched *p, void *self, LONGLONG now)
+ 		Log("GetFrameTiming failed\n");
+ 		return;
+ 	}
++	// SteamVR's client keeps its own GetDeltas result for the last frame in its
++	// compositor-client singleton. Read it only from the SteamVR build whose
++	// layout was checked (singleton getter at RVA 0x134ad0 returns RVA 0x49cd98;
++	// pre/post-submit GPU ms at +0x130c/+0x1310).
++	// SteamVR's compositor client (vtable RVA 0x3b4db8) is the global at RVA
++	// 0x49cd98; its CGpuTiming is at +0x98+0xcd0 = +0xd68, the timing device at
++	// +0x98+0xd68 = +0xe00 and the last pre/post-submit GPU ms at +0x130c.
++	char clients[640] = "";
++	if (HMODULE vrclient = GetModuleHandleA("vrclient_x64.dll")) {
++		const unsigned char *base = reinterpret_cast<const unsigned char *>(vrclient);
++		const unsigned char *object = base + 0x49cd98;
++		uint64_t vptr;
++		memcpy(&vptr, object, 8);
++		int written = snprintf(clients, sizeof(clients), " client vptr rva 0x%llx timing:",
++		                       (unsigned long long)(vptr - (uint64_t)base));
++		for (int k = 0; k < 0xa0 / 8 && written < (int)sizeof(clients); ++k) {
++			uint64_t q;
++			memcpy(&q, object + 0xd68 + 8 * k, 8);
++			written += snprintf(clients + written, sizeof(clients) - written, " %llx", (unsigned long long)q);
++		}
++		uint64_t device;
++		float pre, post;
++		memcpy(&device, object + 0xe00, 8);
++		memcpy(&pre, object + 0x130c, 4);
++		memcpy(&post, object + 0x1310, 4);
++		if (written < (int)sizeof(clients))
++			snprintf(clients + written, sizeof(clients) - written, " device 0x%llx pre %.2f post %.2f",
++			         (unsigned long long)device, pre, post);
++	}
+ 	Log("FrameTiming %u: pre-submit GPU %.2f post-submit GPU %.2f total render GPU %.2f compositor GPU %.2f "
+-	    "client interval %.2f ms, presents %u dropped %u\n",
++	    "client interval %.2f ms, presents %u dropped %u; clients%s\n",
+ 	    t.m_nFrameIndex, t.m_flPreSubmitGpuMs, t.m_flPostSubmitGpuMs, t.m_flTotalRenderGpuMs,
+-	    t.m_flCompositorRenderGpuMs, t.m_flClientFrameIntervalMs, t.m_nNumFramePresents, t.m_nNumDroppedFrames);
++	    t.m_flCompositorRenderGpuMs, t.m_flClientFrameIntervalMs, t.m_nNumFramePresents, t.m_nNumDroppedFrames,
++	    clients);
++}
++
++// Diagnostic: find every live object with SteamVR's compositor-client vtable
++// (RVA 0x3b4db8) and log its GPU-timing state, once, from a background thread.
++DWORD WINAPI
++ScanClients(void *)
++{
++	Sleep(20000);
++	HMODULE vrclient = GetModuleHandleA("vrclient_x64.dll");
++	if (!vrclient) {
++		return 0;
++	}
++	const uint64_t vptr = (uint64_t)vrclient + 0x3b4db8;
++	MEMORY_BASIC_INFORMATION mbi;
++	unsigned char *address = nullptr;
++	int found = 0;
++	while (VirtualQuery(address, &mbi, sizeof(mbi)) && found < 16) {
++		unsigned char *region = (unsigned char *)mbi.BaseAddress;
++		bool readable = mbi.State == MEM_COMMIT && !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) &&
++		                (mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ |
++		                                PAGE_EXECUTE_READWRITE));
++		if (readable && mbi.RegionSize >= 0x1400) {
++			for (size_t at = 0; at + 0x1400 <= mbi.RegionSize; at += 8) {
++				if (*(const uint64_t *)(region + at) != vptr) {
++					continue;
++				}
++				const unsigned char *o = region + at;
++				uint64_t device = *(const uint64_t *)(o + 0xe00);
++				uint32_t frame = *(const uint32_t *)(o + 0xd68 + 0x70);
++				uint32_t count = *(const uint32_t *)(o + 0xd68 + 0x74);
++				float pre = *(const float *)(o + 0x130c), post = *(const float *)(o + 0x1310);
++				Log("client object %p (rva 0x%llx in vrclient? %d): device 0x%llx timing frame %u count %u pre %.2f "
++				    "post %.2f\n", o, (unsigned long long)(o - (const unsigned char *)vrclient),
++				    o > (const unsigned char *)vrclient && o < (const unsigned char *)vrclient + 0x500000,
++				    (unsigned long long)device, frame, count, pre, post);
++				++found;
++			}
++		}
++		address = region + mbi.RegionSize;
++	}
++	Log("client object scan done: %d found\n", found);
++	return 0;
+ }
+ 
+ vr::EVRCompositorError
+@@ -347,6 +420,10 @@ WaitGetPosesHook(void *self, vr::TrackedDevicePose_t *render, uint32_t renderCou
+ 	}
+ 	Record(begin.QuadPart, end.QuadPart, error, haveHmd ? &before : nullptr, fixed);
+ 	LogFrameTiming(p, self, end.QuadPart);
++	static LONG scanStarted = 0;
++	if (getenv("MWXR_OPENVR_SHIM_FRAME_TIMING") && !InterlockedExchange(&scanStarted, 1)) {
++		CloseHandle(CreateThread(nullptr, 0, ScanClients, nullptr, 0, nullptr));
++	}
+ 	return error;
+ }
+ 
+@@ -464,9 +541,105 @@ PostPresentHandoffHook(void *self)
+ 	ReleaseSRWLockExclusive(&g_stats.lock);
+ }
+ 
++// Diagnostic (MWXR_OPENVR_SHIM_TRACE_SUBMIT=1): one-shot breakpoints on every
++// basic block of SteamVR's shared-texture Submit function (vrclient_x64.dll RVA
++// 0x153d20, the installed build only) to find which path skips its GPU-timing
++// setup. Each int3 is removed on its first hit, which is recorded in order.
++constexpr size_t kTraceBlocks = sizeof(kSubmitTraceBlocks) / sizeof(kSubmitTraceBlocks[0]);
++unsigned char g_traceOriginal[kTraceBlocks];
++volatile LONG g_traceOrder[kTraceBlocks];
++volatile LONG g_traceSequence = 0;
++uint64_t g_traceBase = 0;
++
++LONG CALLBACK
++TraceHandler(EXCEPTION_POINTERS *info)
++{
++	if (info->ExceptionRecord->ExceptionCode != EXCEPTION_BREAKPOINT || !g_traceBase) {
++		return EXCEPTION_CONTINUE_SEARCH;
++	}
++	uint64_t rva = (uint64_t)info->ExceptionRecord->ExceptionAddress - g_traceBase;
++	size_t lo = 0, hi = kTraceBlocks;
++	while (lo < hi) {
++		size_t mid = (lo + hi) / 2;
++		if (kSubmitTraceBlocks[mid] < rva) {
++			lo = mid + 1;
++		} else {
++			hi = mid;
++		}
++	}
++	if (lo == kTraceBlocks || kSubmitTraceBlocks[lo] != rva) {
++		return EXCEPTION_CONTINUE_SEARCH;
++	}
++	unsigned char *at = (unsigned char *)(g_traceBase + rva);
++	if (*at == 0xcc) {
++		*at = g_traceOriginal[lo];
++		FlushInstructionCache(GetCurrentProcess(), at, 1);
++		InterlockedCompareExchange(&g_traceOrder[lo], InterlockedIncrement(&g_traceSequence), 0);
++	}
++	info->ContextRecord->Rip = (DWORD64)at;
++	return EXCEPTION_CONTINUE_EXECUTION;
++}
++
++DWORD WINAPI
++ReportTrace(void *)
++{
++	for (int report = 0; report < 3; ++report) {
++		Sleep(report == 0 ? 30000 : 30000);
++		char line[2048];
++		int written = snprintf(line, sizeof(line), "submit trace %d: %ld hits:", report, g_traceSequence);
++		for (size_t i = 0; i < kTraceBlocks; ++i) {
++			if (!g_traceOrder[i]) {
++				continue;
++			}
++			if (written > (int)sizeof(line) - 24) {
++				Log("%s\n", line);
++				written = snprintf(line, sizeof(line), "submit trace %d (cont):", report);
++			}
++			written += snprintf(line + written, sizeof(line) - written, " %x@%ld", kSubmitTraceBlocks[i],
++			                    g_traceOrder[i]);
++		}
++		Log("%s\n", line);
++	}
++	return 0;
++}
++
++void
++ArmSubmitTrace()
++{
++	static LONG armed = 0;
++	const char *value = getenv("MWXR_OPENVR_SHIM_TRACE_SUBMIT");
++	if (!value || strcmp(value, "1") || InterlockedExchange(&armed, 1)) {
++		return;
++	}
++	HMODULE vrclient = GetModuleHandleA("vrclient_x64.dll");
++	const unsigned char prologue[] = {0x4c, 0x89, 0x44, 0x24, 0x18, 0x55, 0x53, 0x56,
++	                                  0x41, 0x54, 0x41, 0x55, 0x41, 0x57, 0x48, 0x8d};
++	if (!vrclient || memcmp((const unsigned char *)vrclient + 0x153d20, prologue, sizeof(prologue))) {
++		Log("submit trace: vrclient_x64.dll missing or a different build; not armed\n");
++		return;
++	}
++	uint64_t base = (uint64_t)vrclient;
++	DWORD old;
++	if (!VirtualProtect((void *)(base + 0x153000), 0x6000, PAGE_EXECUTE_READWRITE, &old)) {
++		Log("submit trace: VirtualProtect failed %lu\n", GetLastError());
++		return;
++	}
++	g_traceBase = base;
++	AddVectoredExceptionHandler(1, TraceHandler);
++	for (size_t i = 0; i < kTraceBlocks; ++i) {
++		unsigned char *at = (unsigned char *)(base + kSubmitTraceBlocks[i]);
++		g_traceOriginal[i] = *at;
++		*at = 0xcc;
++	}
++	FlushInstructionCache(GetCurrentProcess(), (void *)(base + 0x153000), 0x6000);
++	Log("submit trace: armed %zu blocks\n", kTraceBlocks);
++	CloseHandle(CreateThread(nullptr, 0, ReportTrace, nullptr, 0, nullptr));
++}
++
+ void
+ Patch(void *compositor, const char *version)
+ {
++	ArmSubmitTrace();
+ 	void **vtable = *reinterpret_cast<void ***>(compositor);
+ 	AcquireSRWLockExclusive(&g_lock);
+ 	for (int i = 0; i < g_patchedCount; ++i) {
