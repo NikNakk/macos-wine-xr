@@ -61,7 +61,6 @@ trace_windows="Z:${logs//\//\\}"
 export VR_OVERRIDE="Z:${MWXR_XRIZER_ROOT//\//\\}"
 export XDG_STATE_HOME=${trace_windows}
 export RUST_LOG=${RUST_LOG:-xrizer=info,openvr=warn,tracked_property=warn,unknown_interfaces=info}
-export XRIZER_PREFER_APPLICATION_PROJECTION=${XRIZER_PREFER_APPLICATION_PROJECTION:-1}
 "${repo}/scripts/run-in-process-openxr.zsh" "${exe}" -vr -steam -noasserts -nopassiveasserts +map startup \
  -novid -nowindow -console -vconsole +vr_fidelity_level_auto 0 +vr_fidelity_level 3 "$@" 2>&1 | tee "${logs}/alyx.log"
 exit ${pipestatus[1]}
