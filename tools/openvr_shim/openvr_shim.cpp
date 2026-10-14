@@ -48,12 +48,14 @@ using PoseForDeviceFn = vr::EVRCompositorError (*)(void *, vr::TrackedDeviceInde
 using SubmitFn = vr::EVRCompositorError (*)(void *, vr::EVREye, const vr::Texture_t *, const vr::VRTextureBounds_t *,
                                             vr::EVRSubmitFlags);
 using HandoffFn = void (*)(void *);
+using FrameTimingFn = bool (*)(void *, vr::Compositor_FrameTiming *, uint32_t);
 
 constexpr int kWaitGetPosesSlot = 2;
 constexpr int kGetLastPosesSlot = 3;
 constexpr int kGetLastPoseForDeviceSlot = 4;
 constexpr int kSubmitSlot = 5;
 constexpr int kPostPresentHandoffSlot = 7; // after ClearLastSubmittedFrame
+constexpr int kGetFrameTimingSlot = 8;      // called, not patched
 
 // One entry per patched vtable: interface versions have their own vtables.
 struct Patched
@@ -64,6 +66,7 @@ struct Patched
 	PoseForDeviceFn getLastPoseForDevice;
 	SubmitFn submit;
 	HandoffFn postPresentHandoff;
+	FrameTimingFn getFrameTiming;
 };
 
 SRWLOCK g_lock = SRWLOCK_INIT;
@@ -298,6 +301,33 @@ Record(LONGLONG begin, LONGLONG end, vr::EVRCompositorError error, const vr::Tra
 	ReleaseSRWLockExclusive(&g_stats.lock);
 }
 
+// SteamVR's own timing of the application's last frame, about once a second
+// (MWXR_OPENVR_SHIM_FRAME_TIMING=1). Source 2's auto-fidelity is suspected to
+// read these GPU times.
+void
+LogFrameTiming(const Patched *p, void *self, LONGLONG now)
+{
+	static const bool enabled = [] {
+		const char *value = getenv("MWXR_OPENVR_SHIM_FRAME_TIMING");
+		return value && !strcmp(value, "1");
+	}();
+	static LONGLONG last = 0;
+	if (!enabled || !p->getFrameTiming || (last && QpcMs(now - last) < 1000.0)) {
+		return;
+	}
+	last = now;
+	vr::Compositor_FrameTiming t = {};
+	t.m_nSize = sizeof(t);
+	if (!p->getFrameTiming(self, &t, 0)) {
+		Log("GetFrameTiming failed\n");
+		return;
+	}
+	Log("FrameTiming %u: pre-submit GPU %.2f post-submit GPU %.2f total render GPU %.2f compositor GPU %.2f "
+	    "client interval %.2f ms, presents %u dropped %u\n",
+	    t.m_nFrameIndex, t.m_flPreSubmitGpuMs, t.m_flPostSubmitGpuMs, t.m_flTotalRenderGpuMs,
+	    t.m_flCompositorRenderGpuMs, t.m_flClientFrameIntervalMs, t.m_nNumFramePresents, t.m_nNumDroppedFrames);
+}
+
 vr::EVRCompositorError
 WaitGetPosesHook(void *self, vr::TrackedDevicePose_t *render, uint32_t renderCount, vr::TrackedDevicePose_t *game,
                  uint32_t gameCount)
@@ -316,6 +346,7 @@ WaitGetPosesHook(void *self, vr::TrackedDevicePose_t *render, uint32_t renderCou
 		FixHmd(&game[vr::k_unTrackedDeviceIndex_Hmd]);
 	}
 	Record(begin.QuadPart, end.QuadPart, error, haveHmd ? &before : nullptr, fixed);
+	LogFrameTiming(p, self, end.QuadPart);
 	return error;
 }
 
@@ -455,6 +486,7 @@ Patch(void *compositor, const char *version)
 	p.getLastPoseForDevice = reinterpret_cast<PoseForDeviceFn>(vtable[kGetLastPoseForDeviceSlot]);
 	p.submit = reinterpret_cast<SubmitFn>(vtable[kSubmitSlot]);
 	p.postPresentHandoff = reinterpret_cast<HandoffFn>(vtable[kPostPresentHandoffSlot]);
+	p.getFrameTiming = reinterpret_cast<FrameTimingFn>(vtable[kGetFrameTimingSlot]);
 	constexpr SIZE_T kPatchedBytes = (kPostPresentHandoffSlot - kWaitGetPosesSlot + 1) * sizeof(void *);
 	DWORD old = 0;
 	if (VirtualProtect(&vtable[kWaitGetPosesSlot], kPatchedBytes, PAGE_READWRITE, &old)) {
