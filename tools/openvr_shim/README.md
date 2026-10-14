@@ -55,3 +55,9 @@ The same fixture covers the handoff (passed 2026-10-13): no handoff after a
 failed Submit, one injected handoff once both eyes are submitted and none for
 a repeated eye, none after the application's own handoff (which is forwarded
 once), and a new one in the next frame.
+
+`MWXR_OPENVR_SHIM_FRAME_TIMING=1` calls IVRCompositor::GetFrameTiming (slot 8,
+not patched) about once a second from WaitGetPoses and logs SteamVR's GPU
+times for the last frame. On 2026-10-14 SteamVR Home's auto-fidelity "last
+frame" readings matched `total render GPU` exactly; pre- and post-submit GPU
+were always 0.
