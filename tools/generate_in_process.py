@@ -20,11 +20,12 @@ loader.exec_module(g)
 g.LOGGER.setLevel(logging.WARNING)
 g.WINE_XR_VERSION = (1, 0)
 g.NOT_OUR_FUNCTIONS = g.NOT_OUR_FUNCTIONS + ["xrCreateApiLayerInstance"]
-# Generate Windows D3D11 and internal native Metal structures. Only D3D11
-# and Win32 time conversion are advertised; native Metal entry points are
-# hidden from Windows GIPA.
+# Generate Windows D3D11 and internal native Metal structures. D3D11, Win32
+# time conversion and display refresh rates are advertised; native Metal entry
+# points are hidden from Windows GIPA.
 g.XrRegistry._is_extension_supported = lambda self, name: name in {
-    'XR_KHR_D3D11_enable', 'XR_KHR_metal_enable', 'XR_KHR_win32_convert_performance_counter_time'}
+    'XR_KHR_D3D11_enable', 'XR_KHR_metal_enable', 'XR_KHR_win32_convert_performance_counter_time',
+    'XR_FB_display_refresh_rate'}
 g.MANUAL_UNIX_THUNKS = {'xrCreateInstance', 'xrEnumerateInstanceExtensionProperties', 'xrEnumerateApiLayerProperties',
                         'xrCreateSession', 'xrCreateSwapchain', 'xrDestroyInstance', 'xrDestroySession',
     'xrGetD3D11GraphicsRequirementsKHR', 'xrEnumerateSwapchainFormats', 'xrReleaseSwapchainImage',
