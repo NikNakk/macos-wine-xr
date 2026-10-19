@@ -39,6 +39,12 @@ client-side compositing runs inside Wine but currently paces at 60 Hz on its
 rendered OpenComposite frames and matched performance comparisons remain
 pending. See [the implementation, measurements and acceptance ledger](docs/in-process-openxr.md).
 
+The Steam bridge (experimental, not yet run on a Mac) lets Windows games use
+the Mac Steam client instead of a Windows Steam client in the prefix: a builtin
+`steamclient64.dll` with a native half that loads the Mac client's
+`steamclient.dylib`. Launchers take `MWXR_STEAM_BRIDGE=1`. See
+[docs/steam-bridge.md](docs/steam-bridge.md).
+
 ## Active development branches
 
 - Monado integration/reference: `NikNakk/monado:macos-game-mode-upstream-sync-2026-10`

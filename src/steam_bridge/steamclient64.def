@@ -1,0 +1,45 @@
+; Copyright 2026, Nick Kennedy
+; SPDX-License-Identifier: LGPL-2.1-or-later
+LIBRARY steamclient64.dll
+EXPORTS
+    CreateInterface
+    Steam_BConnected
+    Steam_BGetCallback
+    Steam_BLoggedOn
+    Steam_BReleaseSteamPipe
+    Steam_ConnectToGlobalUser
+    Steam_CreateGlobalUser
+    Steam_CreateLocalUser
+    Steam_CreateSteamPipe
+    Steam_FreeLastCallback
+    Steam_GSBLoggedOn
+    Steam_GSBSecure
+    Steam_GSGetSteam2GetEncryptionKeyToSendToNewClient
+    Steam_GSGetSteamID
+    Steam_GSLogOff
+    Steam_GSLogOn
+    Steam_GSRemoveUserConnect
+    Steam_GSSendSteam2UserConnect
+    Steam_GSSendSteam3UserConnect
+    Steam_GSSendUserDisconnect
+    Steam_GSSendUserStatusResponse
+    Steam_GSSetServerType
+    Steam_GSSetSpawnCount
+    Steam_GSUpdateStatus
+    Steam_GetAPICallResult
+    Steam_GetGSHandle
+    Steam_InitiateGameConnection
+    Steam_IsKnownInterface
+    Steam_LogOff
+    Steam_LogOn
+    Steam_NotifyMissingInterface
+    Steam_ReleaseThreadLocalMemory
+    Steam_ReleaseUser
+    Steam_SetLocalIPBinding
+    Steam_TerminateGameConnection
+    Breakpad_SteamMiniDumpInit = Breakpad_Ignored
+    Breakpad_SteamSendMiniDump = Breakpad_Ignored
+    Breakpad_SteamSetAppID = Breakpad_Ignored
+    Breakpad_SteamSetSteamID = Breakpad_Ignored
+    Breakpad_SteamWriteMiniDumpSetComment = Breakpad_Ignored
+    Breakpad_SteamWriteMiniDumpUsingExceptionInfoWithBuildId = Breakpad_Ignored

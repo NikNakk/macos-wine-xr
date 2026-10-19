@@ -107,3 +107,37 @@ jobs:
           DXMT_SOURCE_DIR: ${{ github.workspace }}/dxmt
           MACOS_WINE_XR_CLIENT_ROOT: ${{ github.workspace }}/client-build
         run: ./scripts/build-wine-openxr-client.zsh
+
+  steam-bridge:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: macos-wine-xr
+      - uses: actions/checkout@v4
+        with:
+          repository: ValveSoftware/Proton
+          ref: bc896217ffcd67f892f952b010f898fe7bd0f0a1
+          path: proton
+          sparse-checkout: lsteamclient
+      - uses: actions/checkout@v4
+        with:
+          repository: wine-mirror/wine
+          ref: wine-11.0
+          path: wine
+          sparse-checkout: include
+      - name: Install MinGW (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64
+      - name: Install MinGW (macOS)
+        if: runner.os == 'macOS'
+        run: brew install mingw-w64
+      - name: Steam bridge table, calling conventions, native half and Windows half
+        working-directory: macos-wine-xr
+        run: |
+          export STEAMWORKS_HEADERS="$(ls -d "$GITHUB_WORKSPACE"/proton/lsteamclient/steamworks_sdk_* | tr '\n' ' ')"
+          export WINE_INCLUDE="$GITHUB_WORKSPACE/wine/include"
+          tests/steam_bridge/run_tests.sh

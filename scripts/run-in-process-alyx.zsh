@@ -36,6 +36,16 @@ export WINEARCH=win64
 export WINEDEBUG=${WINEDEBUG:--all}
 export DYLD_FALLBACK_LIBRARY_PATH=${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-unix:${MWXR_IN_PROCESS_WINE}/lib
 
+# MWXR_STEAM_BRIDGE=1: no Windows Steam; the game uses the Mac Steam client
+# through the Steam bridge (docs/steam-bridge.md).
+if [[ ${MWXR_STEAM_BRIDGE:-0} == 1 ]]; then
+ source "${repo}/scripts/steam-bridge.zsh"
+ trap steam_bridge_stop EXIT INT TERM
+ WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine}" wineboot -u
+ steam_bridge_start "${wine}" "${MWXR_IN_PROCESS_PREFIX}" "${logs}"
+ export SteamAppId=546560 SteamGameId=546560
+ ALYX_START_STEAM=0
+fi
 if [[ ${ALYX_START_STEAM:-1} == 1 ]]; then
  WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine}" wineboot -u
  # Software-rendered CEF so Steam's UI paints under Wine (Silo/Vineport flags).
