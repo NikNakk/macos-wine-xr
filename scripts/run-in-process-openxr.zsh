@@ -12,7 +12,8 @@ wine_root=${MWXR_IN_PROCESS_WINE:-${repo}/build-in-process/wine-direct}
 export WINEPREFIX=${MWXR_IN_PROCESS_PREFIX:-${repo}/build-in-process/prefix-openxr}
 export WINEARCH=win64
 export WINEDEBUG=${WINEDEBUG:--all}
-export WINEDLLPATH=${root}
+# MWXR_EXTRA_WINEDLLPATH adds other builtins, such as the Steam bridge (scripts/steam-bridge.zsh).
+export WINEDLLPATH=${root}${MWXR_EXTRA_WINEDLLPATH:+:${MWXR_EXTRA_WINEDLLPATH}}
 # Wine loads GnuTLS, FreeType and friends by name from the runtime's lib.
 export DYLD_FALLBACK_LIBRARY_PATH=${wine_root}/lib/wine/x86_64-unix:${wine_root}/lib
 export MWXR_NATIVE_RUNTIME_JSON

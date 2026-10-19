@@ -19,6 +19,13 @@
 #                          MWXR_STEAM_ONLY=1, Steam) is up
 #   APP_ARGS='...'         extra arguments for that app, for example -nowindow
 #                          (no desktop companion window in Source 2 games)
+#   MWXR_STEAM_BRIDGE=1    no Windows Steam: SteamVR and the app use the Mac Steam
+#                          client (running and signed in) through the Steam bridge
+#                          (scripts/build-steam-bridge.zsh, docs/steam-bridge.md);
+#                          the app is started directly instead of by steam.exe
+#   APP_EXE=<path>         with MWXR_STEAM_BRIDGE=1, the app's executable, relative
+#                          to steamapps/common (default for APPID=546560: Half-Life
+#                          Alyx's hlvr.exe, with -vr -steam before APP_ARGS)
 #   XRT_MACOS_REFRESH_RATE_HZ=90  PS VR2 refresh rate, passed to the service too
 #   MWXR_DISPLAY_MODE=direct|virtual  driver_mwxr.displayMode for this run (default direct)
 #   MWXR_OPENVR_SHIM_INSTALL=1  install tools/openvr_shim beside SteamVR Home
@@ -52,6 +59,9 @@ prefix=${root}/prefix
 steam_dir="${prefix}/drive_c/Program Files (x86)/Steam"
 mode=${MWXR_MONADO:-simulated}
 steam_only=${MWXR_STEAM_ONLY:-0}
+steam_bridge=${MWXR_STEAM_BRIDGE:-0}
+[[ ${steam_bridge} == 1 && ${steam_only} == 1 ]] && { print -u2 "MWXR_STEAM_ONLY needs the Windows Steam client; drop MWXR_STEAM_BRIDGE"; exit 2; }
+source "${repo}/scripts/steam-bridge.zsh"
 
 [[ -f ${driver_root}/bin/win64/driver_mwxr.dll ]] || { print -u2 "Build the driver first: ${driver_root}"; exit 1; }
 [[ -d ${steam_dir}/steamapps/common/SteamVR ]] || { print -u2 "No SteamVR in ${prefix}"; exit 1; }
@@ -201,8 +211,26 @@ start_steam() {
   fi
 }
 
+# With the Steam bridge there is no steam.exe to launch the app: it is started
+# directly, as Steam would, with its app id in the environment.
+launch_app_directly() {
+  local exe=${APP_EXE:-} args=(${=APP_ARGS:-})
+  if [[ -z ${exe} && ${APPID} == 546560 ]]; then
+    exe='Half-Life Alyx/game/bin/win64/hlvr.exe' args=(-vr -steam ${args[@]})
+  fi
+  [[ -n ${exe} ]] || { print -u2 "Set APP_EXE (relative to steamapps/common) for app ${APPID}"; return 1; }
+  exe=${steam_dir}/steamapps/common/${exe}
+  [[ -f ${exe} ]] || { print -u2 "No ${exe}"; return 1; }
+  ( sleep ${VR_WAIT_S:-60}
+    SteamAppId=${APPID} SteamGameId=${APPID} "${repo}/scripts/run-in-process-openxr.zsh" "${exe}" ${args[@]} \
+      > "${logs}/app.log" 2>&1
+    print "App ${APPID} exited" ) &
+  print "Will start ${exe:t} for app ${APPID} directly (log: ${logs}/app.log)"
+}
+
 launch_app() {
   [[ -n ${APPID:-} ]] || return 0
+  [[ ${steam_bridge} == 1 ]] && { launch_app_directly; return; }
  local wait_s=${VR_WAIT_S:-60}
  [[ ${steam_only} == 1 ]] && wait_s=${VR_WAIT_S:-0}
  ( sleep ${wait_s}
@@ -249,6 +277,7 @@ restore_shim() {
 cleanup() {
   [[ -n ${console_pid:-} ]] && kill ${console_pid} 2>/dev/null
   restore_shim
+  steam_bridge_stop
   [[ -n ${isolated_label} ]] && { launchctl bootout "gui/${UID}/${isolated_label}" || true; rm -rf "${isolated_dir}"; }
   return 0
 }
@@ -309,7 +338,12 @@ case ${mode} in
   unset XR_RUNTIME_JSON XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR IPC_IGNORE_VERSION ;;
  *) print -u2 "MWXR_MONADO must be simulated, isolated or hardware"; exit 2 ;;
 esac
-start_steam
+if [[ ${steam_bridge} == 1 ]]; then
+  steam_running && { print -u2 "A Windows Steam runs in ${prefix}; quit it before using the Steam bridge"; exit 1; }
+  steam_bridge_start "${wine_wrapper}" "${prefix}" "${logs}"
+else
+  start_steam
+fi
 launch_app
 if [[ ${steam_only} == 1 ]]; then
   # Stay until Steam exits, so an isolated service outlives the games using it.
