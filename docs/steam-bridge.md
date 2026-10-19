@@ -5,10 +5,17 @@ run on a Mac.**
 
 Windows games under Wine currently need a Windows Steam client signed in inside
 the prefix: `steam.exe`, its Chromium web helper and the wineserver traffic they
-generate, all under Rosetta. [steamvr-home.md](steamvr-home.md) records Alyx as
-"still CPU-limited at 120 Hz", and Steam is CPU time the game does not get. It
-also takes 30–40 s to start and has its own Wine problems (the black sign-in
-window, the GPU web helper).
+generate, all under Rosetta. It takes 30–40 s to start and has its own Wine
+problems (the black sign-in window, the GPU web helper).
+
+Whether removing it speeds games up is not established. The 2026-10-07 note
+that Alyx was "still CPU-limited at 120 Hz" ([steamvr-home.md](steamvr-home.md))
+predates the DXMT timestamp fix of 2026-10-14. Until then SteamVR read near-zero
+GPU time from DXMT, so its timings counted GPU-bound frames as CPU time, and
+Source 2's auto-fidelity raised the resolution
+([Monado's keyed-ownership follow-up](https://github.com/NikNakk/monado/blob/claude/macos-wsi-integration/doc/macos-steamvr-keyed-ownership-followup.md)).
+Measure with and without the bridge on the fixed timestamps (Status, step 4)
+before counting on a frame-rate gain.
 
 The Steam bridge removes it. A Wine builtin `steamclient64.dll` hands the game's
 `steam_api64.dll` the Mac Steam client's own objects, from its
