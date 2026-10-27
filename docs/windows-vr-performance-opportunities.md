@@ -18,6 +18,11 @@ Nothing here is newly measured. Each item says what evidence it rests on.
   The rig's Monado LaunchAgent (`~/Library/LaunchAgents/org.freedesktop.monado.service.plist`)
   now sets `XRT_MACOS_REFRESH_RATE_HZ=90` and `U_PACING_APP_USE_MIN_FRAME_PERIOD=1`;
   the previous plist is `~/Windows/backups/org.freedesktop.monado.service.plist.before-90hz-minperiod-20261027`.
+  On 2026-10-27 the LaunchAgent also gained `PSVR2_TIMING_TRACE=1` (frame timing CSVs in
+  `~/Library/Logs/Monado/timing`) and `PSSENSE_LOG=warn` (the controller driver's
+  per-frame `info` messages had grown its log to 698 MB in an evening); Alyx's
+  console with `+vr_fidelity_level_spew 1` is kept in each run's log folder
+  (`ALYX_CONSOLE_LOG=1`, the rig default).
   `scripts/run-alyx-xrizer.zsh` (this rig: `~/Windows/run-alyx-xrizer.zsh`)
   launches Alyx that way with adaptive fidelity over a table extended down to
   0.50, `scripts/alyx/fidelity-levels.csv` (85–90 fps at 90 Hz offscreen).
