@@ -37,7 +37,10 @@ export WINEDEBUG=${WINEDEBUG:--all}
 export DYLD_FALLBACK_LIBRARY_PATH=${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-unix:${MWXR_IN_PROCESS_WINE}/lib
 
 if [[ ${ALYX_START_STEAM:-1} == 1 ]]; then
- WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine}" wineboot -u
+ # Wine updates a prefix itself when its runtime's wine.inf changes. An explicit
+ # "wineboot -u" on every launch left a temporary copy of each DLL a running process
+ # had open (dll*.tmp, pending until the prefix restarts): 12.9 GB in the rig prefix.
+ [[ -f ${WINEPREFIX}/system.reg ]] || WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine}" wineboot --init
  # Software-rendered CEF so Steam's UI paints under Wine (Silo/Vineport flags).
  "${wine}" "${steam}" -silent -cef-disable-gpu -cef-disable-gpu-compositing -cef-in-process-gpu \
   -cef-disable-sandbox -no-cef-sandbox -noverifyfiles -norepairfiles > "${logs}/steam.log" 2>&1 &

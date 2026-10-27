@@ -20,7 +20,10 @@ unset XR_RUNTIME_JSON WINEDLLOVERRIDES
 [[ -x ${wine_root}/bin/wine && -f ${root}/x86_64-unix/wineopenxr.so ]] || {
  print -u2 'Build the in-process runtime and install direct-object DXMT first'; exit 1
 }
-WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine_root}/bin/wine" wineboot -u
+# Wine updates a prefix itself when its runtime's wine.inf changes. An explicit
+# "wineboot -u" on every launch left a temporary copy of each DLL a running process
+# had open (dll*.tmp, pending until the prefix restarts): 12.9 GB in the rig prefix.
+[[ -f ${WINEPREFIX}/system.reg ]] || WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine_root}/bin/wine" wineboot --init
 mkdir -p "${WINEPREFIX}/drive_c/openxr"
 cp "${root}/x86_64-windows/wineopenxr.dll" "${WINEPREFIX}/drive_c/windows/system32/"
 cat > "${WINEPREFIX}/drive_c/openxr/wineopenxr64.json" <<'JSON'

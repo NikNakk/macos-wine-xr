@@ -9,9 +9,15 @@
 # wineopenxr and OpenVR through xrizer. Half-Life: Alyx (546560) goes to
 # run-alyx-xrizer.zsh, with its adaptive fidelity table.
 #
-# Usage: [GAME_MODE=vr|default] run-windows-game.zsh APPID [extra game arguments...]
+# Usage: [GAME_MODE=vr|default] [GAME_PREFIX=pergame|rig] run-windows-game.zsh APPID [arguments...]
 #   GAME_MODE      the app's VR launch entry where it has one (default), or its default one
+#   GAME_PREFIX    pergame: the game's own prefix (scripts/game-prefix.zsh), the default for
+#                  games in the shared library; rig: MWXR_IN_PROCESS_PREFIX, the default for
+#                  games installed inside it
 #   GAME_DRY_RUN=1 print the launch without starting the game
+# Stopping this script (SIGTERM, SIGINT or SIGHUP, as a launcher's Stop does) closes the
+# game: the whole prefix's wineserver for a per-game prefix, the game's processes in the
+# rig prefix.
 #
 # Required (a rig wrapper sets them): MWXR_IN_PROCESS_PREFIX, MWXR_IN_PROCESS_WINE (a
 # runtime with lsteamclient, scripts/install-lsteamclient.zsh), MWXR_XRIZER_ROOT,
@@ -32,22 +38,45 @@ fi
 
 mac_steam="$HOME/Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS"
 stand_in=${ALYX_STEAM_STAND_IN:-${repo}/build-in-process/lsteamclient/mwxr-steam.exe}
-[[ -f ${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-windows/lsteamclient.dll &&
-   -f ${MWXR_IN_PROCESS_PREFIX}/drive_c/windows/system32/lsteamclient.dll ]] || {
-  print -u2 "No lsteamclient in ${MWXR_IN_PROCESS_WINE} or the prefix: run scripts/install-lsteamclient.zsh"; exit 1; }
+[[ -f ${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-windows/lsteamclient.dll ]] || {
+  print -u2 "No lsteamclient in ${MWXR_IN_PROCESS_WINE}: run scripts/install-lsteamclient.zsh"; exit 1; }
 [[ -f ${stand_in} ]] || { print -u2 "Need ${stand_in} (scripts/build-lsteamclient.zsh)"; exit 1; }
 
-spec=$(MWXR_IN_PROCESS_PREFIX=${MWXR_IN_PROCESS_PREFIX} \
-  python3 "${repo}/tools/steam_games/steam_games.py" launch-spec "${appid}" --mode "${GAME_MODE:-vr}" --json)
+spec=$(python3 "${repo}/tools/steam_games/steam_games.py" launch-spec "${appid}" --mode "${GAME_MODE:-vr}" --json)
 field() { python3 -c 'import json,sys; print(json.loads(sys.argv[1])[sys.argv[2]])' "${spec}" "$1"; }
 name=$(field name) exe=$(field exe) arguments=$(field arguments) workdir=$(field workdir) entry=$(field type)
+library=$(field library)
 [[ -f ${exe} ]] || { print -u2 "${name}: ${exe} is missing"; exit 1; }
+
+prefix_kind=${GAME_PREFIX:-$([[ ${library} == shared ]] && print pergame || print rig)}
+case ${prefix_kind} in
+  pergame) MWXR_IN_PROCESS_PREFIX=$("${repo}/scripts/game-prefix.zsh" ensure "${appid}") ;;
+  rig) ;;
+  *) print -u2 "GAME_PREFIX must be pergame or rig"; exit 2 ;;
+esac
+export MWXR_IN_PROCESS_PREFIX
+[[ -f ${MWXR_IN_PROCESS_PREFIX}/drive_c/windows/system32/lsteamclient.dll ]] || {
+  print -u2 "No lsteamclient in ${MWXR_IN_PROCESS_PREFIX}: run scripts/install-lsteamclient.zsh"; exit 1; }
+
+# steam_api loads the Windows steamclient64.dll named in the registry; the redirect never
+# runs it, so one copy serves every prefix: MWXR_STEAM_CLIENT_DIR (default
+# ~/Windows/library/steam-client), taken once from the rig prefix's Windows Steam.
+steam_client=${MWXR_STEAM_CLIENT_DIR:-${MWXR_GAME_LIBRARY:-$HOME/Windows/library}/steam-client}
+if [[ ! -f ${steam_client}/steamclient64.dll ]]; then
+  rig_steam="${MWXR_RIG_PREFIX:-$HOME/Windows/prefix}/drive_c/Program Files (x86)/Steam"
+  [[ -f ${rig_steam}/steamclient64.dll ]] || {
+    print -u2 "No Windows steamclient64.dll in ${steam_client} (or ${rig_steam} to copy it from)"; exit 1; }
+  mkdir -p "${steam_client}"
+  cp -p "${rig_steam}/steamclient64.dll" "${rig_steam}/steamclient.dll" "${steam_client}/"
+  print -u2 "Copied Windows Steam's steamclient DLLs to ${steam_client}"
+fi
 
 wine=${MWXR_IN_PROCESS_WINE}/bin/wine
 export WINEPREFIX=${MWXR_IN_PROCESS_PREFIX} WINEMSYNC=${WINEMSYNC:-1}
 export DYLD_FALLBACK_LIBRARY_PATH=${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-unix:${MWXR_IN_PROCESS_WINE}/lib
 exe_windows=$(WINEDEBUG=-all "${wine}" winepath -w "${exe}" 2>/dev/null | tr -d '\r')
 print -r -- "${name} (${appid}): ${entry} launch, ${exe_windows} ${arguments}"
+print -r -- "prefix (${prefix_kind}): ${MWXR_IN_PROCESS_PREFIX}"
 if [[ ${GAME_DRY_RUN:-0} == 1 ]]; then
   print -r -- "working directory: ${workdir}"
   exit 0
@@ -84,6 +113,23 @@ export SteamAppId=${appid} SteamGameId=${appid}
 export VR_OVERRIDE=${xrizer_windows} XDG_STATE_HOME="Z:${logs//\//\\}"
 export RUST_LOG=${RUST_LOG:-xrizer=info,openvr=warn}
 cd "${workdir}"
-"${repo}/scripts/run-in-process-openxr.zsh" "${stand_in}" -- "${exe_windows}" ${=arguments} "$@" 2>&1 |
-  tee "${logs}/game.log"
-exit ${pipestatus[1]}
+# The game runs as a background job so a stop signal is handled at once rather than after
+# the game exits.
+stop_game() {
+  trap - TERM INT HUP
+  print -u2 "Stopping ${name}"
+  if [[ ${prefix_kind} == pergame ]]; then
+    "${MWXR_IN_PROCESS_WINE}/bin/wineserver" -k 2>/dev/null || true
+  else
+    WINEDEBUG=-all "${wine}" taskkill /f /im "${exe:t}" >/dev/null 2>&1 || true
+    WINEDEBUG=-all "${wine}" taskkill /f /im mwxr-steam.exe >/dev/null 2>&1 || true
+  fi
+  wait 2>/dev/null || true
+  exit 143
+}
+trap stop_game TERM INT HUP
+steam_client_windows=$(WINEDEBUG=-all "${wine}" winepath -w "${steam_client}" 2>/dev/null | tr -d '\r')
+"${repo}/scripts/run-in-process-openxr.zsh" "${stand_in}" --steam-dir "${steam_client_windows}" -- \
+  "${exe_windows}" ${=arguments} "$@" > "${logs}/game.log" 2>&1 &
+game_pid=$!
+wait ${game_pid}
