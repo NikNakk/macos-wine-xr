@@ -68,6 +68,14 @@ if [[ -n ${ALYX_BASE_ARGS:-} ]]; then
 else
  base_args=(+map startup -novid -nowindow -console -vconsole +vr_fidelity_level_auto 0 +vr_fidelity_level 3)
 fi
-"${repo}/scripts/run-in-process-openxr.zsh" "${exe}" -vr -steam -noasserts -nopassiveasserts \
+# ALYX_STEAM_STAND_IN: a Steam stand-in that starts the game (mwxr-steam.exe, for the
+# macOS Steam client through lsteamclient; see docs/lsteamclient.md).
+launch=("${exe}")
+if [[ -n ${ALYX_STEAM_STAND_IN:-} ]]; then
+ # the stand-in starts the game with CreateProcess, which needs its Windows path
+ exe_windows=$("${wine}" winepath -w "${exe}" 2>/dev/null | tr -d '\r')
+ launch=("${ALYX_STEAM_STAND_IN}" -- "${exe_windows}")
+fi
+"${repo}/scripts/run-in-process-openxr.zsh" "${launch[@]}" -vr -steam -noasserts -nopassiveasserts \
  "${base_args[@]}" "$@" 2>&1 | tee "${logs}/alyx.log"
 exit ${pipestatus[1]}

@@ -67,11 +67,19 @@ VARIANTS = {
     'wine-dxmt': dict(kind='wine', process='hlvr', extra_args=[]),
     'wine-vulkan': dict(kind='wine', process='hlvr', extra_args=['-vulkan']),
     'native-mvk': dict(kind='native', process='alyx_host', extra_args=[]),
-    # Measurement only: colour typeless textures without PixelFormatView (DXMT
-    # claude/xr-frame-boundary), so Metal can compress them. Not correct in general.
     # DXMT before on-demand PixelFormatView: every typeless texture gets the usage (uncompressed)
     'wine-dxmt-pfv-always': dict(kind='wine', process='hlvr', extra_args=[],
                                  env=dict(DXMT_PIXEL_FORMAT_VIEW='always')),
+    # The macOS Steam client through lsteamclient instead of the rig's Windows Steam
+    # (docs/lsteamclient.md): the runtime copy set up by scripts/install-lsteamclient.zsh,
+    # and the mwxr-steam.exe stand-in to start the game.
+    'wine-dxmt-macos-steam': dict(
+        kind='wine', process='hlvr', extra_args=[], steam='macos',
+        wine_tree=HOME / 'Code/wine-crossover/runtime-lsteamclient',
+        env=dict(MWXR_LSTEAMCLIENT='1', SteamAppId='546560', SteamGameId='546560',
+                 STEAM_COMPAT_CLIENT_INSTALL_PATH=str(
+                     HOME / 'Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS'),
+                 ALYX_STEAM_STAND_IN=str(BRIDGE / 'build-in-process/lsteamclient/mwxr-steam.exe'))),
 }
 
 SIZE_PATTERNS = ('Recommended render target size', 'wineopenxr: swapchain=', 'recreating swapchain',
@@ -274,7 +282,7 @@ def build_command(args, variant_name, run_dir):
     else:
         env.update(
             ALYX_GAME_ROOT=str(WINDOWS_ALYX), MWXR_XRIZER_ROOT=str(args.xrizer_root),
-            MWXR_IN_PROCESS_WINE=str(args.wine_tree), MWXR_IN_PROCESS_PREFIX=str(args.prefix),
+            MWXR_IN_PROCESS_WINE=str(variant.get('wine_tree', args.wine_tree)), MWXR_IN_PROCESS_PREFIX=str(args.prefix),
             MWXR_NATIVE_RUNTIME_JSON=str(args.x86_client_json), ALYX_START_STEAM='0',
             ALYX_LOG_DIR=str(game_out), WINEMSYNC='1', MWXR_IN_PROCESS_BUILD=str(args.in_process_build),
             ALYX_BASE_ARGS=' '.join(['-console', '-vconsole', '-nowindow', '-condebug'] + game_args(args, variant_name)),
@@ -292,9 +300,20 @@ def prerequisites(args, variants):
     if 'wine-vulkan' in variants:
         problems.append('wine-vulkan needs XR_KHR_vulkan_enable in wineopenxr, which exposes only D3D11 (Metal-backed) '
                         'sessions so far')
-    if any(VARIANTS[v]['kind'] == 'wine' for v in variants):
+    mac_steam = [v for v in variants if VARIANTS[v].get('steam') == 'macos']
+    if mac_steam:
+        if not running('steam_osx'):
+            problems.append(f'macOS Steam is not running (needed by {", ".join(mac_steam)})')
+        if running('steam.exe'):
+            problems.append('Windows Steam is running: one account cannot be signed in to both Steam clients')
+        for v in mac_steam:
+            tree = VARIANTS[v]['wine_tree']
+            if not (tree / 'lib/wine/x86_64-windows/lsteamclient.dll').exists():
+                problems.append(f'no lsteamclient in {tree} (scripts/install-lsteamclient.zsh)')
+    if any(VARIANTS[v]['kind'] == 'wine' and VARIANTS[v].get('steam') != 'macos' for v in variants):
         if not running('steam.exe'):
             problems.append("the rig's Windows Steam is not running (start it with ~/Windows/run-steam.zsh)")
+    if any(VARIANTS[v]['kind'] == 'wine' for v in variants):
         if not args.x86_client_json.exists():
             problems.append(f'missing x86_64 client {args.x86_client_json}')
         if not (WINDOWS_ALYX / 'game/bin/win64/hlvr.exe').exists():

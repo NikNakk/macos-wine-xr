@@ -1,0 +1,72 @@
+diff -ru a/unix_private.h b/unix_private.h
+--- a/unix_private.h	2026-10-27 15:08:08
++++ b/unix_private.h	2026-10-27 15:08:08
+@@ -4,6 +4,17 @@
+ #include <stdarg.h>
+ #include <stddef.h>
+ 
++#if defined(__APPLE__) && defined(__cplusplus)
++/* macos-wine-xr: libc++ reaches the C wchar.h through these headers, after winbase.h has
++ * redefined wcsncpy (to keep Wine code off it) and windef.h min and max. Include them
++ * first. */
++#define NOMINMAX
++#include <cwchar>
++#include <array>
++#include <algorithm>
++#include <unordered_map>
++#endif
++
+ #include <windef.h>
+ #include <winbase.h>
+ 
+diff -ru a/unix_steam_input_manual.cpp b/unix_steam_input_manual.cpp
+--- a/unix_steam_input_manual.cpp	2026-10-27 15:08:07
++++ b/unix_steam_input_manual.cpp	2026-10-27 15:08:08
+@@ -192,6 +192,13 @@
+         return vk_to_xkeysym[win_vk];
+     return 0;
+ }
++#elif defined(__APPLE__)
++/* macos-wine-xr: no X11 keysyms on macOS. Steam uses this only to find keyboard glyphs;
++ * 0 reports no native key code for the key. */
++uint32_t manual_convert_nNativeKeyCode( uint32_t win_vk )
++{
++    return 0;
++}
+ #else
+ #error You must implement VK<->Native keysym conversion for this platform.
+ #endif
+diff -ru a/unixlib.cpp b/unixlib.cpp
+--- a/unixlib.cpp	2026-10-27 15:08:07
++++ b/unixlib.cpp	2026-10-27 15:08:08
+@@ -795,8 +795,11 @@
+     LOAD_FUNC( Steam_GetAPICallResult );
+     LOAD_FUNC( Steam_FreeLastCallback );
+     LOAD_FUNC( Steam_ReleaseThreadLocalMemory );
+-    LOAD_FUNC( Steam_IsKnownInterface );
+-    LOAD_FUNC( Steam_NotifyMissingInterface );
++    /* macos-wine-xr: the macOS steamclient.dylib does not export these two. */
++#define LOAD_OPTIONAL_FUNC( x ) p_##x = (decltype(p_##x))dlsym( steamclient, #x )
++    LOAD_OPTIONAL_FUNC( Steam_IsKnownInterface );
++    LOAD_OPTIONAL_FUNC( Steam_NotifyMissingInterface );
++#undef LOAD_OPTIONAL_FUNC
+ 
+     TRACE( "Loaded host steamclient from %s\n", debugstr_a(path) );
+     return 0;
+@@ -851,14 +854,14 @@
+ template< typename Params >
+ static NTSTATUS steamclient_Steam_IsKnownInterface( Params *params, bool wow64 )
+ {
+-    params->_ret = p_Steam_IsKnownInterface( params->version );
++    params->_ret = p_Steam_IsKnownInterface ? p_Steam_IsKnownInterface( params->version ) : true;
+     return 0;
+ }
+ 
+ template< typename Params >
+ static NTSTATUS steamclient_Steam_NotifyMissingInterface( Params *params, bool wow64 )
+ {
+-    p_Steam_NotifyMissingInterface( params->pipe, params->version );
++    if (p_Steam_NotifyMissingInterface) p_Steam_NotifyMissingInterface( params->pipe, params->version );
+     return 0;
+ }
+ 

@@ -1,0 +1,217 @@
+--- a/dlls/ntdll/unixlib.h
++++ b/dlls/ntdll/unixlib.h
+@@ -72,6 +72,13 @@
+     void *end;
+ };
+ 
++/* macos-wine-xr: Proton's lsteamclient redirect */
++struct steamclient_setup_trampolines_params
++{
++    HMODULE src_mod;
++    HMODULE tgt_mod;
++};
++
+ enum ntdll_unix_funcs
+ {
+     unix_load_so_dll,
+@@ -85,6 +92,7 @@
+ #if defined(__x86_64__)
+     unix_pe_module_loaded,
+ #endif
++    unix_steamclient_setup_trampolines,
+ };
+ 
+ extern unixlib_handle_t __wine_unixlib_handle;
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -1149,6 +1149,36 @@
+ }
+ 
+ 
++/* macos-wine-xr: Proton's lsteamclient redirect. With MWXR_LSTEAMCLIENT=1, a game's
++ * Windows steamclient64.dll (or gameoverlayrenderer64.dll) is mapped but never run: its
++ * exports jump to lsteamclient.dll, which forwards to the host (macOS) Steam client. */
++#define MWXR_LDR_SKIP_INIT 0x20000000  /* Proton: LDR_DONT_CALL_DLLMAIN */
++
++static int use_lsteamclient(void)
++{
++    static int use = -1;
++    WCHAR env[8];
++
++    if (use == -1) use = get_env( L"MWXR_LSTEAMCLIENT", env, sizeof(env) ) && env[0] == '1';
++    return use;
++}
++
++/* name: a file name with or without its directory, len characters long */
++static BOOL is_steamclient_module( const WCHAR *name, ULONG len )
++{
++    static const WCHAR *names[] = { L"steamclient64", L"gameoverlayrenderer64" };
++    unsigned int i;
++    ULONG start;
++
++    for (start = len; start; start--) if (name[start - 1] == '\\' || name[start - 1] == '/') break;
++    name += start;
++    len -= start;
++    if (len >= 4 && !RtlCompareUnicodeStrings( name + len - 4, 4, L".dll", 4, TRUE )) len -= 4;
++    for (i = 0; i < ARRAY_SIZE(names); i++)
++        if (!RtlCompareUnicodeStrings( name, len, names[i], wcslen( names[i] ), TRUE )) return TRUE;
++    return FALSE;
++}
++
+ /*************************************************************************
+  *		import_dll
+  *
+@@ -1184,6 +1214,16 @@
+         WARN( "Skipping unused import %s\n", name );
+         *pwm = NULL;
+         return TRUE;
++    }
++
++    /* The redirected steamclient64.dll never runs, so don't load Steam's runtime for it. */
++    if (use_lsteamclient() && (!strcmp( name, "tier0_s64.dll" ) || !strcmp( name, "vstdlib_s64.dll" )) &&
++        wm->ldr.BaseDllName.Buffer &&
++        is_steamclient_module( wm->ldr.BaseDllName.Buffer, wm->ldr.BaseDllName.Length / sizeof(WCHAR) ))
++    {
++        TRACE( "%s -> ntdll.\n", name );
++        name = "ntdll.dll";
++        len = strlen( name );
+     }
+ 
+     status = build_import_name( wm, buffer, name, len );
+@@ -1710,7 +1750,7 @@
+ 
+     /* Skip calls for modules loaded with special load flags */
+ 
+-    if (wm->ldr.Flags & LDR_DONT_RESOLVE_REFS) return STATUS_SUCCESS;
++    if (wm->ldr.Flags & (LDR_DONT_RESOLVE_REFS | MWXR_LDR_SKIP_INIT)) return STATUS_SUCCESS;
+     if (wm->ldr.TlsIndex == -1) call_tls_callbacks( wm->ldr.DllBase, reason );
+     if (!entry) return STATUS_SUCCESS;
+ 
+@@ -2309,6 +2349,26 @@
+     wm->system = system;
+ 
+     update_load_config( *module );
++
++    if (use_lsteamclient())
++    {
++        static HMODULE lsteamclient;
++        UNICODE_STRING lsteamclient_us;
++
++        if (is_steamclient_module( nt_name->Buffer, nt_name->Length / sizeof(WCHAR) ) &&
++            RtlCreateUnicodeStringFromAsciiz( &lsteamclient_us, "lsteamclient.dll" ) &&
++            (lsteamclient || LdrLoadDll( load_path, 0, &lsteamclient_us, &lsteamclient ) == STATUS_SUCCESS))
++        {
++            struct steamclient_setup_trampolines_params params = { .src_mod = *module, .tgt_mod = lsteamclient };
++            if (!WINE_UNIX_CALL( unix_steamclient_setup_trampolines, &params ))
++            {
++                NtFlushInstructionCache( NtCurrentProcess(), *module, map_size );
++                wm->ldr.Flags |= MWXR_LDR_SKIP_INIT;
++                TRACE( "%s redirected to lsteamclient\n", debugstr_us( nt_name ) );
++            }
++            RtlFreeUnicodeString( &lsteamclient_us );
++        }
++    }
+ 
+     /* fixup imports */
+ 
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -1400,7 +1400,9 @@
+ #elif defined(__x86_64__)
+ static NTSTATUS pe_module_loaded( void *args ) { return STATUS_NOT_IMPLEMENTED; }
+ #endif
++
+ 
++static NTSTATUS steamclient_setup_trampolines( void *args );
+ 
+ static const unixlib_entry_t unix_call_funcs[] =
+ {
+@@ -1415,6 +1417,7 @@
+ #if defined(__x86_64__)
+     pe_module_loaded,
+ #endif
++    steamclient_setup_trampolines,
+ };
+ 
+ 
+@@ -1436,6 +1439,7 @@
+ #if defined(__x86_64__)
+ static NTSTATUS wow64_pe_module_loaded( void *args ) { return STATUS_NOT_IMPLEMENTED; }
+ #endif
++static NTSTATUS wow64_steamclient_setup_trampolines( void *args ) { return STATUS_NOT_SUPPORTED; }
+ 
+ const unixlib_entry_t unix_call_wow64_funcs[] =
+ {
+@@ -1450,6 +1454,7 @@
+ #if defined(__x86_64__)
+     wow64_pe_module_loaded,
+ #endif
++    wow64_steamclient_setup_trampolines,
+ };
+ 
+ #endif  /* _WIN64 */
+@@ -1903,6 +1908,64 @@
+     return get_rva( module, data->VirtualAddress );
+ }
+ 
++
++/* macos-wine-xr: Proton's lsteamclient redirect (ValveSoftware/wine, proton_11.0,
++ * dlls/ntdll/unix/loader.c). Point each export of the mapped Windows steamclient64.dll,
++ * and its entry point, at the export of the same name in lsteamclient.dll, which
++ * forwards to the host Steam client. x86_64 only. */
++static void steamclient_write_jump( void *src_addr, ULONG_PTR tgt_addr )
++{
++    static const unsigned char mov[] = {0x48, 0xb8};   /* mov rax, imm64 */
++    static const unsigned char jmp[] = {0xff, 0xe0};   /* jmp rax */
++    memcpy( src_addr, mov, sizeof(mov) );
++    memcpy( (char *)src_addr + sizeof(mov), &tgt_addr, sizeof(tgt_addr) );
++    memcpy( (char *)src_addr + sizeof(mov) + sizeof(tgt_addr), jmp, sizeof(jmp) );
++}
++
++static NTSTATUS steamclient_setup_trampolines( void *args )
++{
++    struct steamclient_setup_trampolines_params *params = args;
++    HMODULE src_mod = params->src_mod, tgt_mod = params->tgt_mod;
++    IMAGE_NT_HEADERS *src_nt = get_rva( src_mod, ((IMAGE_DOS_HEADER *)src_mod)->e_lfanew );
++    IMAGE_NT_HEADERS *tgt_nt = get_rva( tgt_mod, ((IMAGE_DOS_HEADER *)tgt_mod)->e_lfanew );
++    IMAGE_SECTION_HEADER *src_sec = IMAGE_FIRST_SECTION( src_nt );
++    const IMAGE_EXPORT_DIRECTORY *src_exp, *tgt_exp;
++    UINT_PTR page_mask = getpagesize() - 1;
++    const DWORD *names;
++    void *src_addr, *tgt_addr;
++    unsigned int i;
++
++    if (src_nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) return STATUS_NOT_SUPPORTED;
++    if (!(src_exp = get_module_data_dir( src_mod, IMAGE_FILE_EXPORT_DIRECTORY, NULL )) ||
++        !(tgt_exp = get_module_data_dir( tgt_mod, IMAGE_FILE_EXPORT_DIRECTORY, NULL )))
++        return STATUS_INVALID_IMAGE_FORMAT;
++
++    for (i = 0; i < src_nt->FileHeader.NumberOfSections; i++)
++    {
++        void *addr;
++        size_t size;
++        if (memcmp( src_sec[i].Name, ".text", 5 )) continue;
++        addr = (void *)(((UINT_PTR)src_mod + src_sec[i].VirtualAddress) & ~page_mask);
++        size = (src_sec[i].Misc.VirtualSize + page_mask) & ~page_mask;
++        mprotect( addr, size, PROT_READ | PROT_WRITE | PROT_EXEC );
++    }
++
++    names = get_rva( src_mod, src_exp->AddressOfNames );
++    for (i = 0; i < src_exp->NumberOfNames; i++)
++    {
++        const char *name;
++        if (!names[i] || !(name = get_rva( src_mod, names[i] ))) continue;
++        if (!(src_addr = (void *)find_named_export( src_mod, src_exp, name ))) continue;
++        if (!(tgt_addr = (void *)find_named_export( tgt_mod, tgt_exp, name ))) continue;
++        steamclient_write_jump( src_addr, (ULONG_PTR)tgt_addr );
++    }
++
++    src_addr = get_rva( src_mod, src_nt->OptionalHeader.AddressOfEntryPoint );
++    tgt_addr = get_rva( tgt_mod, tgt_nt->OptionalHeader.AddressOfEntryPoint );
++    steamclient_write_jump( src_addr, (ULONG_PTR)tgt_addr );
++    return STATUS_SUCCESS;
++}
++
+ /***********************************************************************
+  *           load_ntdll_functions
+  */
