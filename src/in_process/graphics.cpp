@@ -309,5 +309,11 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
     }
     struct xrEndFrame_params params = {session, &native};
     NTSTATUS status = UNIX_CALL(xrEndFrame, &params);
-    return call_result(status, params.result);
+    XrResult result = call_result(status, params.result);
+    // After the frame is submitted, as Present marks its boundary.
+    if (XR_SUCCEEDED(result)) {
+        auto *state = (SessionState *)wine_session_from_handle(session)->graphics;
+        if (state && state->interop) state->interop->end_frame();
+    }
+    return result;
 }

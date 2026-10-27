@@ -4,6 +4,8 @@
 #include "graphics_interop.h"
 #include "graphics_interop_native.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "dxmt_native_interop.h"
 
 namespace {
@@ -13,6 +15,7 @@ public:
     ~DxmtInterop() override
     {
         if (fence) fence->Release();
+        if (frames) frames->Release();
         if (context) context->Release();
         if (native) native->Release();
     }
@@ -25,6 +28,18 @@ public:
         hr = immediate->QueryInterface(__uuidof(ID3D11DeviceContext4), (void **)&context);
         immediate->Release();
         if (SUCCEEDED(hr)) hr = native->GetMetalDevice(&device_object);
+        // MWXR_DXMT_FRAME_BOUNDARY=1: end a DXMT frame at each xrEndFrame (per-frame
+        // statistics, DXMT_CAPTURE_FRAME, the maximum frame latency). Off by default
+        // while its effect on pacing is measured.
+        const char *boundary = getenv("MWXR_DXMT_FRAME_BOUNDARY");
+        if (SUCCEEDED(hr) && boundary && !strcmp(boundary, "1")) {
+            if (FAILED(device->QueryInterface(DXMT_IID_NATIVE_DEVICE4, (void **)&frames))) {
+                frames = nullptr;
+                fprintf(stderr, "wineopenxr: DXMT has no IDXMTNativeDevice4; frame boundaries are off\n");
+            } else {
+                fprintf(stderr, "wineopenxr: DXMT frame boundary at each xrEndFrame\n");
+            }
+        }
         return hr;
     }
     const char *name() const override { return "dxmt"; }
@@ -61,9 +76,14 @@ public:
         return hr;
     }
     void flush() override { context->Flush(); }
+    void end_frame() override
+    {
+        if (frames) frames->EndFrame();
+    }
 private:
     GraphicsNativeHost host;
     IDXMTNativeDevice2 *native = nullptr;
+    IDXMTNativeDevice4 *frames = nullptr;
     ID3D11DeviceContext4 *context = nullptr;
     ID3D11Fence *fence = nullptr;
     UINT64 device_object = 0;
