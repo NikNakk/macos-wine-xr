@@ -66,7 +66,7 @@ in use by the generic RPC transport.
 No upstream pull requests are created automatically. Work remains on the
 user-owned forks until explicitly requested.
 
-## Transitional build framework
+## Build framework
 
 The target path no longer uses the pinned DXMT v0.80/Basalt patches embedded in
 Monado. Development now uses:
@@ -75,9 +75,12 @@ Monado. Development now uses:
   texture/fence metadata;
 - `NikNakk/monado:macos-upstream-clean` for the native macOS runtime.
 
-The old integrated branch remains useful as a reproducibility reference and as
-a temporary build framework for the Win64 OpenXR frontend, but it is not the
-native runtime used by the new path.
+The old integrated branch remains a reproducibility reference only. Until
+2026-10-27 it was also the build framework for a transitional Monado-based Win64
+OpenXR frontend (`scripts/build-wine-openxr-client.zsh`, with
+`src/windows/comp_d3d11_bridge.cpp` and `oxr_d3d11_bridge.cpp` overlaid), the
+client half of the former proxy path; it was removed with the proxy and is in
+`a239e8f`.
 
 ### Native-sharing proof
 
