@@ -1,0 +1,8 @@
+hlvr,default,vr_msaa,vr_render_target_scale,min_gpu_memory,min_width,min_height,
+0,1,2,0.5,,,,
+1,,2,0.54,,,,
+2,,2,0.58,,,,
+3,,2,0.62,,,,
+4,,2,0.67,,,,
+5,,2,0.72,,,,
+end,,,,,,,

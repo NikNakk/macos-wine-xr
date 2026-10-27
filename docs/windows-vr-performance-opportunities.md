@@ -18,8 +18,9 @@ Nothing here is newly measured. Each item says what evidence it rests on.
   The rig's Monado LaunchAgent (`~/Library/LaunchAgents/org.freedesktop.monado.service.plist`)
   now sets `XRT_MACOS_REFRESH_RATE_HZ=90` and `U_PACING_APP_USE_MIN_FRAME_PERIOD=1`;
   the previous plist is `~/Windows/backups/org.freedesktop.monado.service.plist.before-90hz-minperiod-20261027`.
-  `~/Windows/run-alyx-xrizer.zsh` launches Alyx that way with adaptive
-  fidelity over a table extended down to 0.50 (85–90 fps at 90 Hz offscreen).
+  `scripts/run-alyx-xrizer.zsh` (this rig: `~/Windows/run-alyx-xrizer.zsh`)
+  launches Alyx that way with adaptive fidelity over a table extended down to
+  0.50, `scripts/alyx/fidelity-levels.csv` (85–90 fps at 90 Hz offscreen).
 
 - **The translation-layer question is already settled.** Windows D3D11 games
   reach Metal through DXMT alone, and SteamVR's compositor and the driver use
@@ -433,7 +434,7 @@ command lists when they are executed.
 - **Valve's own table is too heavy for 90 Hz on this Mac**: its lowest level is
   0.81 at 4× MSAA (2268×2313), which ran at 42–45 fps
   (`adaptive-90-20261027`).
-- **An extended table** (`~/Windows/alyx-fidelity-levels.csv`: 2× MSAA,
+- **An extended table** (`scripts/alyx/fidelity-levels.csv`: 2× MSAA,
   scales 0.50 to 0.72 in about 7% steps, default level 0): 85–90 fps at 90 Hz,
   settling at 0.50 (`adaptive-table-cap072-90-20261027`); at 60 Hz it climbs to
   0.62 and holds 60 (`adaptive-table-cap072-60-20261027`). The same table up to
@@ -441,11 +442,14 @@ command lists when they are executed.
   Source 2 allocates its render targets for the largest level and renders a
   viewport inside them, so the top of the table has a cost even when unused
   (`adaptive-table-90-20261027`).
-- **Headset launcher:** `~/Windows/run-alyx-xrizer.zsh` runs Alyx through
+- **Headset launcher:** `scripts/run-alyx-xrizer.zsh` runs Alyx through
   xrizer and the in-process wineopenxr against the Monado LaunchAgent, with
   adaptive fidelity and that table by default (`ALYX_FIDELITY_TABLE` for
-  another, `ALYX_FIXED_PERCENT` for a fixed size). It puts the game's override
-  table and the OpenVR path file back on exit. Not yet run on the headset.
+  another, such as `scripts/alyx/fidelity-levels-to-1.23.csv`;
+  `ALYX_FIXED_PERCENT` for a fixed size; `ALYX_DRY_RUN=1` to check the setup).
+  It puts the game's override table and the OpenVR path files back on exit.
+  A rig wrapper sets the prefix, Wine, xrizer and Monado client paths
+  (`~/Windows/run-alyx-xrizer.zsh` here). Not yet run on the headset.
 - `compare.py --fidelity-table FILE` writes a given table for a run.
 
 ### On-demand PixelFormatView: 90 fps, 2026-10-27
