@@ -48,7 +48,7 @@ in to one Steam client, so starting Windows Steam signs macOS Steam out
 
 ```sh
 scripts/build-lsteamclient.zsh            # lsteamclient.dll/.so and mwxr-steam.exe in build-in-process/lsteamclient
-cp -cR ~/Code/wine-crossover/runtime ~/Code/wine-crossover/runtime-lsteamclient   # a separate runtime to test with
+cp -cpR ~/Code/wine-crossover/runtime ~/Code/wine-crossover/runtime-lsteamclient   # a separate runtime to test with (-p keeps times: see steam-games.md)
 scripts/install-lsteamclient.zsh ~/Code/wine-crossover/runtime-lsteamclient ~/Windows/prefix
 ```
 
