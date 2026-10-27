@@ -22,6 +22,9 @@
 #                          Windows Steam in the prefix (docs/lsteamclient.md): needs
 #                          MWXR_IN_PROCESS_WINE and the prefix set up by
 #                          scripts/install-lsteamclient.zsh, and macOS Steam signed in
+#   ALYX_CONSOLE_LOG=1     keep Alyx's console (-condebug) with its fidelity readings and
+#                          level changes (+vr_fidelity_level_spew 1) as console.log in
+#                          ALYX_LOG_DIR; the game folder's own console.log is put back
 #   ALYX_DRY_RUN=1         print the table, environment and command without starting the game
 #   game arguments         for example "+load autosave"
 #
@@ -79,14 +82,18 @@ fi
 # Keep copies of what this changes, and put them back however the game ends.
 keep=$(mktemp -d "${TMPDIR:-/tmp}/run-alyx-xrizer.XXXXXX")
 saved=()
-for f in "${csv}" "${MWXR_IN_PROCESS_PREFIX}"/drive_c/users/*/AppData/Local/openvr/openvrpaths.vrpath(N); do
+console_log="${hlvr}/console.log"
+for f in "${csv}" "${console_log}" "${MWXR_IN_PROCESS_PREFIX}"/drive_c/users/*/AppData/Local/openvr/openvrpaths.vrpath(N); do
   [[ -f $f ]] || continue
   cp -p "$f" "${keep}/${#saved}"
   saved+=("$f")
 done
 restore() {
   local i
-  rm -f "${csv}"
+  if [[ ${ALYX_CONSOLE_LOG:-0} == 1 && ${ALYX_DRY_RUN:-0} != 1 && -f ${console_log} && -n ${ALYX_LOG_DIR:-} ]]; then
+    mkdir -p "${ALYX_LOG_DIR}" && cp -p "${console_log}" "${ALYX_LOG_DIR}/console.log"
+  fi
+  rm -f "${csv}" "${console_log}"
   for (( i = 1; i <= ${#saved}; i++ )); do
     cp -p "${keep}/$((i - 1))" "${saved[$i]}"
   done
@@ -117,7 +124,9 @@ if [[ ${steam} == macos ]]; then
   describe_steam=", macOS Steam"
 fi
 export WINEMSYNC=${WINEMSYNC:-1}
-export ALYX_BASE_ARGS="+map startup -novid -nowindow -console -vconsole ${fidelity} +vr_symmetric_fov 0"
+console_args=""
+[[ ${ALYX_CONSOLE_LOG:-0} == 1 ]] && console_args="-condebug +vr_fidelity_level_spew 1"
+export ALYX_BASE_ARGS="+map startup -novid -nowindow -console -vconsole ${fidelity} +vr_symmetric_fov 0 ${console_args}"
 print "Alyx: ${describe}${describe_steam:-}"
 if [[ ${ALYX_DRY_RUN:-0} == 1 ]]; then
   print "fidelity table:"; cat "${csv}"
