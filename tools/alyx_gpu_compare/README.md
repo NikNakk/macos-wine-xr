@@ -138,8 +138,8 @@ problem. Not needed for GPU measurements.
 --game-arg 1` the game picks its own level from the table (add
 `--game-arg +vr_fidelity_level_spew --game-arg 1` to log its GPU readings and
 level changes in `console.log`). Adaptive fidelity honours the table's MSAA
-without `+vr_msaa`. `~/Windows/alyx-fidelity-levels.csv` is the table used for
-the headset (2x MSAA, scale 0.50 to 0.72).
+without `+vr_msaa`. `scripts/alyx/fidelity-levels.csv` is the table
+`scripts/run-alyx-xrizer.zsh` uses on the headset (2x MSAA, scale 0.50 to 0.72).
 
 `wine-dxmt-pfv-always` runs the Windows build with
 `DXMT_PIXEL_FORMAT_VIEW=always`, DXMT's behaviour before on-demand
