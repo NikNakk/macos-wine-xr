@@ -58,6 +58,10 @@ public:
     // and submit it. Only FenceCpuWait may block until the GPU completes.
     virtual HRESULT signal_completion(uint64_t value) = 0;
     virtual void flush() = 0;
+    // After xrEndFrame: tell the translation layer an application frame has ended, as a
+    // Present would. Applications in XR may never present, so without this a layer that
+    // counts frames at Present sees one endless frame. No-op unless the backend opts in.
+    virtual void end_frame() {}
 };
 
 // MWXR_GRAPHICS_BACKEND=auto (default), dxmt, d3dmetal or d3dmetal-copy.
