@@ -290,7 +290,8 @@ Monado's pacing**, not CPU-bound: see "Where each frame's time goes" below.
 
 Same matched settings, one Windows and one native run each with Time Profiler
 (`~/Code/alyx-native/runs/cpu-profile-20261027`) and with Thread Activity
-(`thread-activity-20261027`), both attached to the game process only
+(`thread-activity-20261027`, deleted on 2026-10-27 to save 1.2 GB; record again with
+`compare.py --trace-template threads`), both attached to the game process only
 (`--trace-template cpu` / `threads`; `cpu_profile.py`, `thread_waits.py`).
 
 - **CPU is not the limit.** Both builds use about 1.25 cores in total; the
@@ -510,6 +511,9 @@ command lists when they are executed.
   developer-tools permission, and every Metal process under Wine waits until
   it is answered. DXMT writes the capture to the game's working directory as
   seen by Windows, here `game/bin/win64`.
+- Both captures below were deleted on 2026-10-27 to save 10.5 GB; the findings are
+  recorded here. To make a new one, use the environment above (and
+  `DXMT_CAPTURE_FRAME_COUNT` for several frames) and keep it outside the repository.
 - Result: `~/Code/alyx-native/runs/dxmt-capture-20261026-c/hlvr_F3000.gputrace`,
   5.1 GB, one frame of `a2_pistol` at the matched size. Open it in Xcode to
   read per-pass GPU time, attachments with their load and store actions, and
