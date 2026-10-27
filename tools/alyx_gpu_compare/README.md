@@ -121,14 +121,11 @@ restore also runs when a wait times out.
 
 ## Steam for the Windows build
 
-The Wine variants use the rig's Windows Steam. Answering the game's Steam
-calls from the native macOS Steam instead, as the native build does through
-Klepton's `kl_steambridge.c`, needs a bridge from the Windows ABI to
-`steamclient.dylib` (which has an x86_64 slice). That is Proton's
-`lsteamclient`. NotProton (2026-10-09, GPL-3.0, lsteamclient under the
-Steamworks SDK licence) already has a macOS port of it for CrossOver 26.3, so
-it is the starting point if Windows Steam's CPU and memory use become a
-problem. Not needed for GPU measurements.
+The Wine variants use the rig's Windows Steam, except `wine-dxmt-macos-steam`, which
+uses the macOS Steam client through Proton's `lsteamclient` (`docs/lsteamclient.md`):
+it runs the game from the runtime copy set up by `scripts/install-lsteamclient.zsh`
+through the `mwxr-steam.exe` stand-in, and needs macOS Steam running and Windows Steam
+stopped (one account cannot be signed in to both clients).
 
 ## Fidelity tables and adaptive fidelity
 

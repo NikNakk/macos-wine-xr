@@ -18,6 +18,10 @@
 #                          largest level, which cost about 5 fps at 90 Hz on an M5)
 #   ALYX_FIXED_PERCENT     a fixed size instead: this percentage of the recommended size
 #                          (OXR_VIEWPORT_SCALE_PERCENTAGE), at ALYX_MSAA samples (2, 4 or 8)
+#   ALYX_STEAM=macos       use the macOS Steam client through lsteamclient instead of a
+#                          Windows Steam in the prefix (docs/lsteamclient.md): needs
+#                          MWXR_IN_PROCESS_WINE and the prefix set up by
+#                          scripts/install-lsteamclient.zsh, and macOS Steam signed in
 #   ALYX_DRY_RUN=1         print the table, environment and command without starting the game
 #   game arguments         for example "+load autosave"
 #
@@ -27,7 +31,8 @@
 #   MWXR_XRIZER_ROOT          xrizer provision (bin/vrclient_x64.dll, openxr_loader.dll)
 #   MWXR_NATIVE_RUNTIME_JSON  the x86_64 Monado client's runtime manifest
 # Optional: ALYX_GAME_ROOT (default: the prefix's Steam library), MWXR_IN_PROCESS_BUILD,
-# ALYX_LOG_DIR. Windows Steam must already be running and signed in in that prefix.
+# ALYX_LOG_DIR. Windows Steam must already be running and signed in in that prefix (or
+# macOS Steam, with ALYX_STEAM=macos).
 #
 # The Windows build ignores a fidelity table at a fixed level unless +vr_msaa is on its
 # command line (it then renders at the full recommended size with 8x MSAA); adaptive
@@ -48,8 +53,26 @@ table=${ALYX_FIDELITY_TABLE:-${repo}/scripts/alyx/fidelity-levels.csv}
 [[ -d ${hlvr} ]] || { print -u2 "No Alyx in ${ALYX_GAME_ROOT}"; exit 1; }
 [[ -n ${fixed} || -f ${table} ]] || { print -u2 "No fidelity table ${table}"; exit 1; }
 
+steam=${ALYX_STEAM:-windows}
+mac_steam="$HOME/Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS"
+stand_in=${ALYX_STEAM_STAND_IN:-${repo}/build-in-process/lsteamclient/mwxr-steam.exe}
+case ${steam} in
+  windows) ;;
+  macos)
+    [[ -f ${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-windows/lsteamclient.dll &&
+       -f ${MWXR_IN_PROCESS_PREFIX}/drive_c/windows/system32/lsteamclient.dll ]] || {
+      print -u2 "No lsteamclient in ${MWXR_IN_PROCESS_WINE} or the prefix: run scripts/install-lsteamclient.zsh"; exit 1; }
+    [[ -f ${stand_in} && -f ${mac_steam}/steamclient.dylib ]] || {
+      print -u2 "Need ${stand_in} (scripts/build-lsteamclient.zsh) and macOS Steam"; exit 1; } ;;
+  *) print -u2 "ALYX_STEAM must be windows or macos"; exit 2 ;;
+esac
 if [[ ${ALYX_DRY_RUN:-0} != 1 ]]; then
-  pgrep -f 'steam\.exe' >/dev/null || { print -u2 'Start Windows Steam in the prefix first'; exit 1; }
+  if [[ ${steam} == macos ]]; then
+    pgrep -x steam_osx >/dev/null || { print -u2 'Start macOS Steam first'; exit 1; }
+    pgrep -f 'steam\.exe' >/dev/null && { print -u2 'Quit Windows Steam first: one account cannot be signed in to both'; exit 1; }
+  else
+    pgrep -f 'steam\.exe' >/dev/null || { print -u2 'Start Windows Steam in the prefix first'; exit 1; }
+  fi
   pgrep -x hlvr.exe >/dev/null && { print -u2 'Half-Life: Alyx is already running'; exit 1; }
 fi
 
@@ -88,12 +111,17 @@ else
 fi
 
 export ALYX_START_STEAM=0
+if [[ ${steam} == macos ]]; then
+  export MWXR_LSTEAMCLIENT=1 STEAM_COMPAT_CLIENT_INSTALL_PATH=${mac_steam}
+  export SteamAppId=546560 SteamGameId=546560 ALYX_STEAM_STAND_IN=${stand_in}
+  describe_steam=", macOS Steam"
+fi
 export WINEMSYNC=${WINEMSYNC:-1}
 export ALYX_BASE_ARGS="+map startup -novid -nowindow -console -vconsole ${fidelity} +vr_symmetric_fov 0"
-print "Alyx: ${describe}"
+print "Alyx: ${describe}${describe_steam:-}"
 if [[ ${ALYX_DRY_RUN:-0} == 1 ]]; then
   print "fidelity table:"; cat "${csv}"
-  env | grep -E '^(OXR_|ALYX_|MWXR_|WINEMSYNC)' | sort
+  env | grep -E '^(OXR_|ALYX_|MWXR_|WINEMSYNC|STEAM_COMPAT|SteamAppId)' | sort
   print "would run: ${repo}/scripts/run-in-process-alyx.zsh $*"
   exit 0
 fi
