@@ -130,10 +130,48 @@ Steamworks SDK licence) already has a macOS port of it for CrossOver 26.3, so
 it is the starting point if Windows Steam's CPU and memory use become a
 problem. Not needed for GPU measurements.
 
+## Fidelity tables and adaptive fidelity
+
+`--fidelity-table FILE` writes FILE as the game's
+`vr_fidelity_levels_override.csv` instead of the one-level table. With
+`--render-scale 0 --viewport-percent 100 --game-arg +vr_fidelity_level_auto
+--game-arg 1` the game picks its own level from the table (add
+`--game-arg +vr_fidelity_level_spew --game-arg 1` to log its GPU readings and
+level changes in `console.log`). Adaptive fidelity honours the table's MSAA
+without `+vr_msaa`. `~/Windows/alyx-fidelity-levels.csv` is the table used for
+the headset (2x MSAA, scale 0.50 to 0.72).
+
+`wine-dxmt-pfv-always` runs the Windows build with
+`DXMT_PIXEL_FORMAT_VIEW=always`, DXMT's behaviour before on-demand
+`PixelFormatView`, for A/B runs.
+
+## CPU and thread profiles
+
+```sh
+python3 tools/alyx_gpu_compare/compare.py --variants wine-dxmt,native-mvk --repetitions 1 --capture 10 --trace-template cpu
+python3 tools/alyx_gpu_compare/compare.py --variants wine-dxmt,native-mvk --repetitions 1 --capture 8 --trace-template threads
+```
+
+Both attach xctrace to the game process only, and save `vmmap.txt.gz` from
+the moment the capture starts.
+
+- `cpu`: Time Profiler. After the run, `cpu_profile.py` writes
+  `cpu-profile.txt` and `.json`: CPU ms per second by thread, and the
+  binaries and functions its samples land in. For Wine runs it reads the raw
+  `time-sample` table (exporting `time-profile` crashes xctrace on Wine
+  stacks) and names addresses from the vmmap, including Wine-loaded PE
+  modules such as `d3d11.dll`. About 20 MB for 10 s.
+- `threads`: Thread Activity, kept as `threads.trace` (about 0.5 GB for 8 s).
+  `thread_waits.py TRACE` reports each thread's running, runnable and blocked
+  time, and splits its blocked time by the thread that woke it.
+
+Recording every process instead breaks the export while iOS simulators are
+booted.
+
 ## Tests
 
 ```sh
-cd tools/alyx_gpu_compare && python3 -m unittest test_analysis
+cd tools/alyx_gpu_compare && python3 -m unittest test_analysis test_cpu_profile
 ```
 
 ## Limits

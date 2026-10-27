@@ -69,8 +69,9 @@ VARIANTS = {
     'native-mvk': dict(kind='native', process='alyx_host', extra_args=[]),
     # Measurement only: colour typeless textures without PixelFormatView (DXMT
     # claude/xr-frame-boundary), so Metal can compress them. Not correct in general.
-    'wine-dxmt-strip': dict(kind='wine', process='hlvr', extra_args=[],
-                            env=dict(DXMT_PIXEL_FORMAT_VIEW_EXPERIMENT='strip')),
+    # DXMT before on-demand PixelFormatView: every typeless texture gets the usage (uncompressed)
+    'wine-dxmt-pfv-always': dict(kind='wine', process='hlvr', extra_args=[],
+                                 env=dict(DXMT_PIXEL_FORMAT_VIEW='always')),
 }
 
 SIZE_PATTERNS = ('Recommended render target size', 'wineopenxr: swapchain=', 'recreating swapchain',
@@ -396,9 +397,22 @@ def remove_new_ktraces(before, record):
     record['ktrace_bytes_removed'] = removed
 
 
-def record_trace(args, run_dir, record):
+def record_trace(args, run_dir, record, pid):
     """xctrace for --capture seconds; returns its exit code. Stops it cleanly if it overruns."""
-    if args.trace_template == 'gpu':
+    output = run_dir / 'metal.trace'
+    target = ['--all-processes']
+    if args.trace_template in ('cpu', 'threads'):
+        # Time Profiler (cpu) or Thread Activity (threads: every run and wait interval, and who
+        # woke the thread) on the game process only. Recording every process breaks the export
+        # while iOS simulators are booted (overlapping simulator dylibs; xctrace export exits 133).
+        instrument = 'Time Profiler' if args.trace_template == 'cpu' else 'Thread Activity'
+        what, target = ['--instrument', instrument], ['--attach', str(pid)]
+        output = run_dir / f'{args.trace_template}.trace'
+        # Wine's PE modules are not dyld images, so their samples carry bare addresses; the map
+        # lets cpu_profile.py name the DLL.
+        with (run_dir / 'vmmap.txt').open('w') as f:
+            subprocess.run(['vmmap', '-wide', str(pid)], stdout=f, stderr=subprocess.STDOUT, check=False)
+    elif args.trace_template == 'gpu':
         what = ['--instrument', 'GPU']  # only the GPU intervals the analysis uses: far smaller
     else:
         what = ['--template', args.trace_template]
@@ -407,8 +421,8 @@ def record_trace(args, run_dir, record):
     # The trace's own start time is wall clock; this pair converts it to Monado's clock.
     record['clock_pair'] = [time.time(), uptime_ns()]
     with (run_dir / 'xctrace.log').open('w') as xlog:
-        xc = subprocess.Popen(['xcrun', 'xctrace', 'record', *what, '--all-processes',
-                               '--time-limit', f'{args.capture:.0f}s', '--output', str(run_dir / 'metal.trace')],
+        xc = subprocess.Popen(['xcrun', 'xctrace', 'record', *what, *target,
+                               '--time-limit', f'{args.capture:.0f}s', '--output', str(output)],
                               stdout=xlog, stderr=subprocess.STDOUT)
         try:
             code = xc.wait(timeout=args.capture + 600)
@@ -460,7 +474,7 @@ def run_game(args, run_dir, name, variant, argv, env, record, log):
     elif args.until_file:
         wait_for_file(args, proc, record, log, name)
     if proc.poll() is None and args.trace_template != 'none' and free_gb >= args.min_free_gb:
-        record_trace(args, run_dir, record)
+        record_trace(args, run_dir, record, pid)
     return proc, replayer
 
 
@@ -559,7 +573,9 @@ def one_run(args, out, order, variant, log):
     proc = replayer = None
     try:
         state.prepare()
-        if scale is not None:
+        if args.fidelity_table:
+            (hlvr / OVERRIDE_CSV).write_text(args.fidelity_table.read_text())
+        elif scale is not None:
             (hlvr / OVERRIDE_CSV).write_text(override_csv(scale, args.msaa))
         proc, replayer = run_game(args, run_dir, name, variant, argv, env, record, log)
     except Exception as e:  # restore the game folders whatever happened
@@ -593,6 +609,19 @@ def one_run(args, out, order, variant, log):
     if (run_dir / 'metal.trace').exists():
         # Exported after the game has stopped, so the export does not compete with it.
         record['problems'] += analysis.condense_trace(run_dir, record.get('clock_pair'), args.keep_traces)
+    if (run_dir / 'cpu.trace').exists():
+        with (run_dir / 'cpu-profile.txt').open('w') as f:
+            code = subprocess.run([sys.executable, str(Path(__file__).with_name('cpu_profile.py')),
+                                   str(run_dir / 'cpu.trace'), '--all', '--top', '40',
+                                   '--vmmap', str(run_dir / 'vmmap.txt'),
+                                   '--table', 'time-sample' if VARIANTS[variant]['kind'] == 'wine' else 'time-profile',
+                                   '--json', str(run_dir / 'cpu-profile.json')],
+                                  stdout=f, stderr=subprocess.STDOUT).returncode
+        if code != 0:
+            record['problems'].append(f'cpu_profile.py exited {code}')
+        elif not args.keep_traces:
+            shutil.rmtree(run_dir / 'cpu.trace', ignore_errors=True)
+        subprocess.run(['gzip', '-9', str(run_dir / 'vmmap.txt')], check=False)
     before = record.pop('_ktraces_before', None)
     if before is not None and not args.keep_traces:
         remove_new_ktraces({Path(p) for p in before}, record)
@@ -626,7 +655,7 @@ def main():
                         '50 gives 1400x1428 per eye from the 4000x2040 remote display')
     p.add_argument('--viewport-percent-native', type=int, default=53,
                    help='the same for the native build, which renders a square from the recommendation '
-                        '(50% gives 1344x1344, 53% about 1410x1410)')
+                        '(50%% gives 1344x1344, 53%% about 1410x1410)')
     p.add_argument('--render-scale', type=float, default=1.0,
                    help=f'vr_render_target_scale for a one-level {OVERRIDE_CSV} in each game, so both render '
                         'at a chosen size (the two builds ship different fidelity tables); negative: use '
@@ -646,10 +675,13 @@ def main():
     p.add_argument('--capture', type=float, default=15,
                    help='Metal System Trace length (s); all processes, about 40 MB a second')
     p.add_argument('--trace-template', default='gpu',
-                   help="'gpu' (GPU instrument only, enough for the analysis), 'none', or an xctrace template name, "
+                   help="'gpu' (GPU instrument only, enough for the analysis), 'cpu' (Time Profiler on the game process only; see cpu_profile.py), 'threads' (Thread Activity on the game process, kept for thread_waits.py), 'none', or an xctrace template name, "
                         "e.g. 'Metal System Trace' (much larger)")
     p.add_argument('--game-env', action='append', default=[], metavar='KEY=VALUE',
                    help='extra environment for the game, e.g. MWXR_DXMT_FRAME_BOUNDARY=1')
+    p.add_argument('--fidelity-table', type=Path,
+                   help=f'write this file as {OVERRIDE_CSV} in each game instead of the one-level table '
+                        '(use with --render-scale 0 and, for adaptive fidelity, --game-arg +vr_fidelity_level_auto --game-arg 1)')
     p.add_argument('--in-process-build', type=Path, default=BRIDGE / 'build-in-process/gate',
                    help='wineopenxr build for the Wine variants')
     p.add_argument('--until-file', help='after the warm-up, wait until this glob exists and stops growing '
