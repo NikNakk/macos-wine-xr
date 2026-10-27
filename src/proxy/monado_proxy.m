@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: BSL-1.0
 
 #import <Foundation/Foundation.h>
-#import <Metal/Metal.h>
 
 #include "macos_wine_xr/monado_handoff.h"
-#include "macos_wine_xr/native_metal_sharing.h"
 #include "monado_wire_generated.h"
 #include "tcp_auth.h"
 
@@ -157,113 +155,16 @@ create_listener(uint16_t port)
 	return fd;
 }
 
+/*
+ * Forwards one Wine client's IPC to native Monado. Monado no longer has the name-based
+ * Metal bootstrap messages (removed with its transitional Wine protocol, monado
+ * e55cef5f8), so swapchain and semaphore imports cannot pass through this proxy; the
+ * in-process wineopenxr path shares textures instead.
+ */
 static bool
-translate_texture_import(uint8_t *request,
-                         size_t request_size,
-                         id<MTLDevice> device,
-                         struct macos_wine_xr_monado_handoff *handoff,
-                         uint8_t *out_request,
-                         size_t out_capacity,
-                         size_t *out_size)
-{
-	if (request_size != sizeof(struct ipc_swapchain_import_metal_bootstrap_msg) ||
-	    out_capacity < sizeof(struct ipc_swapchain_import_metal_msg)) {
-		return false;
-	}
-
-	const struct ipc_swapchain_import_metal_bootstrap_msg *old_msg =
-	    (const struct ipc_swapchain_import_metal_bootstrap_msg *)request;
-	uint32_t count = old_msg->args.image_count;
-	if (count == 0 || count > XRT_MAX_SWAPCHAIN_IMAGES) {
-		return false;
-	}
-
-	void *textures[XRT_MAX_SWAPCHAIN_IMAGES] = {0};
-	bool ok = true;
-	for (uint32_t i = 0; i < count; i++) {
-		const char *name = old_msg->args.names[i].name;
-		if (name[0] == '\0' || memchr(name, '\0', sizeof(old_msg->args.names[i].name)) == NULL ||
-		    macos_wine_xr_resolve_shared_texture(name, (__bridge void *)device, &textures[i]) != 0) {
-			ok = false;
-			break;
-		}
-	}
-
-	uint64_t token = 0;
-	if (ok) {
-		ok = macos_wine_xr_monado_publish_textures(handoff, textures, count, &token) == 0;
-	}
-
-	for (uint32_t i = 0; i < count; i++) {
-		if (textures[i] != NULL) {
-			macos_wine_xr_release_metal_object(textures[i]);
-		}
-	}
-	if (!ok) {
-		return false;
-	}
-
-	struct ipc_swapchain_import_metal_msg translated = {
-	    .cmd = IPC_SWAPCHAIN_IMPORT_METAL,
-	    .info = old_msg->info,
-	    .token = token,
-	    .image_count = count,
-	};
-	memcpy(out_request, &translated, sizeof(translated));
-	*out_size = sizeof(translated);
-	return true;
-}
-
-static bool
-translate_semaphore_import(uint8_t *request,
-                           size_t request_size,
-                           id<MTLDevice> device,
-                           struct macos_wine_xr_monado_handoff *handoff,
-                           uint8_t *out_request,
-                           size_t out_capacity,
-                           size_t *out_size)
-{
-	if (request_size != sizeof(struct ipc_compositor_semaphore_import_metal_bootstrap_msg) ||
-	    out_capacity < sizeof(struct ipc_compositor_semaphore_import_metal_msg)) {
-		return false;
-	}
-
-	const struct ipc_compositor_semaphore_import_metal_bootstrap_msg *old_msg =
-	    (const struct ipc_compositor_semaphore_import_metal_bootstrap_msg *)request;
-	const char *name = old_msg->bootstrap.name;
-	if (name[0] == '\0' || memchr(name, '\0', sizeof(old_msg->bootstrap.name)) == NULL) {
-		return false;
-	}
-
-	void *event = NULL;
-	if (macos_wine_xr_resolve_shared_event(name, (__bridge void *)device, &event) != 0) {
-		return false;
-	}
-
-	uint64_t token = 0;
-	bool ok = macos_wine_xr_monado_publish_shared_event(handoff, event, &token) == 0;
-	macos_wine_xr_release_metal_object(event);
-	if (!ok) {
-		return false;
-	}
-
-	struct ipc_compositor_semaphore_import_metal_msg translated = {
-	    .cmd = IPC_COMPOSITOR_SEMAPHORE_IMPORT_METAL,
-	    .token = token,
-	};
-	memcpy(out_request, &translated, sizeof(translated));
-	*out_size = sizeof(translated);
-	return true;
-}
-
-static bool
-proxy_one_client(int wine_fd,
-                 int native_fd,
-                 id<MTLDevice> device,
-                 struct macos_wine_xr_monado_handoff *handoff)
+proxy_one_client(int wine_fd, int native_fd)
 {
 	uint8_t request[MWXR_MAX_WIRE_MESSAGE] = {0};
-	uint8_t translated[MWXR_MAX_WIRE_MESSAGE] = {0};
 	uint8_t reply[MWXR_MAX_WIRE_MESSAGE] = {0};
 
 	for (;;) {
@@ -295,21 +196,7 @@ proxy_one_client(int wine_fd,
 
 		const uint8_t *native_request = request;
 		size_t native_request_size = info.request_size;
-		if (cmd == IPC_SWAPCHAIN_IMPORT_METAL_BOOTSTRAP) {
-			if (!translate_texture_import(request, info.request_size, device, handoff,
-			                              translated, sizeof(translated), &native_request_size)) {
-				fprintf(stderr, "proxy: texture bootstrap translation failed\n");
-				return false;
-			}
-			native_request = translated;
-		} else if (cmd == IPC_COMPOSITOR_SEMAPHORE_IMPORT_METAL_BOOTSTRAP) {
-			if (!translate_semaphore_import(request, info.request_size, device, handoff,
-			                                translated, sizeof(translated), &native_request_size)) {
-				fprintf(stderr, "proxy: semaphore bootstrap translation failed\n");
-				return false;
-			}
-			native_request = translated;
-		} else if (cmd == IPC_SESSION_CREATE) {
+		if (cmd == IPC_SESSION_CREATE) {
 			/*
 			 * This was previously server policy for stream_socket clients.
 			 * The compatibility proxy owns that policy now: the native Monado
@@ -384,17 +271,9 @@ main(int argc, char **argv)
 		return 2;
 	}
 
-	id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-	if (device == nil) {
-		fprintf(stderr, "no default Metal device\n");
-		macos_wine_xr_monado_handoff_close(handoff);
-		return 2;
-	}
-
 	int listener = create_listener(port);
 	if (listener < 0) {
 		fprintf(stderr, "could not listen on 127.0.0.1:%u: %s\n", port, strerror(errno));
-		[device release];
 		macos_wine_xr_monado_handoff_close(handoff);
 		return 2;
 	}
@@ -426,14 +305,13 @@ main(int argc, char **argv)
 			continue;
 		}
 
-		bool clean = proxy_one_client(wine_fd, native_fd, device, handoff);
+		bool clean = proxy_one_client(wine_fd, native_fd);
 		close(native_fd);
 		close(wine_fd);
 		fprintf(stderr, "proxy: Wine client disconnected%s\n", clean ? "" : " after IPC failure");
 	}
 
 	close(listener);
-	[device release];
 	macos_wine_xr_monado_handoff_close(handoff);
 	return 1;
 }

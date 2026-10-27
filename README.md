@@ -26,7 +26,9 @@ Meta XR Simulator (opaque composition). See
 [build/run instructions, evidence and limitations](docs/native-openxr-backend.md).
 
 The original authenticated Monado byte-stream proxy and transitional frontend
-remain available as a regression path. DXMT has no Monado dependency; clean
+remain in the tree, but no longer render: clean Monado dropped the name-based
+Metal bootstrap messages the proxy translated (monado `e55cef5f8`), so it now
+forwards only IPC that shares no textures or events. DXMT has no Monado dependency; clean
 Monado has no Wine/DXMT transport code.
 
 An experimental third path uses a Proton-style builtin Wine OpenXR runtime
@@ -102,7 +104,8 @@ Monado. Development now uses:
   texture/fence metadata;
 - `NikNakk/monado:macos-upstream-clean` for the native macOS runtime;
 - the standalone authenticated proxy in this repository for the Wine byte
-  stream, DXMT bootstrap resolution and Monado XPC token handoff.
+  stream (its DXMT bootstrap resolution and Monado XPC token handoff went with
+  Monado's bootstrap messages; see above).
 
 The old integrated branch remains useful as a reproducibility reference and as
 a temporary build framework for the Win64 OpenXR frontend, but it is not the
@@ -131,6 +134,10 @@ probe through Monado's generic XPC broker.
 
 ### End-to-end OpenXR proof
 
+> Historical: this path needs the Metal bootstrap messages that clean Monado
+> removed in `e55cef5f8`, so with current `macos-upstream-clean` it fails at the
+> first swapchain import. The in-process wineopenxr path replaces it.
+
 Configure a native `macos-upstream-clean` Monado build, then run:
 
 ```zsh
@@ -151,8 +158,8 @@ runs the D3D11 sample through:
 hello_xr (Win64)
   -> D3D11 / current DXMT
   -> macos-wine-xr authenticated proxy
-       -> resolve DXMT Metal bootstrap metadata
-       -> republish textures/shared event through Monado XPC
+       -> (until monado e55cef5f8) resolve DXMT Metal bootstrap metadata
+       -> (until monado e55cef5f8) republish textures/shared event through Monado XPC
   -> normal macos-upstream-clean Unix IPC client connection
   -> native Monado compositor
 ```
