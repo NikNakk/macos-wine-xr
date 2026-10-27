@@ -7,6 +7,20 @@ Nothing here is newly measured. Each item says what evidence it rests on.
 
 ## Summary
 
+- **Windows Alyx reaches 90 fps (2026-10-27)** at the matched size (2× MSAA,
+  1400×1428 per eye) with three changes: the service at 90 Hz instead of 120
+  (10 ms of GPU work cannot fit 8.3 ms), Monado's minimum frame period
+  (`U_PACING_APP_USE_MIN_FRAME_PERIOD=1`, so the pacer cannot lock at half
+  rate), and DXMT creating typeless textures without `PixelFormatView` until
+  a view needs it (1.4 ms less GPU work a frame). 89.9 fps in both A/B runs,
+  against 85 without the DXMT change. Measured offscreen, not yet on the
+  headset.
+  The rig's Monado LaunchAgent (`~/Library/LaunchAgents/org.freedesktop.monado.service.plist`)
+  now sets `XRT_MACOS_REFRESH_RATE_HZ=90` and `U_PACING_APP_USE_MIN_FRAME_PERIOD=1`;
+  the previous plist is `~/Windows/backups/org.freedesktop.monado.service.plist.before-90hz-minperiod-20261027`.
+  `~/Windows/run-alyx-xrizer.zsh` launches Alyx that way with adaptive
+  fidelity over a table extended down to 0.50 (85–90 fps at 90 Hz offscreen).
+
 - **The translation-layer question is already settled.** Windows D3D11 games
   reach Metal through DXMT alone, and SteamVR's compositor and the driver use
   the same DXMT device, with zero copies into Monado. DXVK → MoltenVK or
@@ -31,6 +45,13 @@ Nothing here is newly measured. Each item says what evidence it rests on.
   Steam Frame) through Klepton and MoltenVK: no Rosetta, no Wine, Vulkan. No
   other SteamVR title has such a build. What does transfer: the measured GPU
   feedback design, timeline handoff, and the gaze/FDM work (for Vulkan titles).
+
+- **Matched measurement (2026-10-26/27):** at the same size and 2× MSAA, the
+  Windows path takes about 1.8× native's GPU time per pixel, and that is what
+  sets its frame rate: Monado's pacer estimates 14.5 ms of GPU work per frame,
+  so it runs the game at a 16.7 ms period (sometimes 25 ms), where native gets
+  8.3 ms. CPU use is similar in both builds and well short of saturating
+  any thread.
 
 So the biggest levers, in order: make DXMT's GPU work cheaper, render fewer
 pixels, hold a steady frame cadence, and only then remove the extra compositor.
@@ -241,10 +262,11 @@ throughout, every run starting nominal and ending "fair" thermally.
 pixel**, not the 2.3–2.5× of the unmatched runs. This still includes the
 renderers' differences (the D3D11 build's compute MSAA resolve against the
 Vulkan build's render-pass resolve, and whatever else the Steam Frame build
-does differently), so it is an upper bound on DXMT's share. At this size
-both games kept the GPU busy only about 53% of the time, so neither is purely
-GPU-bound: frame rate also depends on the CPU side, Rosetta and Wine for
-Windows.
+does differently), so it is an upper bound on DXMT's share. The GPU looked busy only about 53%
+of the time during the traces, but that is the traced frame rate (the GPU
+instrument itself slows the games); at the untraced rate Windows keeps it
+busy about 75% of the time. **The Windows build is GPU-bound through
+Monado's pacing**, not CPU-bound: see "Where each frame's time goes" below.
 
 - **Result of the strip A/B** (`~/Code/alyx-native/runs/gpu-compare-20261026-pfv-strip`,
   Windows only, full size with 8× MSAA, unpaused by the replay, frame rate
@@ -257,6 +279,212 @@ Windows.
   on-demand version is worth doing as a general DXMT improvement, not as the
   answer to Alyx's GPU cost. (xctrace hung finishing the trace in both normal
   runs and in neither stripped run; the runner recovered each time.)
+
+### Where each frame's time goes, 2026-10-27
+
+Same matched settings, one Windows and one native run each with Time Profiler
+(`~/Code/alyx-native/runs/cpu-profile-20261027`) and with Thread Activity
+(`thread-activity-20261027`), both attached to the game process only
+(`--trace-template cpu` / `threads`; `cpu_profile.py`, `thread_waits.py`).
+
+- **CPU is not the limit.** Both builds use about 1.25 cores in total; the
+  busiest Windows thread runs about 27% of the time (about 5 ms a frame), the
+  DXMT encode thread 11–14%.
+- **Each Windows frame is serial and then idle.** Every 16–19 ms the
+  OpenXR thread wakes from a timer, makes about ten quick Monado calls
+  (`xrWaitFrame` returning, `xrBeginFrame`, poses), wakes the game's threads,
+  and they work for about 6 ms. It then submits, calls `xrWaitFrame`, and
+  sleeps 8–13 ms until the wake time Monado gave it, with nothing running.
+- **Monado runs Windows at half rate because of its GPU time.** Its pacer's
+  GPU estimate for the Windows frame is 14.5 ms, above the 8.3 ms display
+  period, so it gives the app a 16.7 ms frame period (and 25 ms for about 11%
+  of frames: 40 Hz). Native's estimate is 7.4–8.6 ms and it gets 8.3 ms for
+  most frames. So **bringing Windows' GPU time under about 8 ms per frame
+  would double its frame rate here**, and the 1.8× per-pixel gap is what keeps
+  it out. Section 1's GPU work (the compute MSAA resolve, clears, fragment
+  cost) is the main lever; render size is the other (section 2).
+- **A smaller, cheaper gain: stop missing 60.** CPU work (about 6 ms) starts
+  only after the wake, and the GPU work (about 14 ms) follows it, so 20 ms of
+  work is fitted into a 16.7 ms period and frames slip to 25 ms. Waking the
+  app earlier, so its CPU work overlaps the previous frame's GPU work, could
+  hold 60 Hz steadily (about +10–15% over the measured 51–55 fps). That is
+  Monado's app pacer (`u_pacing_app`) and its margins, or a fixed divisor
+  (section 3).
+- **Wineserver sits in almost every cross-thread wake.** The game's ten job
+  threads are each woken about 620 times a second by one wineserver thread;
+  natively the main thread wakes them directly. CrossOver's msync wakes a
+  single-object, non-alertable wait directly (`__ulock_wake`), but alertable
+  and multi-object waits register with wineserver and are woken by its
+  message-pump thread, and I/O completion ports are server objects. Each such
+  wake costs an extra hop through a process that Windows Steam (CEF) also
+  wakes about 100 times a second when idle. It is not the limit for Alyx
+  at this size, but it will matter for CPU-bound titles; candidate fixes are
+  in CrossOver's msync and Wine's completion-port handling, not in this repository.
+
+Tools notes: recording every process with Time Profiler breaks the export
+while iOS simulators are booted (overlapping simulator dylibs, `xctrace
+export` exits 133), so the runner attaches to the game. For Wine processes
+`xctrace` also crashes exporting `time-profile` backtraces (a trap in
+`BacktraceXMLExport`), so `cpu_profile.py --table time-sample` reads the raw
+samples and names addresses from a `vmmap` taken during the run, recovering
+each Wine-loaded PE module's range from its header and the few file-mapped
+pieces of it vmmap shows. Rosetta-translated frames carry no x86 call chain,
+so attribution stops at the module.
+
+### Per-pass costs and submission timing, 2026-10-27
+
+DXMT `claude/xr-frame-boundary` gained two opt-in switches (uncommitted):
+`DXMT_ENCODER_LABELS=1` names each Metal encoder by what it does (size,
+sample count, per-attachment pixel format and load/store actions, draw or
+dispatch count), and `DXMT_AUTO_COMMIT_WORK=N` commits the immediate context
+at a pass boundary once N draws and dispatches are pending, counting deferred
+command lists when they are executed.
+
+- **Matched runs today, untraced:** Windows 10.3–12.0 GPU ms/frame, 57–58
+  fps (`~/Code/alyx-native/runs/auto-commit-20261027`); native 6.9 ms, 112 fps
+  (`encoder-labels-20261027-native`). Both faster than on 2026-10-26.
+- **Per frame by GPU channel** (4 s Metal System Traces,
+  `encoder-labels-20261027`, channels overlap): vertex 7.0 against 3.7 ms,
+  fragment 7.9 against 6.4 ms, compute 2.4 against 0.5 ms. Fragment work is
+  close to native; compute is mostly Alyx's own MSAA resolve (a renderer
+  difference); **vertex work is twice native's** and is the largest DXMT-side
+  gap. Vertex work does not scale with resolution.
+- **Where it goes (Windows):** the main 2× MSAA scene pass (about 700 draws)
+  6.4 ms, of which 3.0 ms vertex; the passes that follow on the same targets
+  2.9 ms, 2.3 ms of it vertex; the depth prepass (about 320 draws) 1.2 ms; the
+  4096² shadow pass about 1 ms of vertex for 34 draws. On a tile-based GPU a
+  pass's fragment work starts only after all its geometry is binned, so a
+  long vertex phase delays the fragment phase directly. Standalone clears are
+  cheap (a few µs) apart from rare outliers.
+- **Submission:** DXMT commits the immediate context only at Flush, Present
+  or a query. Alyx in VR never presents and records most of a frame in deferred
+  command lists on its job threads, so nearly the whole frame was committed at
+  about `xrEndFrame`; 96% of the GPU's idle time waited for the encode thread
+  to commit. Monado's GPU estimate is measured from `xrEndFrame` to GPU done,
+  so it counted all of that.
+- **Auto-commit result:** at 64 (deferred lists counted) Monado's GPU estimate
+  fell from 12.3 to 10.1 ms, but the frame rate did not change (57.8 against
+  58.0 fps): the frame period stays 16.7 ms while the frame's GPU work
+  (10–12 ms) is above the 8.3 ms display period. Counting only immediate-context
+  draws (128, 32) gave about 1 ms. GPU time per frame was 1–1.5 ms higher with
+  it on (fewer passes merged across commits, or run-to-run variation; one run
+  each). Keep it off for Alyx; it lowers latency only, and may matter for games
+  whose GPU work fits the period.
+- **So the lever is the GPU work itself**, about 10 ms to under 8.3 ms, and
+  vertex cost is where DXMT is furthest from native. DXMT pulls vertex
+  attributes in the shader from buffer addresses without bounds checks, so the
+  fetch is not the obvious cause; candidates are the translated vertex shader
+  code (DXBC registers kept in arrays), per-draw argument-buffer setup, and how
+  the D3D11 renderer does stereo (the Vulkan build may use multiview).
+
+### 90 Hz, the geometry-shader draw and the half-rate trap, 2026-10-27
+
+- **90 Hz suits Windows Alyx now.** With the service at 90 Hz
+  (`--refresh 90`, an 11.1 ms period) the Windows build held 85–90 fps for
+  most of each run (`~/Code/alyx-native/runs/gs-ab-20261027`, untraced), its
+  GPU tail rising from about 9.2 to 10.1 ms as the machine warmed. At 120 Hz it
+  gets 60 at most, because 10 ms of GPU work does not fit 8.3 ms.
+- **The half-rate trap.** In 2 of 6 runs at 90 Hz the build ran at exactly
+  45 fps for the whole run with a 15 ms GPU tail, from the first seconds or
+  from the unpause, on either DXMT build. The same work takes 10 ms in the
+  other runs, so the GPU is slower in that state, most likely clocked down
+  because it idles half of each 22 ms period. Monado's app pacer then never
+  tries the shorter period again (`calc_app_period` steps up while the GPU
+  estimate exceeds the period and has no way back down while the estimate stays
+  high). Traces cannot show this: Metal System Trace induces a fixed GPU
+  performance state (Medium or Minimum here), which is also why traced runs
+  are slower.
+- **Minimum frame period** (`U_PACING_APP_USE_MIN_FRAME_PERIOD=1` in the
+  service: the app always gets the display period). A/B at 90 Hz, default,
+  min, min, default (`~/Code/alyx-native/runs/minperiod-ab-20261027`, frames
+  20–130 s): 85.4 and 82.2 fps default, 85.3 and 85.2 fps with it; 95–96% of
+  frames on a single refresh with it, 92–95% without. None of the four runs fell
+  into the half-rate trap, so the A/B does not show that it prevents it; it does
+  by construction, as the period can no longer double. The remaining misses
+  come from the GPU tail rising toward the 11.1 ms period as the machine warms
+  (9.2 ms early, 10.4–10.7 ms after two minutes), so about 1 ms less GPU work a
+  frame should hold 90.
+- **The one geometry-shader draw** (1 draw, about 30,000 vertices, in an MSAA
+  pass after the main one) costs 1.3–1.4 ms of vertex time. DXMT emulates
+  geometry shaders with object and mesh shaders, one single-thread mesh
+  threadgroup per input primitive. Packing up to 32 invocations per mesh
+  threadgroup (fixed vertex and primitive slots, culled filler primitives)
+  did not reduce it (1.31 ms) and made whole runs slightly slower, so it was
+  reverted; occupancy of the mesh stage is not the limit there.
+- Pass labels now also give draw kinds per pass (direct, indexed, indirect,
+  geometry or tessellation emulation), thousands of vertices and the largest
+  instance count. About 9.5 million vertices a frame; the main pass 4.3 million
+  over 704 indexed draws, with up to 19 instances.
+
+### Render size and adaptive fidelity at 90 Hz, 2026-10-27
+
+- **Fixed sizes** (90 Hz, minimum frame period, on-demand `PixelFormatView`,
+  2× MSAA; `~/Code/alyx-native/runs/sizes-90-20261027`, one run each, frames
+  20–130 s): 50% of the recommendation (1400×1428 per eye) 89.9 fps; 55%
+  (1540×1570) 85.4; 60% (1680×1713) 85.9; 70% (1959×1999) 67.1; 80%
+  (2240×2284) 57.3. So 50% is about the largest fixed size that holds 90 here.
+- **Adaptive fidelity works through xrizer and DXMT.** With
+  `+vr_fidelity_level_auto 1` and `+vr_fidelity_level_spew 1`, Alyx reads
+  xrizer's `GetFrameTiming` GPU time (timestamp queries bracketing the frame)
+  and the 90 Hz display rate, and moves between levels. It honours an override
+  table's MSAA without `+vr_msaa`, and scales below 1 cause no
+  `InvalidBounds`. Some readings are low (0–7 ms during loading), so it
+  oscillates between adjacent levels while loading.
+- **Valve's own table is too heavy for 90 Hz on this Mac**: its lowest level is
+  0.81 at 4× MSAA (2268×2313), which ran at 42–45 fps
+  (`adaptive-90-20261027`).
+- **An extended table** (`~/Windows/alyx-fidelity-levels.csv`: 2× MSAA,
+  scales 0.50 to 0.72 in about 7% steps, default level 0): 85–90 fps at 90 Hz,
+  settling at 0.50 (`adaptive-table-cap072-90-20261027`); at 60 Hz it climbs to
+  0.62 and holds 60 (`adaptive-table-cap072-60-20261027`). The same table up to
+  Valve's 1.231 gave 76–84 fps at 90 Hz although it also settled at 0.50:
+  Source 2 allocates its render targets for the largest level and renders a
+  viewport inside them, so the top of the table has a cost even when unused
+  (`adaptive-table-90-20261027`).
+- **Headset launcher:** `~/Windows/run-alyx-xrizer.zsh` runs Alyx through
+  xrizer and the in-process wineopenxr against the Monado LaunchAgent, with
+  adaptive fidelity and that table by default (`ALYX_FIDELITY_TABLE` for
+  another, `ALYX_FIXED_PERCENT` for a fixed size). It puts the game's override
+  table and the OpenVR path file back on exit. Not yet run on the headset.
+- `compare.py --fidelity-table FILE` writes a given table for a run.
+
+### On-demand PixelFormatView: 90 fps, 2026-10-27
+
+- **Strip experiment at the matched settings** (2× MSAA, 90 Hz, minimum
+  frame period; `~/Code/alyx-native/runs/pfv-strip-90-20261027`, A B B A,
+  frames 20–130 s): normal 86.9 and 87.3 fps with a 10.1 ms median GPU tail;
+  stripped 89.9 and 90.0 fps with 8.7 ms. About 1.35 ms a frame, the margin
+  that 90 fps needed. (At 8× MSAA and full size it had looked like at most 10%.)
+- **Safe version** (DXMT `claude/xr-frame-boundary`, uncommitted): device
+  textures that are typeless, GPU-only, not shared and not depth/stencil are
+  created without `PixelFormatView`. The first view that reinterprets one
+  (`Texture::createView`, which covers every application view) queues the
+  texture on the device's command queue. Before encoding its next chunk, the
+  encode thread adds the usage, allocates again, blit-copies every level and
+  slice with the usual dependency tracking, and renames. Every command that
+  can use the new view was recorded after the view, so in that chunk or a later
+  one, after the copy. The encode-thread paths that create reinterpreting
+  views (`ResolveSubresource` with a format, uint clears of float views) queue
+  the upgrade when the call is recorded; the resolve-merge optimisation skips
+  textures still waiting; an allocation without the usage never gets a
+  reinterpreting Metal view. Metal can blit-copy MSAA textures (checked with
+  the validation layer). `DXMT_PIXEL_FORMAT_VIEW=always` restores the old
+  behaviour.
+- **In Alyx** 21 textures were upgraded, all at load: the 512×3072 RGBA16F
+  and 1024×1024 ones found earlier and 19 small ones (at most 256×256). The
+  scene targets keep compression. One run: 89.9 fps, GPU tail 8.8 ms (8.2
+  early, 9.1 after two minutes), unpaused normally.
+- **A/B against the old behaviour** (`pfv-ondemand-ab-20261027`, on-demand,
+  always, always, on-demand, 90 Hz, minimum frame period, frames 20–130 s):
+  on-demand 89.9 and 89.9 fps, GPU tail 8.94 and 8.99 ms; always 85.4 and
+  85.0 fps, 10.34 and 10.37 ms. Same map, unpaused, thermal state nominal to
+  fair in all four.
+- **Validation layer run** (`pfv-ondemand-validation-20261027`, Metal API
+  validation in log mode): no texture-view or usage errors. One existing error
+  unrelated to the change, twice a frame: a blit copy from RGBA8Unorm into
+  RGBA8Unorm_sRGB (xrizer copying each eye into the sRGB OpenXR swapchain;
+  DXMT's copy treats sRGB twins as the same format). Rendering was not checked
+  by eye.
 
 ### Frame boundary and the first capture, 2026-10-26
 
@@ -472,8 +700,9 @@ the fast path.
 
 ## Suggested order
 
-1. Matched A/B/C GPU comparison (section 1). It decides how much DXMT work is
-   worth doing.
+1. Matched A/B/C GPU comparison (section 1). Done: 1.8× per pixel, and Monado
+   paces Windows at half rate because its GPU time (14.5 ms) exceeds the 8.3 ms
+   period. Getting under about 8 ms is the target for DXMT work.
 2. Driver throttling support and a Monado fixed-divisor option (section 3):
    small, and helps every title now.
 3. DXMT discard and store-action work, guided by the trace (section 1).
