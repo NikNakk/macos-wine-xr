@@ -61,6 +61,13 @@ trace_windows="Z:${logs//\//\\}"
 export VR_OVERRIDE="Z:${MWXR_XRIZER_ROOT//\//\\}"
 export XDG_STATE_HOME=${trace_windows}
 export RUST_LOG=${RUST_LOG:-xrizer=info,openvr=warn,tracked_property=warn,unknown_interfaces=info}
-"${repo}/scripts/run-in-process-openxr.zsh" "${exe}" -vr -steam -noasserts -nopassiveasserts +map startup \
- -novid -nowindow -console -vconsole +vr_fidelity_level_auto 0 +vr_fidelity_level 3 "$@" 2>&1 | tee "${logs}/alyx.log"
+# ALYX_BASE_ARGS replaces the default map and fidelity arguments (split on
+# spaces), for example to load a save at a fixed fidelity level.
+if [[ -n ${ALYX_BASE_ARGS:-} ]]; then
+ base_args=(${=ALYX_BASE_ARGS})
+else
+ base_args=(+map startup -novid -nowindow -console -vconsole +vr_fidelity_level_auto 0 +vr_fidelity_level 3)
+fi
+"${repo}/scripts/run-in-process-openxr.zsh" "${exe}" -vr -steam -noasserts -nopassiveasserts \
+ "${base_args[@]}" "$@" 2>&1 | tee "${logs}/alyx.log"
 exit ${pipestatus[1]}
