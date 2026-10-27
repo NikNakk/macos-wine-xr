@@ -56,7 +56,8 @@ resolved DXMT metadata, published native Metal objects using generic Monado XPC
 tokens and forwarded the ordinary Unix IPC protocol. It was removed on
 2026-10-27, after Monado `e55cef5f8` dropped the bootstrap messages it relied on;
 `24b53d8` is its last version. The transitional Monado-based Windows frontend that
-talked to it is still built by `scripts/build-wine-openxr-client.zsh`.
+talked to it (`scripts/build-wine-openxr-client.zsh`) followed; `a239e8f` is its
+last version.
 
 Clean Monado owns native XR tracking/composition, generic Metal/XPC imports,
 shared events and Unix IPC. Wine resource resolution, transport and application
