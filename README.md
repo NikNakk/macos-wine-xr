@@ -25,11 +25,11 @@ The same Win64 DLL has run Khronos `hello_xr` against simulated Monado and
 Meta XR Simulator (opaque composition). See
 [build/run instructions, evidence and limitations](docs/native-openxr-backend.md).
 
-The original authenticated Monado byte-stream proxy and transitional frontend
-remain in the tree, but no longer render: clean Monado dropped the name-based
-Metal bootstrap messages the proxy translated (monado `e55cef5f8`), so it now
-forwards only IPC that shares no textures or events. DXMT has no Monado dependency; clean
-Monado has no Wine/DXMT transport code.
+The original authenticated Monado byte-stream proxy was removed on 2026-10-27
+(last present in `24b53d8`): clean Monado dropped the name-based Metal bootstrap
+messages it translated (monado `e55cef5f8`), so it could no longer pass any
+textures or events. DXMT has no Monado dependency; clean Monado has no Wine/DXMT
+transport code.
 
 An experimental third path uses a Proton-style builtin Wine OpenXR runtime
 with PE and native macOS halves in the application's process. x86_64 Wine and
@@ -49,46 +49,17 @@ pending. See [the implementation, measurements and acceptance ledger](docs/in-pr
 - Bridge fallbacks: this repository, `main`
 - Experimental in-process bridge: `codex/in-process-wine-openxr`
 
-## Transitional path (retained)
+## Former proxy path (removed)
 
-The current path includes:
-
-- consumer-neutral DXMT texture/fence private-data GUIDs;
-- shared-Metal transport for both ordinary 2D and Texture2DArray D3D11 swapchains;
-- DXMT shared-fence / MTLSharedEvent synchronization;
-- a native bootstrap-name resolver;
-- publication into Monado's PID-scoped Metal XPC broker;
-- a standalone authenticated Wine TCP -> native Monado Unix-IPC proxy;
-- proxy-owned minimum-frame-period pacing policy;
-- a bridge-owned D3D11 client compositor and OpenXR D3D requirements helper;
-- current-DXMT provisioning/build scripts;
-- native-sharing probes; and
-- an end-to-end Khronos hello_xr runner.
-
-The Windows OpenXR frontend is currently transitional: it is built in a
-disposable private checkout of the last integrated Wine-client Monado branch,
-with the live bridge sources overlaid at build time. The native runtime is
-`macos-upstream-clean`.
-
-## First end-to-end test
-
-Configure/build `macos-upstream-clean`, then from this repository:
-
-```sh
-export MONADO_SOURCE_DIR=/path/to/monado
-export MONADO_BUILD_DIR=/path/to/monado/build
-MWXR_BOOTSTRAP_SERVICE=1 scripts/run-hello-xr-current-dxmt.zsh
-```
-
-`MWXR_BOOTSTRAP_SERVICE=1` deliberately replaces the currently loaded
-development Monado LaunchAgent with the clean build. Omit it if the correct
-service is already registered.
-
-For the lower-level current-DXMT resource test:
-
-```sh
-scripts/run-current-dxmt-sharing-probe.zsh
-```
+Until 2026-10-27 the repository also carried a standalone authenticated Wine TCP
+to native Monado Unix-IPC proxy (`src/proxy/monado_proxy.m`, `scripts/run-proxy.zsh`)
+and a Khronos `hello_xr` runner for it (`scripts/run-hello-xr-current-dxmt.zsh`).
+It resolved DXMT's Metal bootstrap names, republished the textures and shared
+event through Monado's Metal XPC broker, and owned the minimum-frame-period
+policy for those clients. Monado `e55cef5f8` removed the bootstrap messages, so
+the path stopped working; see `24b53d8` for its last version. The in-process
+wineopenxr path replaces it. Its TCP authentication (`src/rpc/tcp_auth.c`) remains
+in use by the generic RPC transport.
 
 ## Upstreaming rule
 
@@ -102,10 +73,7 @@ Monado. Development now uses:
 
 - `NikNakk/dxmt:macos-xr-native-sharing` for current DXMT and generic native
   texture/fence metadata;
-- `NikNakk/monado:macos-upstream-clean` for the native macOS runtime;
-- the standalone authenticated proxy in this repository for the Wine byte
-  stream (its DXMT bootstrap resolution and Monado XPC token handoff went with
-  Monado's bootstrap messages; see above).
+- `NikNakk/monado:macos-upstream-clean` for the native macOS runtime.
 
 The old integrated branch remains useful as a reproducibility reference and as
 a temporary build framework for the Win64 OpenXR frontend, but it is not the
@@ -131,40 +99,3 @@ DXMT, reads the generic DXMT metadata, and reopens the same objects as native
 Metal resources. Set `MONADO_METAL_XPC_CLIENT` to a
 `libmonado_metal_xpc_client.dylib` from `macos-upstream-clean` to extend the
 probe through Monado's generic XPC broker.
-
-### End-to-end OpenXR proof
-
-> Historical: this path needs the Metal bootstrap messages that clean Monado
-> removed in `e55cef5f8`, so with current `macos-upstream-clean` it fails at the
-> first swapchain import. The in-process wineopenxr path replaces it.
-
-Configure a native `macos-upstream-clean` Monado build, then run:
-
-```zsh
-MONADO_SOURCE_DIR=/path/to/monado \
-MONADO_BUILD_DIR=/path/to/monado/build \
-MWXR_BOOTSTRAP_SERVICE=1 \
-./scripts/run-hello-xr-current-dxmt.zsh
-```
-
-`MWXR_BOOTSTRAP_SERVICE=1` is only needed when the currently loaded
-development LaunchAgent is not already the specified clean build.
-
-The script builds the clean native service, current DXMT, the bridge-owned
-Win64 D3D11/OpenXR frontend, the standalone proxy and Khronos `hello_xr`, then
-runs the D3D11 sample through:
-
-```text
-hello_xr (Win64)
-  -> D3D11 / current DXMT
-  -> macos-wine-xr authenticated proxy
-       -> (until monado e55cef5f8) resolve DXMT Metal bootstrap metadata
-       -> (until monado e55cef5f8) republish textures/shared event through Monado XPC
-  -> normal macos-upstream-clean Unix IPC client connection
-  -> native Monado compositor
-```
-
-The current Win64 frontend build is transitional: it uses a disposable checkout
-of the last integrated Monado branch only for the Windows state-tracker/build
-framework, while its D3D11 bridge sources live here. The native runtime and
-service come exclusively from `macos-upstream-clean`.

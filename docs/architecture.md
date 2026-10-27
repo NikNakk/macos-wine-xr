@@ -49,14 +49,14 @@ proven reverse-sharing route.
 See [the backend note](native-openxr-backend.md) for supported limits,
 authentication, build/run commands, timings and runtime caveats.
 
-## Transitional regression path
+## Former proxy path
 
-The original bridge-owned Monado-based Windows frontend and standalone
-`macos_wine_xr_proxy` remain available. That proxy authenticates Wine TCP,
-resolves existing DXMT metadata, publishes native Metal objects using generic
-Monado XPC tokens and forwards the ordinary Unix IPC protocol. Its protocol
-compatibility checks remain intact. This path preserves the previous
-DXMT-owned-texture route until physical-headset comparisons are complete.
+The bridge-owned standalone `macos_wine_xr_proxy` authenticated Wine TCP,
+resolved DXMT metadata, published native Metal objects using generic Monado XPC
+tokens and forwarded the ordinary Unix IPC protocol. It was removed on
+2026-10-27, after Monado `e55cef5f8` dropped the bootstrap messages it relied on;
+`24b53d8` is its last version. The transitional Monado-based Windows frontend that
+talked to it is still built by `scripts/build-wine-openxr-client.zsh`.
 
 Clean Monado owns native XR tracking/composition, generic Metal/XPC imports,
 shared events and Unix IPC. Wine resource resolution, transport and application
