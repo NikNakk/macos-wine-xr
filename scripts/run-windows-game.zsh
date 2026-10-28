@@ -47,6 +47,10 @@ field() { python3 -c 'import json,sys; print(json.loads(sys.argv[1])[sys.argv[2]
 name=$(field name) exe=$(field exe) arguments=$(field arguments) workdir=$(field workdir) entry=$(field type)
 library=$(field library)
 [[ -f ${exe} ]] || { print -u2 "${name}: ${exe} is missing"; exit 1; }
+# Reject unsupported launcher architectures before touching the prefix or
+# starting Wine, and keep the normal Steam entry rather than guessing a game EXE.
+python3 "${repo}/tools/steam_games/check_launch.py" \
+ --exe "${exe}" --wine-runtime "${MWXR_IN_PROCESS_WINE}" --name "${name}"
 
 prefix_kind=${GAME_PREFIX:-$([[ ${library} == shared ]] && print pergame || print rig)}
 case ${prefix_kind} in

@@ -108,3 +108,26 @@ a runtime made for testing must keep that file's time (`cp -cpR`, or `touch -r`)
 - Apps made for Hyperbolica and Half-Life: Alyx. Not yet added to Steam or started from it,
   and no game installed with `install` yet (Half-Life: Alyx was installed the same way by
   hand on 2026-09-20).
+
+
+## Launcher compatibility and OpenXR loader provisioning
+
+`run-windows-game.zsh` validates the selected PE launch entry before starting
+Wine or changing its prefix. A 32-bit entry requires the selected Wine runtime
+to contain `lib/wine/i386-windows/ntdll.dll`. Without it, the runner reports an
+explicit compatibility error and keeps the normal Steam entry; it does not
+substitute a different game executable. This catches Assetto Corsa's 32-bit
+`AssettoCorsa.exe` launcher on the current 64-bit-only rig runtime. Running its
+64-bit race engine directly is a separate, explicit configuration decision.
+
+`run-in-process-openxr.zsh` copies the Win64 Khronos loader from
+`$MWXR_XRIZER_ROOT/openxr_loader.dll` (or `MWXR_WINDOWS_OPENXR_LOADER`) into the
+prefix's `drive_c/windows/system32`. xrizer loads this DLL by name; placing it
+beside `vrclient_x64.dll` alone does not make it discoverable by the game process.
+This is separate from the native Mac loader linked by `wineopenxr.so`.
+
+Run `python3 tests/windows/test_game_launch_preflight.py` for PE architecture and
+runtime compatibility checks. On 2026-10-27, Audio Trip (826540) passed through
+the rig runner after loader provisioning, created an OpenXR/Metal session,
+rendered frames and was detected by SwiftXR Shell's external-session handoff.
+The test was stopped through the runner's normal termination trap.
