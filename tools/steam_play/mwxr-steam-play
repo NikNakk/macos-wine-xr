@@ -32,14 +32,43 @@ appid=${STEAM_COMPAT_APP_ID:-${SteamAppId:-0}}
 say "$verb app=$appid exe=$exe args=$* cwd=$PWD"
 [ -n "$exe" ] || { say "no executable given"; exit 2; }
 
-if [ "$verb" = run ]; then
-  say "skipped helper $exe"
-  exit 0
-fi
-
 runner=$HOME/Windows/run-windows-game.zsh
 [ -r "$here/runner" ] && read -r runner < "$here/runner"
 [ -x "$runner" ] || { say "runner $runner is missing"; exit 1; }
+
+if [ "$verb" = run ]; then
+  # Steam's setup scripts (docs/steam-play.md, Setup scripts). Keep what Steam passed: the
+  # environment, and every argument that names a file (Windows separators, relative to the
+  # working folder), which Steam deletes after the call.
+  capture="$logs/steam-play-run/$(date '+%Y%m%d-%H%M%S')-$appid"
+  mkdir -p "$capture"
+  { printf 'verb=%s\nexe=%s\ncwd=%s\n' "$verb" "$exe" "$PWD"
+    for a in "$@"; do printf 'arg=%s\n' "$a"; done; } > "$capture/call.txt"
+  env | grep -v '^SteamUser=' | sort > "$capture/env.txt"
+  script=
+  for a in "$@"; do
+    f=$(printf '%s' "$a" | tr '\\' '/')
+    case "$f" in /*) ;; *) f="$PWD/$f" ;; esac
+    if [ -f "$f" ]; then
+      cp "$f" "$capture/"
+      case "$f" in */evaluatorscript_*.vdf) script="$capture/${f##*/}" ;; esac
+    fi
+  done
+  case "${exe##*/}" in
+    iscriptevaluator.exe) ;;
+    *) script= ;;
+  esac
+  if [ -z "$script" ]; then
+    say "skipped helper $exe; saved the call in $capture"
+    exit 0
+  fi
+  # Applied into the game's prefix by the runner; a failure must not stop the game.
+  GAME_SETUP_SCRIPT=$script
+  export GAME_SETUP_SCRIPT
+  "$runner" "$appid" >> "$log" 2>&1 || say "setup script for app $appid failed ($?)"
+  say "setup script for app $appid done; call saved in $capture"
+  exit 0
+fi
 
 case "$exe" in
   /*) ;;
