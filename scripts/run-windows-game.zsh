@@ -88,7 +88,7 @@ fi
 # Reject unsupported launcher architectures before touching the prefix or
 # starting Wine, and keep the normal Steam entry rather than guessing a game EXE.
 python3 "${repo}/tools/steam_games/check_launch.py" \
- --exe "${exe}" --wine-runtime "${MWXR_IN_PROCESS_WINE}" --name "${name}"
+ --exe "${exe}" --wine-runtime "${MWXR_IN_PROCESS_WINE}" --name "${name}" --steam-bridge
 
 prefix_kind=${GAME_PREFIX:-$([[ ${library} == (shared|steam) ]] && print pergame || print rig)}
 case ${prefix_kind} in
@@ -104,14 +104,17 @@ export MWXR_IN_PROCESS_PREFIX
 # runs it, so one copy serves every prefix: MWXR_STEAM_CLIENT_DIR (default
 # ~/Windows/library/steam-client), taken once from the rig prefix's Windows Steam.
 steam_client=${MWXR_STEAM_CLIENT_DIR:-${MWXR_GAME_LIBRARY:-$HOME/Windows/library}/steam-client}
-if [[ ! -f ${steam_client}/steamclient64.dll ]]; then
-  rig_steam="${MWXR_RIG_PREFIX:-$HOME/Windows/prefix}/drive_c/Program Files (x86)/Steam"
-  [[ -f ${rig_steam}/steamclient64.dll ]] || {
-    print -u2 "No Windows steamclient64.dll in ${steam_client} (or ${rig_steam} to copy it from)"; exit 1; }
-  mkdir -p "${steam_client}"
-  cp -p "${rig_steam}/steamclient64.dll" "${rig_steam}/steamclient.dll" "${steam_client}/"
-  print -u2 "Copied Windows Steam's steamclient DLLs to ${steam_client}"
-fi
+# The 32-bit launcher and its 64-bit child need different Steam client DLLs.
+for steam_dll in steamclient64.dll steamclient.dll; do
+  if [[ ! -f ${steam_client}/${steam_dll} ]]; then
+    rig_steam="${MWXR_RIG_PREFIX:-$HOME/Windows/prefix}/drive_c/Program Files (x86)/Steam"
+    [[ -f ${rig_steam}/${steam_dll} ]] || {
+      print -u2 "No Windows ${steam_dll} in ${steam_client} (or ${rig_steam} to copy it from)"; exit 1; }
+    mkdir -p "${steam_client}"
+    cp -p "${rig_steam}/${steam_dll}" "${steam_client}/"
+    print -u2 "Copied Windows Steam's ${steam_dll} to ${steam_client}"
+  fi
+done
 
 wine=${MWXR_IN_PROCESS_WINE}/bin/wine
 export WINEPREFIX=${MWXR_IN_PROCESS_PREFIX} WINEMSYNC=${WINEMSYNC:-1}

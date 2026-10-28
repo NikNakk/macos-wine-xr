@@ -18,7 +18,7 @@
 #
 # Usage: [WINE_SRC=...] [WINE_BUILD=...] [OUT=...] build-lsteamclient.zsh
 #   WINE_SRC    CrossOver Wine source (default ~/Code/wine-crossover/sources/wine)
-#   WINE_BUILD  its configured x86_64 build tree (default ~/Code/wine-crossover/build)
+#   WINE_BUILD  its configured x86_64 or WoW64 build tree (default ~/Code/wine-crossover/build)
 #   OUT         where lsteamclient.dll and lsteamclient.so are copied
 #               (default build-in-process/lsteamclient in this repository)
 #   SDKROOT     macOS SDK for the unix half (default: the 26.5 Command Line Tools SDK,
@@ -88,8 +88,15 @@ if ! grep -q $'^\tdlls/lsteamclient \\\\$' config.status; then
   rm -f include/config.h.pre-lsteamclient
 fi
 
-# 4. The PE half
-make -j"${jobs}" dlls/lsteamclient/x86_64-windows/lsteamclient.dll
+# 4. Windows halves. WoW64 uses the same 64-bit native library and Proton's
+# generated __wine_unix_call_wow64_funcs table, not a 32-bit macOS library.
+pe_archs=(x86_64)
+if grep -q 'i386-windows/ntdll.dll' Makefile; then
+  pe_archs+=(i386)
+fi
+for pe_arch in ${pe_archs}; do
+  make -j"${jobs}" "dlls/lsteamclient/${pe_arch}-windows/lsteamclient.dll"
+done
 
 # 5. The unix half
 obj=${WINE_BUILD}/dlls/lsteamclient/unix
@@ -119,6 +126,11 @@ clang++ -arch x86_64 -m64 -o dlls/lsteamclient/lsteamclient.so -dynamiclib \
 
 # 6. Results, and the Steam stand-in that starts games (src/windows/steam_stand_in.c)
 mkdir -p "${OUT}"
+# Keep the original flat Win64 output for existing launchers.
 cp dlls/lsteamclient/x86_64-windows/lsteamclient.dll dlls/lsteamclient/lsteamclient.so "${OUT}/"
+for pe_arch in ${pe_archs}; do
+  mkdir -p "${OUT}/${pe_arch}-windows"
+  cp "dlls/lsteamclient/${pe_arch}-windows/lsteamclient.dll" "${OUT}/${pe_arch}-windows/"
+done
 x86_64-w64-mingw32-gcc -municode -O2 -Wall -o "${OUT}/mwxr-steam.exe" "${repo}/src/windows/steam_stand_in.c"
-print "Built ${OUT}/lsteamclient.dll, lsteamclient.so and mwxr-steam.exe"
+print "Built Windows architectures: ${pe_archs[*]}; native bridge and stand-in in ${OUT}"

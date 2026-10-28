@@ -31,6 +31,21 @@ done
 ntdll_pe=${WINE_BUILD}/dlls/ntdll/x86_64-windows/ntdll.dll ntdll_unix=${WINE_BUILD}/dlls/ntdll/ntdll.so
 python3 -c 'import sys; sys.exit(0 if "MWXR_LSTEAMCLIENT".encode("utf-16-le") in open(sys.argv[1], "rb").read() else 1)' \
   "${ntdll_pe}" || { print -u2 "${ntdll_pe} lacks the lsteamclient redirect (patches/crossover/0007)"; exit 1; }
+# Refuse to install a 64-bit-only ntdll.so over a WoW64 runtime. Preflight
+# every 32-bit artifact before replacing any runtime files.
+pe32=${runtime}/lib/wine/i386-windows
+if [[ -d ${pe32} ]]; then
+  ntdll32=${WINE_BUILD}/dlls/ntdll/i386-windows/ntdll.dll
+  [[ -f ${ntdll32} && -f ${OUT}/i386-windows/lsteamclient.dll &&
+     -d ${prefix}/drive_c/windows/syswow64 ]] || {
+    print -u2 "WoW64 runtime needs a WoW64 WINE_BUILD, a dual-architecture bridge build and a WoW64 prefix"; exit 1
+  }
+  grep -q 'i386-windows/ntdll.dll' "${WINE_BUILD}/Makefile" || {
+    print -u2 "${WINE_BUILD} is not a WoW64 build"; exit 1
+  }
+  python3 -c 'import sys; sys.exit(0 if "steamclient".encode("utf-16-le") + b"\0\0" in open(sys.argv[1], "rb").read() else 1)' \
+    "${ntdll32}" || { print -u2 "${ntdll32} lacks the 32-bit redirect (patches/crossover/0008)"; exit 1; }
+fi
 pgrep -f "${runtime}/" >/dev/null && { print -u2 "Processes from ${runtime} are running; stop them first"; exit 1; }
 
 install_file() {  # source destination; keeps the first original as *.pre-lsteamclient
@@ -40,7 +55,15 @@ install_file() {  # source destination; keeps the first original as *.pre-lsteam
 }
 install_file "${ntdll_pe}" "${pe}/ntdll.dll"
 install_file "${ntdll_unix}" "${unix}/ntdll.so"
+install_file "${ntdll_pe}" "${prefix}/drive_c/windows/system32/ntdll.dll"
 install_file "${OUT}/lsteamclient.dll" "${pe}/lsteamclient.dll"
 install_file "${OUT}/lsteamclient.so" "${unix}/lsteamclient.so"
 cp "${OUT}/lsteamclient.dll" "${prefix}/drive_c/windows/system32/lsteamclient.dll"
 print "installed ${prefix}/drive_c/windows/system32/lsteamclient.dll"
+if [[ -d ${pe32} ]]; then
+  install_file "${ntdll32}" "${pe32}/ntdll.dll"
+  install_file "${ntdll32}" "${prefix}/drive_c/windows/syswow64/ntdll.dll"
+  install_file "${OUT}/i386-windows/lsteamclient.dll" "${pe32}/lsteamclient.dll"
+  cp "${OUT}/i386-windows/lsteamclient.dll" "${prefix}/drive_c/windows/syswow64/lsteamclient.dll"
+  print "installed ${prefix}/drive_c/windows/syswow64/lsteamclient.dll"
+fi

@@ -90,6 +90,80 @@ wine mwxr-steam.exe -- 'C:\path\to\game.exe' [arguments]` with the runtime copy.
 - Steam Cloud: macOS Steam maps Windows save locations (`WinAppDataLocalLow` and so on)
   to macOS folders, not to the prefix, so Cloud saves do not follow the game's files.
 - No Steam overlay; Steam Input keyboard glyphs have no native key codes.
-- 64-bit games only (this CrossOver build has no 32-bit side).
+- The original runtime is 64-bit only. The WoW64 build supports 32-bit Steam calls too; see below.
 - Games that relaunch themselves through Steam (`SteamAPI_RestartAppIfNecessary`) need
   `SteamAppId` set, as the launchers do.
+
+
+## WoW64 / 32-bit apps, 2026-10-28
+
+The Steam bridge now builds both PE architectures against a WoW64 Wine tree.
+Both use the same x86_64 native `lsteamclient.so` and macOS Steam library.
+Proton already provides generated WoW64 interface and callback conversions;
+this port enables them rather than introducing a second RPC transport.
+
+Apply `patches/crossover/0008-ntdll-lsteamclient-wow64.patch` after 0007 in the
+CrossOver source. It adds the 32-bit Steam DLL names and dependency redirects,
+converts the two module handles at the WoW64 boundary, and writes x86 jumps
+for PE32 modules. Crucially, PE32 must reserve the native `pe_module_loaded`
+Unix-call slot: otherwise its redirect calls that stub and returns
+`STATUS_NOT_IMPLEMENTED`. PE32 and PE32+ images must match their target's
+architecture. Redirect failures now produce a loader warning.
+
+```sh
+# From ~/Code/wine-crossover/build-wow64, after applying 0008:
+make -j6 dlls/ntdll/ntdll.so dlls/ntdll/x86_64-windows/ntdll.dll dlls/ntdll/i386-windows/ntdll.dll
+# From the bridge checkout:
+WINE_BUILD=~/Code/wine-crossover/build-wow64 OUT=$PWD/build-in-process/lsteamclient-wow64 scripts/build-lsteamclient.zsh
+WINE_BUILD=~/Code/wine-crossover/build-wow64 OUT=$PWD/build-in-process/lsteamclient-wow64 scripts/install-lsteamclient.zsh RUNTIME PREFIX
+```
+
+Use a stopped WoW64 prefix. Installation updates both runtime and prefix
+ntdll copies, the Win64 bridge in `system32`, and the Win32 bridge in
+`syswow64`. Updating only the runtime leaves a prefix using stale ntdll code.
+The installer rejects a 64-bit-only build for a WoW64 runtime. Existing
+64-bit-only prefixes need their WoW64 system files initialized with the new
+runtime first. `game-prefix.zsh` syncs both bridge DLLs; an old template also
+needs rebuilding with the WoW64 runtime before cloning new game prefixes.
+No 32-bit DXMT or XR DLL is provided by this change.
+
+### Verified scope
+
+Tested from bridge base `7ad96c7` plus this uncommitted change, CrossOver 26.3
+WoW64, macOS 27.0.1, with the user's signed-in Steam Play client, app 244210.
+The test used an APFS-cloned runtime and a private prefix under
+`build-in-process/lsteamclient-wow64/test`; it did not change the game prefix
+or the Steam Play wrapper's selected runtime.
+After the passing tests, the bridge and matching ntdlls were also installed in
+`~/Code/wine-crossover/runtime-wow64`, retaining installer backups. Both probes
+were repeated against that installed runtime and returned 0.
+
+Both `i686` and `x86_64` versions of `tests/windows/steam_bridge_probe.cpp`
+returned 0 and verified:
+
+- The actual Windows `steamclient[64].dll` redirects to `lsteamclient.dll`.
+- Native Steam pipe/user connection, valid Steam ID, persona string, app ID
+  244210, and `BLoggedOn() == true`.
+- `UserStatsReceived_t`: successful result, matching app and user, including
+  the macOS callback's compact 20-byte payload (Windows adds trailing padding).
+- `GetNumberOfCurrentPlayers`: asynchronous completion and successful result
+  retrieval through `ISteamUtils`, then clean pipe release.
+
+The probe calls the explicit MSVC return-buffer ABI for `GetSteamID`;
+MinGW's C++ small-class return convention otherwise produces a misleading
+invalid ID even though Steam is signed in. Native identity values are not
+printed. Each architecture received four callbacks, one stats callback.
+
+Reproduce with an owned, installed app ID and an isolated installed prefix:
+
+```sh
+python3 scripts/test-lsteamclient.py --runtime RUNTIME --prefix PREFIX --steam-dir WINDOWS_STEAM_DIR --app-id 244210 --out build-in-process/lsteamclient-wow64/probes
+```
+
+The test terminates only the explicitly selected prefix's Wine server between
+architectures. Exit 3 from the probe means callback/online checks were
+incomplete; it is not evidence that the user is signed out. The user confirmed on 2026-10-28 that Assetto Corsa reaches the menu with the
+WoW64/.NET setup; see [the rollout evidence](steam-play.md#assetto-corsa-wow64-rollout-2026-10-28).
+Racing/VR, Steam Cloud save mapping, the overlay, networking callbacks and
+arbitrary game compatibility remain unverified. Its 64-bit
+race engine can continue using the existing 64-bit XR bridge.

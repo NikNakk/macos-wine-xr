@@ -117,7 +117,8 @@ a runtime made for testing must keep that file's time (`cp -cpR`, or `touch -r`)
 Wine or changing its prefix. A 32-bit entry requires the selected Wine runtime
 to contain `lib/wine/i386-windows/ntdll.dll`. Without it, the runner reports an
 explicit compatibility error and keeps the normal Steam entry; it does not
-substitute a different game executable. This catches Assetto Corsa's 32-bit
+substitute a different game executable. With the macOS Steam bridge selected, it also requires a 32-bit `lsteamclient.dll`.
+This catches Assetto Corsa's 32-bit
 `AssettoCorsa.exe` launcher on the current 64-bit-only rig runtime. Running its
 64-bit race engine directly is a separate, explicit configuration decision.
 
@@ -132,3 +133,12 @@ runtime compatibility checks. On 2026-10-27, Audio Trip (826540) passed through
 the rig runner after loader provisioning, created an OpenXR/Metal session,
 rendered frames and was detected by SwiftXR Shell's external-session handoff.
 The test was stopped through the runner's normal termination trap.
+
+
+The WoW64 Steam bridge is now verified with live 32-bit and 64-bit API probes;
+see [the build, installation and evidence](lsteamclient.md#wow64--32-bit-apps-2026-10-28).
+Steam Play still uses the runtime selected by its rig wrapper. Select the
+installed WoW64 runtime (`MWXR_IN_PROCESS_WINE`) to use its 32-bit side;
+this does not itself install .NET or the game's redistributables. Existing
+64-bit prefix templates need WoW64 initialization before use with 32-bit
+launchers. The game-prefix sync copies the 32-bit bridge into `syswow64`.

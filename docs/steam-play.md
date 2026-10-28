@@ -141,4 +141,105 @@ call imported nothing. Tests: `python3 tests/windows/test_steam_play_install_scr
   copy Steam installs.
 - Steam client updates: the gate depends on the `"linux"` comparison keeping its shape.
   `install-steam-play.zsh` and the test check it without starting Steam.
-- 64-bit games only, as the runtime (`tools/steam_games/check_launch.py`).
+- Runtime support is selected per game: Assetto Corsa uses the WoW64 runtime;
+  other games keep the original 64-bit runtime. The launch preflight checks
+  both Wine and Steam bridge architecture support.
+
+
+## Assetto Corsa WoW64 rollout, 2026-10-28
+
+The rig wrapper `~/Windows/run-windows-game.zsh` sources
+`scripts/steam-play-game-settings.zsh` before assigning its normal defaults.
+For app **244210** only, absent an explicit caller override, that selects:
+
+- `~/Code/wine-crossover/runtime-wow64`, with both Steam bridge architectures.
+- `MWXR_GAME_PREFIXES=~/Windows/prefixes-wow64` and `GAME_PREFIX=pergame`.
+- A fresh WoW64 template and `~/Windows/prefixes-wow64/244210`, separate from
+  the existing 64-bit template/game prefixes.
+
+Explicit `MWXR_IN_PROCESS_WINE`, `MWXR_GAME_PREFIXES` and `GAME_PREFIX` values
+remain authoritative. The source line in the rig wrapper is:
+
+```zsh
+source "${bridge}/scripts/steam-play-game-settings.zsh"
+```
+
+The shared Windows Steam client directory is provisioned one DLL at a time:
+`steamclient.dll` for the launcher and `steamclient64.dll` for the race engine.
+An existing Win64 DLL no longer masks a missing Win32 DLL.
+
+### Library placement
+
+The Windows Steam installation was APFS-cloned from
+`~/Windows/prefix/drive_c/Program Files (x86)/Steam/steamapps/common/assettocorsa`
+to macOS Steam's `~/Library/Application Support/Steam/steamapps/common/assettocorsa`.
+All **34,824 files / 44,949,470,831 logical bytes** matched by path, type and
+size; SHA-256 matched for the launcher, both race engines, x64 OpenVR DLL and
+native Chromium DLL. These are cloned blocks, not an independently downloaded
+45 GB copy. The original directory and Windows manifest remain available.
+
+With Steam stopped cleanly via its `-shutdown` command, its existing
+`appmanifest_244210.acf` was copied into macOS Steam's `steamapps`. App 244210
+was added to the Steam Play `games` list, and Steam was restarted through
+`Steam Play.app`. Steam's own `libraryfolders.vdf` now lists the installed app
+and its size; `compat_log.txt` records `Mapping AppID 244210 to tool
+"macos-wine-xr" with priority 250` and the app-config-changed callback.
+No broad mapping for other games was added.
+
+The rig wrapper and games list were backed up as
+`run-windows-game.zsh.before-ac-wow64-20261028` and
+`games.before-ac-wow64-20261028` beside their originals. Rollback can restore
+those files with Steam stopped; the original Windows installation was retained.
+
+### Checks and remaining dependencies
+
+The wrapper launched the original `AssettoCorsa.exe` from the macOS Steam
+library and selected the new per-game prefix. It initially exited with 255;
+`+mscoree` diagnostics identify `CLRRuntimeInfo_GetRuntimeHost: Wine Mono is
+not installed`. This is a CLR dependency failure, after runtime/prefix
+selection, not evidence of a Steam account or bridge failure.
+Native .NET Framework 4.0 and then 4.8 were installed successfully using the
+official Winetricks recipe (script SHA-256
+`672a1ff4442e8691a3ffc0e6860137e201a1d1227e9b3044245f1731e9e9837e`)
+and checksum-verified Microsoft installers. The first attempt lost Wine's
+bundled FreeType path when launched through a system shell, producing console
+font errors; it was stopped and replaced from the clean WoW64 template. The
+failed-attempt backup was removed after the successful .NET/launcher retry.
+The successful retry used a Wine shell wrapper which exports
+`DYLD_LIBRARY_PATH` and `DYLD_FALLBACK_LIBRARY_PATH` inside the script before
+execing the runtime. This avoids system-shell DYLD environment stripping.
+Only Assetto Corsa's new prefix was affected; the original install and other
+game prefixes were not changed. Winetricks records `dotnet40` and `dotnet48`.
+
+The subsequent original-launcher test remained running for 40 seconds and
+was stopped through the runner's normal per-game termination path. Its own
+`Documents/Assetto Corsa/logs/launcher.log` records successful Steam API
+initialization, screen/theme initialization, and the macOS library's intro
+video URL. The CEF log reports the video playing. These were startup/log checks. The user subsequently confirmed that Assetto
+Corsa runs all the way through to the menu (2026-10-28). WPF logged a non-fatal
+OpenGL framebuffer error. Racing, VR, wheel input and force feedback have
+not been validated.
+
+Unit checks cover Assetto Corsa's selection, other-game defaults, explicit
+overrides, architecture-specific bridge provisioning and launch preflight:
+
+```sh
+python3 tests/macos/test_steam_play_game_settings.py
+python3 tests/macos/test_game_prefix_sync.py
+python3 tests/windows/test_game_launch_preflight.py
+```
+
+
+Native Steam's `-applaunch 244210` was also requested after this setup, but
+no new Steam Play dispatch appeared in `steam-play.log` during the check.
+The desktop had relocked, preventing inspection of any first-launch Steam
+prompt. The successful launcher evidence above is from the rig runner with
+Steam's selected executable/workdir, not a verified Play-button session.
+The user subsequently confirmed on 2026-10-28 that the game runs all the way
+through to the menu, using this setup (bridge base `7ad96c7` plus the
+uncommitted WoW64/Assetto Corsa changes). This confirms menu startup and
+supersedes the pending menu-visibility check above. The exact launch entry
+and whether this was the launcher menu or the race engine's menu were not
+specified; do not infer a completed Steam Play dispatch or a successful
+32-bit-to-64-bit race handoff solely from this report. Racing, VR and input
+remain unvalidated.
