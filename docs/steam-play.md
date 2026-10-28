@@ -230,16 +230,38 @@ python3 tests/windows/test_game_launch_preflight.py
 ```
 
 
-Native Steam's `-applaunch 244210` was also requested after this setup, but
-no new Steam Play dispatch appeared in `steam-play.log` during the check.
-The desktop had relocked, preventing inspection of any first-launch Steam
-prompt. The successful launcher evidence above is from the rig runner with
-Steam's selected executable/workdir, not a verified Play-button session.
-The user subsequently confirmed on 2026-10-28 that the game runs all the way
-through to the menu, using this setup (bridge base `7ad96c7` plus the
-uncommitted WoW64/Assetto Corsa changes). This confirms menu startup and
-supersedes the pending menu-visibility check above. The exact launch entry
-and whether this was the launcher menu or the race engine's menu were not
-specified; do not infer a completed Steam Play dispatch or a successful
-32-bit-to-64-bit race handoff solely from this report. Racing, VR and input
-remain unvalidated.
+From Steam's Play button (`steam-play.log`, 19:24): Steam ran the setup script (eight
+redistributable installers, all skipped; .NET was already in the prefix from
+Winetricks), then `waitforexitandrun` with `assettocorsa/AssettoCorsa.exe` from macOS
+Steam's library; the runner chose `~/Windows/prefixes-wow64/244210`, and the launcher
+reached its menu. It ran for about 1.5 minutes and exited with 255. Racing (the
+32-bit launcher handing over to the 64-bit race engine), VR and input are not
+validated.
+
+## Games installed elsewhere
+
+Games already installed by Windows Steam in the rig prefix (or by SteamCMD) become
+installed games in macOS Steam without a download:
+
+1. Quit Steam (`open steam://exit`).
+2. Clone the game folder into macOS Steam's `steamapps/common` (`cp -cpR`: an APFS clone
+   of the whole tree, which takes no space until a file changes).
+3. Copy its `appmanifest_<appid>.acf` beside macOS Steam's others. Windows Steam's
+   manifest names the Windows depots, so Steam has nothing to download.
+4. Add the app ID to the Steam Play `games` list and start Steam through Steam Play.app.
+
+Steam then lists the game as installed (`StateFlags` 4, and its size in
+`libraryfolders.vdf`) and maps it to the tool. On 2026-10-28 this moved Assetto Corsa
+(244210), Half-Life: Alyx (546560, 3,176 files, 73.5 GB) and Audio Trip (826540, 2.1 GB);
+paths and sizes matched the originals, Steam queued no download, and no other game's
+depots changed. Steamworks Shared then showed an update required, for the
+redistributables those games use. The originals stay in the rig prefix.
+
+Half-Life: Alyx keeps its saves in `game/hlvr/save` inside the game folder, and macOS
+Steam's Cloud had already put older saves (2026-10-14) in an otherwise empty
+`steamapps/common/Half-Life Alyx`. That folder was moved to
+`~/Windows/backups/half-life-alyx-macos-steam-folder-20261028`, and the clone brought the
+rig copy's newer saves (2026-10-27). From Steam Play, the runner points
+`run-alyx-xrizer.zsh` at the copy Steam installed (`ALYX_GAME_ROOT` from
+`STEAM_COMPAT_INSTALL_PATH`); its prefix and settings are still the rig prefix's. Steam
+Cloud may ask which saves to keep on the first start.

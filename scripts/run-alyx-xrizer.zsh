@@ -71,7 +71,8 @@ case ${steam} in
 esac
 if [[ ${ALYX_DRY_RUN:-0} != 1 ]]; then
   if [[ ${steam} == macos ]]; then
-    pgrep -x steam_osx >/dev/null || { print -u2 'Start macOS Steam first'; exit 1; }
+    # Under Steam Play (GAME_EXE), Steam is running by definition and pgrep cannot see it.
+    [[ -n ${GAME_EXE:-} ]] || pgrep -x steam_osx >/dev/null || { print -u2 'Start macOS Steam first'; exit 1; }
     pgrep -f 'steam\.exe' >/dev/null && { print -u2 'Quit Windows Steam first: one account cannot be signed in to both'; exit 1; }
   else
     pgrep -f 'steam\.exe' >/dev/null || { print -u2 'Start Windows Steam in the prefix first'; exit 1; }
