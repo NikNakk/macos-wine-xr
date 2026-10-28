@@ -81,8 +81,60 @@ Steam client 1793056502, macOS 27.0.1, Apple Silicon:
 
 ## Limits
 
-- `run` calls (Steam's first-time setup scripts, such as Steamworks Shared's
-  `iscriptevaluator.exe` for redistributables) are logged and skipped.
+- Setup scripts: registry values are applied, redistributable installers are not (below).
+
+## Setup scripts
+
+Windows and Linux Steam run each game's install script the first time it is played:
+registry values, and redistributable installers from Steamworks Shared (228980), each
+recorded under a "has run" registry key so it runs once. SteamCMD does not run them, so
+games installed with `steam_games.py install` never had them either, and relied on Wine's
+own runtime libraries.
+
+macOS Steam asks the tool to run them, as Linux Steam asks Proton:
+
+```
+mwxr-steam-play run <client>/legacycompat/iscriptevaluator.exe legacycompat\evaluatorscript_<appid>.vdf
+```
+
+from the client's folder (`.../Steam.AppBundle/Steam/Contents/MacOS`), with the game's
+`STEAM_COMPAT_APP_ID`, `STEAM_COMPAT_DATA_PATH` (`steamapps/compatdata/<appid>`),
+`STEAM_COMPAT_INSTALL_PATH` and, when redistributables are involved, `STEAM_COMPAT_MOUNTS`
+(the Steamworks Shared folder). macOS Steam does not ship `iscriptevaluator.exe`
+(`legacycompat` is empty apart from the script during the call), and deletes the script
+afterwards. The tool saves each call in `~/Library/Logs/macos-wine-xr/steam-play-run/<time>-<appid>/`
+(`call.txt`, `env.txt` without the account name, the script), then runs the rig runner
+with `GAME_SETUP_SCRIPT` set to the saved script. The runner makes the game's prefix if
+it is new, and `tools/steam_play/install_script.py` turns the script into a `.reg` file
+that `wine reg import` applies there. The result's digest is kept in the prefix
+(`.mwxr-setup-<appid>.sha1`), so the call Steam makes before each start imports nothing
+when nothing changed. Every step applied or skipped is logged in `steam-play.log`. The
+tool returns 0 even when this fails, so a setup problem never stops the game.
+
+The script is already resolved by Steam: one numbered entry per step, each with `appid`
+(228980 for the shared redistributables), `mode`, `install_path` (a macOS path, which
+`%INSTALLDIR%` stands for) and `compat_installscript`, which holds the usual install
+script sections: `Registry` (key, then value type such as `string`, then name and value)
+and `run process` (named entries with `hasrunkey`, `process 1`, `command 1` and
+`requirement_os`). Seen on 2026-10-28:
+
+- Mr. Robot (20710): one `Registry` step, `HKLM\SOFTWARE\Moonpod\MrRobot` `installpath`.
+  Steam called it twice: `mode 2` with no language when the install finished, and
+  `mode 1` with `language english` just before the game started.
+- Canyon Capers (275490), when its install finished: four `run process` steps from
+  Steamworks Shared, Visual C++ 2012 and 2013 (x86 and x64), DirectX June 2010
+  (`DXSETUP.exe /silent`) and OpenAL (`oalinst.exe /s`).
+
+Every one of those installers is a 32-bit exe, `vcredist_x64.exe` included (a 32-bit
+bootstrapper), so none can run on the 64-bit-only runtime; games rely on Wine's own
+runtime libraries, as the SteamCMD installs always have. Installers are logged and
+skipped, and their `hasrunkey` values are left unset. Registry steps are applied:
+`string` and `dword` values, with `%INSTALLDIR%` as the install folder's Windows path
+(`Z:\Users\...`), and a block named after a language only for the script's language.
+
+Replaying Mr. Robot's captured call through the installed tool put
+`HKLM\SOFTWARE\Moonpod\MrRobot` `installpath` into `~/Windows/prefixes/20710`; a second
+call imported nothing. Tests: `python3 tests/windows/test_steam_play_install_script.py`.
 - Under Steam, `pgrep` does not list `steam_osx`, so the runner skips its "is Steam
   running" check for games Steam starts.
 - Half-Life: Alyx still goes to `run-alyx-xrizer.zsh` with its rig-prefix install, not the

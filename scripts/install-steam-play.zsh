@@ -38,6 +38,8 @@ codesign -f -s - "${build}/libmwxr_steam_compat_gate.dylib" "${build}/steam-play
 
 tool="${payload}/compatibilitytools.d/macos-wine-xr"
 mkdir -p "${tool}"
+# Replaced, not overwritten: a running Steam has the old library mapped.
+rm -f "${payload}/libmwxr_steam_compat_gate.dylib" "${payload}/steam-compat-gate-scan"
 cp -c "${build}/libmwxr_steam_compat_gate.dylib" "${build}/steam-compat-gate-scan" "${payload}/"
 cp -c "${repo}/tools/steam_play/compatibilitytool.vdf" "${repo}/tools/steam_play/toolmanifest.vdf" \
   "${repo}/tools/steam_play/mwxr-steam-play" "${tool}/"

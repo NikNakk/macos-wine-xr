@@ -18,6 +18,8 @@
 #   GAME_EXE       the game's exe (unix path) instead of its launch entry, and GAME_WORKDIR
 #                  its working folder: set by the Steam Play tool (docs/steam-play.md), for
 #                  games macOS Steam installed itself; these get their own prefix
+#   GAME_SETUP_SCRIPT  a Steam install script (evaluatorscript_<appid>.vdf) to apply to the
+#                  game's prefix instead of starting it, also from the Steam Play tool
 # Stopping this script (SIGTERM, SIGINT or SIGHUP, as a launcher's Stop does) closes the
 # game: the whole prefix's wineserver for a per-game prefix, the game's processes in the
 # rig prefix.
@@ -34,6 +36,31 @@ appid=$1; shift
 : ${MWXR_IN_PROCESS_WINE:?Wine runtime with lsteamclient}
 : ${MWXR_XRIZER_ROOT:?xrizer provision}
 : ${MWXR_NATIVE_RUNTIME_JSON:?x86_64 Monado runtime manifest}
+
+if [[ -n ${GAME_SETUP_SCRIPT:-} ]]; then
+  # A Steam install script for the game (docs/steam-play.md, Setup scripts): its Registry
+  # steps go into the game's own prefix; installers are reported and skipped. Steam calls
+  # this when the install finishes and before each start, so an unchanged result is not
+  # imported again.
+  prefix=$("${repo}/scripts/game-prefix.zsh" ensure "${appid}")
+  work=$(mktemp -d "${TMPDIR:-/tmp}/steam-setup.XXXXXX")
+  trap 'rm -rf "${work}"' EXIT
+  python3 "${repo}/tools/steam_play/install_script.py" "${GAME_SETUP_SCRIPT}" --reg "${work}/setup.reg"
+  [[ -f ${work}/setup.reg ]] || exit 0
+  stamp=${prefix}/.mwxr-setup-${appid}.sha1
+  digest=$(shasum "${work}/setup.reg" | cut -d' ' -f1)
+  if [[ -f ${stamp} && $(<"${stamp}") == "${digest}" ]]; then
+    print "Setup registry values for ${appid} already in ${prefix}"
+    exit 0
+  fi
+  export WINEPREFIX=${prefix} WINEDEBUG=-all WINEMSYNC=${WINEMSYNC:-1}
+  export DYLD_FALLBACK_LIBRARY_PATH=${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-unix:${MWXR_IN_PROCESS_WINE}/lib
+  "${MWXR_IN_PROCESS_WINE}/bin/wine" reg import "$(WINEDEBUG=-all "${MWXR_IN_PROCESS_WINE}/bin/wine" winepath -w "${work}/setup.reg" | tr -d '\r')"
+  "${MWXR_IN_PROCESS_WINE}/bin/wineserver" -w  # the registry is saved when the server exits
+  print -r -- "${digest}" > "${stamp}"
+  print "Imported setup registry values for ${appid} into ${prefix}"
+  exit 0
+fi
 
 if [[ ${appid} == 546560 ]]; then
   ALYX_STEAM=macos exec "${repo}/scripts/run-alyx-xrizer.zsh" "$@"
