@@ -1,0 +1,53 @@
+#!/bin/sh
+# Copyright 2026, Nick Kennedy
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# The macos-wine-xr Steam Play tool (docs/steam-play.md). macOS Steam, started by
+# "Steam Play.app", runs this as
+#
+#   mwxr-steam-play <verb> <game exe> [arguments...]
+#
+# from the game's working folder, with STEAM_COMPAT_APP_ID, STEAM_COMPAT_INSTALL_PATH and
+# STEAM_COMPAT_DATA_PATH set. waitforexitandrun is the game: it goes to the rig's
+# run-windows-game.zsh (named in the file "runner" beside this script) with the exe Steam
+# chose, and Steam counts the game as running until it returns. run is a helper Steam
+# starts around a launch (first-time setup scripts); those are skipped for now.
+set -u
+here=$(cd "$(dirname "$0")" && pwd)
+logs="$HOME/Library/Logs/macos-wine-xr"
+mkdir -p "$logs"
+log="$logs/steam-play.log"
+say() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$log"; }
+
+verb=${1:-}
+case "$verb" in
+  waitforexitandrun|run) shift ;;
+  getcompatpath) printf '%s\n' "${STEAM_COMPAT_DATA_PATH:-}"; exit 0 ;;
+  getnativepath) printf '%s\n' "${2:-}"; exit 0 ;;
+  *) say "unexpected verb '$verb'; treating it as the game"; verb=waitforexitandrun ;;
+esac
+exe=${1:-}
+[ -n "$exe" ] && shift
+appid=${STEAM_COMPAT_APP_ID:-${SteamAppId:-0}}
+say "$verb app=$appid exe=$exe args=$* cwd=$PWD"
+[ -n "$exe" ] || { say "no executable given"; exit 2; }
+
+if [ "$verb" = run ]; then
+  say "skipped helper $exe"
+  exit 0
+fi
+
+runner=$HOME/Windows/run-windows-game.zsh
+[ -r "$here/runner" ] && read -r runner < "$here/runner"
+[ -x "$runner" ] || { say "runner $runner is missing"; exit 1; }
+
+case "$exe" in
+  /*) ;;
+  *) exe="$PWD/$exe" ;;
+esac
+GAME_EXE=$exe GAME_WORKDIR=$PWD
+export GAME_EXE GAME_WORKDIR
+"$runner" "$appid" "$@" >> "$log" 2>&1
+status=$?
+say "app=$appid exited with $status"
+exit $status
