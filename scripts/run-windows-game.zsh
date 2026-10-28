@@ -37,14 +37,46 @@ appid=$1; shift
 : ${MWXR_XRIZER_ROOT:?xrizer provision}
 : ${MWXR_NATIVE_RUNTIME_JSON:?x86_64 Monado runtime manifest}
 
+# Steam Cloud finds a Steam Play game's Windows save folders under
+# STEAM_COMPAT_DATA_PATH/pfx/drive_c/users/steamuser (docs/steam-play.md, Steam Cloud):
+# link pfx to the game's own prefix, and steamuser to the prefix's Wine user. An existing
+# pfx that is not a link is left alone.
+link_compat_data() {  # prefix
+  local data=${STEAM_COMPAT_DATA_PATH:-} users=$1/drive_c/users user
+  [[ -n ${data} && -d ${users} ]] || return 0
+  mkdir -p "${data}"
+  if [[ -L ${data}/pfx || ! -e ${data}/pfx ]]; then
+    [[ $(readlink "${data}/pfx" 2>/dev/null) == "$1" ]] || ln -sfn "$1" "${data}/pfx"
+  fi
+  if [[ ! -e ${users}/steamuser ]]; then
+    for user in "${users}"/*(/N:t); do
+      [[ ${user} == (Public|steamuser) ]] || { ln -s "${user}" "${users}/steamuser"; break; }
+    done
+  fi
+}
+
 if [[ -n ${GAME_SETUP_SCRIPT:-} ]]; then
   # A Steam install script for the game (docs/steam-play.md, Setup scripts): its Registry
   # steps go into the game's own prefix; installers are reported and skipped. Steam calls
   # this when the install finishes and before each start, so an unchanged result is not
-  # imported again.
-  prefix=$("${repo}/scripts/game-prefix.zsh" ensure "${appid}")
+  # imported again. Steam syncs Cloud saves after this call and before the start, so the
+  # prefix and its Cloud links are made here.
+  # On uninstall Steam sends the script again with mode 3; nothing of it is applied, and
+  # the game's prefix is neither made nor removed.
+  if python3 "${repo}/tools/steam_play/install_script.py" "${GAME_SETUP_SCRIPT}" --uninstall; then
+    print "Uninstall script for ${appid}: nothing to do; its prefix is kept"
+    exit 0
+  fi
   work=$(mktemp -d "${TMPDIR:-/tmp}/steam-setup.XXXXXX")
   trap 'rm -rf "${work}"' EXIT
+  # Half-Life: Alyx's Wine route runs in the rig prefix, not a prefix of its own, and keeps
+  # its saves in its game folder.
+  if [[ ${appid} == 546560 ]]; then
+    prefix=${MWXR_IN_PROCESS_PREFIX}
+  else
+    prefix=$("${repo}/scripts/game-prefix.zsh" ensure "${appid}")
+    link_compat_data "${prefix}"
+  fi
   python3 "${repo}/tools/steam_play/install_script.py" "${GAME_SETUP_SCRIPT}" --reg "${work}/setup.reg"
   [[ -f ${work}/setup.reg ]] || exit 0
   stamp=${prefix}/.mwxr-setup-${appid}.sha1
@@ -63,6 +95,10 @@ if [[ -n ${GAME_SETUP_SCRIPT:-} ]]; then
 fi
 
 if [[ ${appid} == 546560 ]]; then
+  # MWXR_ALYX=native (from Steam's Launch Options): the native ARM64 build instead.
+  if [[ ${MWXR_ALYX:-wine} == native ]]; then
+    exec "${repo}/scripts/run-alyx-native.zsh" "$@"
+  fi
   # From Steam Play, the copy Steam installed (STEAM_COMPAT_INSTALL_PATH) rather than the
   # rig prefix's; the rig prefix still holds the saves and settings.
   if [[ -n ${GAME_EXE:-} && -n ${STEAM_COMPAT_INSTALL_PATH:-} ]]; then
@@ -97,7 +133,8 @@ python3 "${repo}/tools/steam_games/check_launch.py" \
 
 prefix_kind=${GAME_PREFIX:-$([[ ${library} == (shared|steam) ]] && print pergame || print rig)}
 case ${prefix_kind} in
-  pergame) MWXR_IN_PROCESS_PREFIX=$("${repo}/scripts/game-prefix.zsh" ensure "${appid}") ;;
+  pergame) MWXR_IN_PROCESS_PREFIX=$("${repo}/scripts/game-prefix.zsh" ensure "${appid}")
+           link_compat_data "${MWXR_IN_PROCESS_PREFIX}" ;;
   rig) ;;
   *) print -u2 "GAME_PREFIX must be pergame or rig"; exit 2 ;;
 esac

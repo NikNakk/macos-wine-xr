@@ -26,7 +26,7 @@ Steam.app's `Info.plist`, which breaks Valve's signature, and hooks much more of
    from the field's offset, which changes between client builds (`0x7b0` in 1785187029,
    `0x810` in 1793056502). Exactly one site must match or nothing is patched. The change is
    in memory only and ends when Steam quits.
-3. `STEAM_EXTRA_COMPAT_TOOLS_PATHS` registers **the macos-wine-xr tool**
+3. `STEAM_EXTRA_COMPAT_TOOLS_PATHS` registers **the macos-wine-xr-proton tool**
    (`tools/steam_play/`): `compatibilitytool.vdf` (Windows to macOS), `toolmanifest.vdf`, and
    `mwxr-steam-play`, which Steam runs as `mwxr-steam-play waitforexitandrun <exe> [args]`
    from the game's working folder with `STEAM_COMPAT_APP_ID` set. It starts
@@ -34,12 +34,13 @@ Steam.app's `Info.plist`, which breaks Valve's signature, and hooks much more of
    `GAME_EXE` and `GAME_WORKDIR`; the game gets its own prefix
    (`~/Windows/prefixes/<appid>`, `scripts/game-prefix.zsh`). Steam counts the game as
    running until the script returns.
-4. `STEAM_COMPAT_TOOL_MAPPINGS` (`APPID 250 macos-wine-xr`, comma-separated; 250 is the
-   lowest priority the client applies) maps **only the games listed** in
-   `~/Library/Application Support/macos-wine-xr/steam-play/games` to the tool. A listed
-   game that also has a macOS build (Hyperbolica does) installs as Windows; Steam asks
-   which launch entry to use where there are several (Hyperbolica's VR mode adds
-   `startXR`).
+4. `STEAM_COMPAT_TOOL_MAPPINGS` (`APPID 250 macos-wine-xr-proton`, comma-separated; 250 is the
+   lowest priority the client applies) maps the games in the payload's `mapped` file to
+   the tool: every Windows-only game in the library, every VR game with a Windows build,
+   and those listed in `games`
+   (Choosing games, below). A listed game that also has a macOS build (Hyperbolica does)
+   installs as Windows; Steam asks which launch entry to use where there are several
+   (Hyperbolica's VR mode adds `startXR`).
 
 Do not map app ID 0 (every game), as Linux Steam's "Enable Steam Play for all other
 titles" does. On 2026-10-28 that switched every installed game with a macOS build to its
@@ -52,21 +53,49 @@ with no files changed.
 
 ```sh
 scripts/install-steam-play.zsh                 # build and install; checks the installed Steam client
-$EDITOR ~/Library/Application\ Support/macos-wine-xr/steam-play/games   # one app ID per line
+$EDITOR ~/Library/Application\ Support/macos-wine-xr/steam-play/games   # other games with a macOS build to play as Windows; -APPID to leave one out
+python3 ~/Library/Application\ Support/macos-wine-xr/steam-play/steam_play_games.py list   # what is mapped and why
 open ~/Applications/Steam\ Play.app            # quit Steam first; start Steam this way from now on
 tests/macos/test_steam_compat_gate.zsh         # after a Steam client update
 scripts/install-steam-play.zsh --uninstall
 ```
 
-Then install and play the listed games from Steam's library as usual.
+Then install and play the mapped games from Steam's library as usual.
 `STEAM_PLAY_RUNNER` chooses the rig wrapper (default `~/Windows/run-windows-game.zsh`).
-Steam started from Steam.app has Steam Play off: listed games then look like macOS games
-that are not installed.
+Steam started from Steam.app has Steam Play off: Windows-only games then cannot be
+installed or started, and a listed game with a macOS build is targeted at its macOS
+build again (on 2026-10-28 Hyperbolica's update started for its macOS depot and finished
+on its Windows one, so nothing changed, but keep to Steam Play.app).
+
+## Choosing games
+
+macOS Steam shows no Compatibility section in a game's Properties, even with Steam Play
+on (that page is drawn for Linux only), so the choice is a file. Steam Play.app runs
+`steam_play_games.py sync` before each start (0.2 s, from Steam's offline caches), which
+writes the payload's `mapped` file from two sources:
+
+- every game in the library (the app IDs in `appcache/librarycache`) whose app info lists
+  Windows and not macOS: these cannot be played on macOS Steam otherwise, so mapping them
+  changes nothing else;
+- every VR game with a Windows build, macOS build or not (`steam_games.is_vr`: OpenVR,
+  OpenXR or VR-only support, or a VR launch entry), since macOS builds have no VR. Such a
+  game installs as Windows; one already installed as macOS would be switched (downloaded
+  again) at the next Steam start;
+- the app IDs listed in `games`: other games that also have a macOS build and should
+  install and start as Windows games. `-APPID` there leaves a game out, so a VR game with
+  a macOS build goes back to it.
+
+On 2026-10-28 that mapped 135 games: 127 Windows-only, 4 VR games with a macOS build
+(InMind VR, SEGA Mega Drive & Genesis Classics, Serious Sam Fusion 2017 (beta) and
+Subnautica, none installed; the two flat games with a VR mode install as Windows too
+unless excluded) and the 4 listed (Hyperbolica, Assetto Corsa, Half-Life: Alyx, Audio
+Trip; Hyperbolica is also a VR game). No installed macOS game changed depots. If the sync fails, the previous `mapped` (or `games` alone) is
+used. Tests: `python3 tests/macos/test_steam_play_games.py`.
 
 Logs, in `~/Library/Logs/macos-wine-xr`: `steam-compat-gate.log` (expect
 `Steam Play gate open`), `steam-play.log` (each call from Steam and the runner's output)
 and `<appid>-<time>/game.log`. Steam's own: `logs/compat_log.txt` (`Registering tool
-macos-wine-xr`, `Mapping AppID N to tool`) and `logs/content_log.txt` (depots).
+macos-wine-xr-proton`, `Mapping AppID N to tool`) and `logs/content_log.txt` (depots).
 
 ## Results, 2026-10-28
 
@@ -78,10 +107,6 @@ Steam client 1793056502, macOS 27.0.1, Apple Silicon:
 - Play, normal mode: Steam called the tool, which made the game's prefix and started it;
   D3D11 through DXMT (feature level 11.1). Steam tracked it until it was closed (exit 0).
   VR mode reached the tool with `startXR`; not run with a headset yet.
-
-## Limits
-
-- Setup scripts: registry values are applied, redistributable installers are not (below).
 
 ## Setup scripts
 
@@ -135,15 +160,95 @@ skipped, and their `hasrunkey` values are left unset. Registry steps are applied
 Replaying Mr. Robot's captured call through the installed tool put
 `HKLM\SOFTWARE\Moonpod\MrRobot` `installpath` into `~/Windows/prefixes/20710`; a second
 call imported nothing. Tests: `python3 tests/windows/test_steam_play_install_script.py`.
-- Under Steam, `pgrep` does not list `steam_osx`, so the runner skips its "is Steam
-  running" check for games Steam starts.
-- Half-Life: Alyx still goes to `run-alyx-xrizer.zsh` with its rig-prefix install, not the
-  copy Steam installs.
+
+## Launch Options
+
+Words of the form `MWXR_NAME=value` in a game's Launch Options (Steam: the game's
+Properties, General) are settings for that launch: the tool exports them and does not
+pass them to the game. A literal `%command%`, as Linux Steam uses, is dropped, so
+`MWXR_ALYX=native %command%` works too. Each one is logged in `steam-play.log`
+(`launch option ...`). They reach the launch only, not the setup call before it.
+
+| Setting | Effect |
+| --- | --- |
+| `MWXR_ALYX=native` | Half-Life: Alyx starts its native ARM64 build (below) |
+| `MWXR_ALYX_OPTIMIZED=1` | with it, the native launcher's `--optimized` xrizer build |
+| `MWXR_WOW64=1` or `0` | the WoW64 or 64-bit runtime, whatever the game's exes are |
+
+Tested by calling the tool as Steam does; macOS Steam passing Launch Options to the tool
+is not confirmed yet.
+
+## Native Half-Life: Alyx
+
+With `MWXR_ALYX=native`, Play starts `scripts/run-alyx-native.zsh`, which runs
+`~/Code/alyx-native/run-alyx` (the Linux ARM64 build on its own host, against macOS
+Steam) with a run folder `~/Code/alyx-native/runs/steam-<time>` and a 12-hour limit
+instead of its 120-second default. The launcher already passes Alyx's `-vr -steam ...
++map startup`, so Steam's copies are dropped; any further Launch Options go to the engine.
+Steam's Stop reaches the launcher as SIGINT, which stops the game's process group (a
+SIGTERM would end the launcher and leave the game running). The native build runs from
+its own prepared folder (`workspace/alyx-native-game-root`), not the copy Steam
+installed: Steam updates do not reach it and its saves are its own. Without the setting,
+Alyx keeps the Wine route. Tested with a stand-in launcher (arguments and stop); not yet
+started from Steam.
+
+## WoW64
+
+`scripts/steam-play-game-settings.zsh` gives a game the WoW64 runtime
+(`runtime-wow64`) and its own prefix root (`~/Windows/prefixes-wow64`) when any of its
+Windows executables is 32-bit: the exe Steam starts, or any Windows launch entry in
+Valve's app info found in the install folder (`tools/steam_play/game_arch.py`, about
+0.13 s). Checking every entry gives the setup call, which has no exe, the same answer as
+the launch, so both use the same prefix. On 2026-10-28: Assetto Corsa and Mr. Robot
+32-bit; Hyperbolica, Audio Trip and Half-Life: Alyx 64-bit. Outside Steam Play Assetto
+Corsa still uses WoW64 by app ID. `MWXR_WOW64` overrides the choice for a launch; the
+setup call before it still follows the exes. The WoW64 runtime has no 32-bit
+`winemetal.dll`, so a 32-bit Direct3D game would render with Wine's own Direct3D, not
+DXMT; 32-bit launchers like Assetto Corsa's are what it is for so far.
+Tests: `python3 tests/macos/test_steam_play_game_settings.py`.
+
+## Steam Cloud
+
+macOS Steam's client carries Linux Steam's Steam Play save mapping: it resolves the
+Windows Cloud roots (`WinAppDataLocalLow`, `WinAppDataRoaming`, `WinMyDocuments`,
+`WinSavedGames` and so on) under
+`steamapps/compatdata/<appid>/pfx/drive_c/users/steamuser/...`, as Proton's prefixes are
+laid out, but only when the game's compatibility tool has "proton" in its name
+(`V_stristr(name, "proton")` before the paths are set, in the same function that sets the
+host platform; a second check sets `STEAM_COMPAT_PROTON=1` for the game, which is the
+only other effect found). The tool was called `macos-wine-xr` until 2026-10-28, and
+Hyperbolica's Cloud sync logged `Unable to resolve path with root WinAppDataLocalLow
+(12)` at Steam start, at launch and at exit. It is now `macos-wine-xr-proton`.
+
+The runner links the rest: `compatdata/<appid>/pfx` to the game's own prefix, and
+`drive_c/users/steamuser` in the prefix to its Wine user (`crossover`), when it makes or
+uses a game's prefix for a launch or a setup call. A `pfx` that is a real folder is left
+alone. Steam syncs Cloud saves after the setup call and before the launch, so a game
+with a setup script gets its saves on the first start; one without gets them from its
+second start (saves made in the first session still upload when it exits).
+
+On 2026-10-28, with the new name and both links in place for Hyperbolica, Steam's sync at
+start resolved `compatdata/1256230/pfx/drive_c/users/steamuser/AppData/LocalLow/...` and
+downloaded `CodeParade/Hyperbolica/game.save` (447 bytes, the save from Windows Steam on
+2026-10-09) into `~/Windows/prefixes/1256230`. Games that save inside their own folder
+(Half-Life: Alyx) are synced from the install folder and need none of this.
+
+Linux Steam deletes `compatdata/<appid>` when a game is uninstalled, which with a `pfx`
+link could reach the prefix. macOS Steam does not: on 2026-10-28 Mr. Robot (not mapped)
+and Canyon Capers (mapped) were uninstalled with `pfx` links to decoy folders, and Steam
+removed the game folders and manifests and left `compatdata/<appid>`, the links and the
+decoys alone. Uninstalling also calls the setup script once more, with every step's
+`mode` 3; the runner recognises that and does nothing, so the prefix is neither made nor
+removed (it stays, as Proton's would not, until removed by hand).
+
+## Limits
+
+- Setup scripts: registry values are applied, redistributable installers are not.
+- Under Steam, `pgrep` does not list `steam_osx`, so the runner and
+  `run-alyx-xrizer.zsh` skip their "is Steam running" checks for games Steam starts.
 - Steam client updates: the gate depends on the `"linux"` comparison keeping its shape.
   `install-steam-play.zsh` and the test check it without starting Steam.
-- Runtime support is selected per game: Assetto Corsa uses the WoW64 runtime;
-  other games keep the original 64-bit runtime. The launch preflight checks
-  both Wine and Steam bridge architecture support.
+- The launch preflight checks both Wine and Steam bridge architecture support.
 
 
 ## Assetto Corsa WoW64 rollout, 2026-10-28

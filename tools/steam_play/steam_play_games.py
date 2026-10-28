@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+# Copyright 2026, Nick Kennedy
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""Which games macOS Steam maps to the Steam Play tool (docs/steam-play.md, Choosing games).
+
+Mapped: every game in your library that has a Windows build and no macOS build, every VR
+game with a Windows build (macOS builds have no VR), plus the app IDs listed in the
+payload's "games" file, minus those listed there as -APPID. Mapping a game that also has
+a macOS build makes Steam install its Windows build instead. Reads macOS Steam's
+offline caches (appinfo.vdf and the library cache).
+
+  steam_play_games.py sync [--payload DIR]   write DIR/mapped, which Steam Play.app reads
+  steam_play_games.py list [--payload DIR]   what is mapped and why
+"""
+import argparse
+import os
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))                       # installed copy
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'steam_games'))  # repository
+import steam_games  # noqa: E402
+
+PAYLOAD = Path.home() / 'Library/Application Support/macos-wine-xr/steam-play'
+
+
+def read_games(path):
+    """(listed, excluded) app IDs from a games file: one per line, -APPID to exclude, # comments."""
+    listed, excluded = set(), set()
+    if path.exists():
+        for line in path.read_text().splitlines():
+            word = line.split('#', 1)[0].strip()
+            if word.startswith('-') and word[1:].isdigit():
+                excluded.add(int(word[1:]))
+            elif word.isdigit():
+                listed.add(int(word))
+    return listed, excluded
+
+
+def oslist(info):
+    return set(str((info or {}).get('common', {}).get('oslist', '')).split(','))
+
+
+def windows_only(apps, owned):
+    out = set()
+    for appid in owned:
+        info = apps.get(appid)
+        common = (info or {}).get('common', {})
+        if not info or str(common.get('type', '')).lower() != 'game' or appid in steam_games.TOOLS:
+            continue
+        if 'windows' in oslist(info) and 'macos' not in oslist(info):
+            out.add(appid)
+    return out
+
+
+def vr_games(apps, owned):
+    """VR games with a Windows build, macOS build or not (steam_games.is_vr: OpenVR, OpenXR
+    or VR-only support, or a VR launch entry)."""
+    out = set()
+    for appid in owned:
+        info = apps.get(appid)
+        common = (info or {}).get('common', {})
+        if not info or str(common.get('type', '')).lower() != 'game' or appid in steam_games.TOOLS:
+            continue
+        if 'windows' in oslist(info) and steam_games.is_vr(info):
+            out.add(appid)
+    return out
+
+
+def owned_apps():
+    cache = steam_games.MAC_STEAM / 'appcache/librarycache'
+    return {int(d) for d in os.listdir(cache) if d.isdigit()} if cache.is_dir() else set()
+
+
+def mapping(apps, owned, listed, excluded):
+    """{appid: reason} for every mapped game: 'listed', 'vr' or 'windows-only'."""
+    out = {a: 'windows-only' for a in windows_only(apps, owned)}
+    out.update({a: 'vr' for a in vr_games(apps, owned) if a not in out})
+    out.update({a: 'listed' for a in listed})
+    for a in excluded:
+        out.pop(a, None)
+    return out
+
+
+def name(apps, appid):
+    return str((apps.get(appid) or {}).get('common', {}).get('name', appid))
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('command', choices=('sync', 'list'))
+    p.add_argument('--payload', type=Path, default=PAYLOAD)
+    a = p.parse_args()
+    apps = steam_games.read_appinfo()
+    listed, excluded = read_games(a.payload / 'games')
+    mapped = mapping(apps, owned_apps(), listed, excluded)
+    if a.command == 'sync':
+        lines = [f'{appid}   # {name(apps, appid)} ({why})' for appid, why in sorted(mapped.items())]
+        tmp = a.payload / 'mapped.new'
+        tmp.write_text('# Written by steam_play_games.py sync; edit "games" instead.\n' + '\n'.join(lines) + '\n')
+        tmp.replace(a.payload / 'mapped')
+        count = lambda why: sum(w == why for w in mapped.values())  # noqa: E731
+        print(f'{len(mapped)} games mapped: {count("listed")} listed, {count("vr")} VR with a macOS build, '
+              f'{count("windows-only")} Windows-only, {len(excluded)} excluded')
+    else:
+        for appid, why in sorted(mapped.items(), key=lambda i: name(apps, i[0]).lower()):
+            mac = ' (has a macOS build: installs as Windows)' if 'macos' in oslist(apps.get(appid)) else ''
+            print(f'{appid:>8}  {why:12}  {name(apps, appid)}{mac}')
+        for appid in sorted(excluded):
+            print(f'{appid:>8}  {"excluded":12}  {name(apps, appid)}')
+
+
+if __name__ == '__main__':
+    main()
