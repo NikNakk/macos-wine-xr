@@ -28,7 +28,8 @@ fi
 mkdir -p "${build}"
 clang -Wall -Wextra -O2 -arch arm64 -arch x86_64 -mmacosx-version-min=13.0 -dynamiclib \
   -install_name @rpath/libmwxr_steam_compat_gate.dylib \
-  "${repo}/src/macos/steam_compat_gate.c" -o "${build}/libmwxr_steam_compat_gate.dylib"
+  "${repo}/src/macos/steam_compat_gate.c" "${repo}/src/macos/steam_ui_patch.c" "${repo}/src/macos/steam_restart.c" \
+  -o "${build}/libmwxr_steam_compat_gate.dylib"
 clang -Wall -Wextra -O2 -arch arm64 -mmacosx-version-min=13.0 \
   "${repo}/src/macos/steam_play_launcher.c" -o "${build}/steam-play"
 clang -Wall -Wextra -O2 -arch arm64 -DMWXR_GATE_SCAN_MAIN \

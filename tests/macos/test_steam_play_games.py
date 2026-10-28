@@ -15,13 +15,15 @@ def app(name, oslist, kind='game'):
 
 APPS = {
     1: app('Windows only', 'windows'),
-    2: app('Windows and macOS', 'windows,macos'),
+    2: {'common': {'name': 'Windows and macOS', 'oslist': 'windows,macos', 'type': 'game', 'osextended': 'macos64'}},
     3: app('macOS only', 'macos'),
     4: app('Windows and Linux', 'windows,linux'),
     5: app('A Windows tool', 'windows', kind='tool'),
     6: {'common': {'name': 'VR, Windows and macOS', 'oslist': 'windows,macos', 'type': 'game',
                    'openvrsupport': '1'}},
     7: {'common': {'name': 'VR, macOS only', 'oslist': 'macos', 'type': 'game', 'openxrsupport': '1'}},
+    8: {'common': {'name': '32-bit macOS build', 'oslist': 'windows,macos', 'type': 'game'}},
+    9: {'common': {'name': '32-bit macOS only', 'oslist': 'macos', 'type': 'game'}},
     228980: app('Steamworks Common Redistributables', 'windows'),
 }
 
@@ -32,15 +34,18 @@ class SteamPlayGamesTests(unittest.TestCase):
 
     def test_games_with_a_macos_build_need_listing(self):
         mapped = games.mapping(APPS, set(APPS), listed={2}, excluded=set())
-        self.assertEqual(mapped, {1: 'windows-only', 4: 'windows-only', 6: 'vr', 2: 'listed'})
+        self.assertEqual(mapped, {1: 'windows-only', 4: 'windows-only', 6: 'vr', 8: 'mac-32-bit', 2: 'listed'})
+
+    def test_games_with_only_a_32_bit_macos_build_are_mapped(self):
+        self.assertEqual(games.mac_32_bit(APPS, set(APPS)), {6, 8})
 
     def test_vr_games_with_a_windows_build_are_mapped(self):
         self.assertEqual(games.vr_games(APPS, set(APPS)), {6})
         self.assertEqual(games.mapping(APPS, set(APPS), listed=set(), excluded={6}),
-                         {1: 'windows-only', 4: 'windows-only'})
+                         {1: 'windows-only', 4: 'windows-only', 8: 'mac-32-bit'})
 
     def test_exclusions_win(self):
-        mapped = games.mapping(APPS, set(APPS), listed={2}, excluded={1, 2, 6})
+        mapped = games.mapping(APPS, set(APPS), listed={2}, excluded={1, 2, 6, 8})
         self.assertEqual(mapped, {4: 'windows-only'})
 
     def test_only_owned_games_are_mapped(self):

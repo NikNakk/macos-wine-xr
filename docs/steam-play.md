@@ -69,8 +69,8 @@ on its Windows one, so nothing changed, but keep to Steam Play.app).
 
 ## Choosing games
 
-macOS Steam shows no Compatibility section in a game's Properties, even with Steam Play
-on (that page is drawn for Linux only), so the choice is a file. Steam Play.app runs
+A game's choice can be made in Steam, on the Compatibility page of its Properties (next
+section), or in the payload's `games` file, which that page writes. Steam Play.app runs
 `steam_play_games.py sync` before each start (0.2 s, from Steam's offline caches), which
 writes the payload's `mapped` file from two sources:
 
@@ -81,6 +81,10 @@ writes the payload's `mapped` file from two sources:
   OpenXR or VR-only support, or a VR launch entry), since macOS builds have no VR. Such a
   game installs as Windows; one already installed as macOS would be switched (downloaded
   again) at the next Steam start;
+- every game with a Windows build whose macOS build is 32-bit only: its app info's
+  `common.osextended` lacks `macos64`, the flag Steam's client checks for 64-bit macOS
+  (macOS has not run 32-bit apps since 10.15). All 13 installed macOS games have it; 120
+  owned games, Amnesia: The Dark Descent among them, do not;
 - the app IDs listed in `games`: other games that also have a macOS build and should
   install and start as Windows games. `-APPID` there leaves a game out, so a VR game with
   a macOS build goes back to it.
@@ -160,6 +164,65 @@ skipped, and their `hasrunkey` values are left unset. Registry steps are applied
 Replaying Mr. Robot's captured call through the installed tool put
 `HKLM\SOFTWARE\Moonpod\MrRobot` `installpath` into `~/Windows/prefixes/20710`; a second
 call imported nothing. Tests: `python3 tests/windows/test_steam_play_install_script.py`.
+
+## The Compatibility page
+
+macOS Steam draws no Compatibility page in a game's Properties, and its client has no
+handler for the page's requests. `src/macos/steam_ui_patch.c`, built into the gate
+library, supplies both, in memory:
+
+- The page: Steam's interface is web code in `steamui/`. The Properties window adds the
+  page only when `CI()`, which is `PLATFORM=="linux"`, is true (2 of its 23 uses). When
+  Steam's web helper ("Steam Helper") opens `steamui/sp.js`, our interposed `open`
+  (and `stat`, `lstat`, `openat`, `fopen`) gives it a copy, made once per `sp.js` in
+  `~/Library/Caches/macos-wine-xr/steamui`, in which those two checks read true.
+  `steam_osx`'s own size checks are not redirected: it compares its files' sizes with its
+  install record, and a different size made it re-extract its package and quit at every
+  start (seen while building this).
+- The tool list and choice: the page asks the client `CompatManager.GetCompatTools` and
+  `CompatManager.SpecifyCompatTool`, which macOS Steam answers with result 2, "no handler
+  for message" (seen with DevTools). In the copy, the hook that makes those requests
+  fetches `/mwxr/compat/<appid>.json` and `/mwxr/select/<appid>/<tool>.json` from
+  steamloopback.host instead, and the web helper's request for those files is answered
+  by the same library: the list from the `games` and `mapped` files, a choice written to
+  `games`. The dropdown offers Default (automatic: Windows for Windows-only and VR games,
+  the macOS build otherwise), macos-wine-xr (adds the app ID) and "None: the macOS build"
+  (adds `-APPID`). A choice is shown at once. While it differs from what Steam loaded at
+  its start (the answer's `mwxr_pending`), the dropdown's description reads "Applies when
+  Steam restarts" with a Restart Steam button, which calls Steam's own restart.
+- Steam's restart: Steam ends the client with exit code 42 and leaves the new start to
+  its parent, which for Valve's Steam.app is its launcher (`steam.sh`, a binary with
+  `-alwaysrelaunch` and `ReLaunchCmdLine`). Steam Play.app replaces itself with the
+  client, so `src/macos/steam_restart.c`, in the same library, catches `exit(42)` (and
+  `_exit(42)`) in `steam_osx`. After Steam's own exit handlers have run, it brings the
+  game list up to date (`steam_play_games.py sync`) and replaces the process with
+  `steam_osx` again, with the same arguments, as arm64, so Steam Play stays on. This also
+  covers a restart from Steam's Settings.
+
+Steam's interface caches `sp.js` in a service worker (`config/htmlcache/Default/Service
+Worker`), so the copy reaches it only when that cache is refreshed, which Steam does
+after a client update. To apply a new version of the patch by hand, quit Steam and move
+that folder aside; Steam rebuilds it at the next start. If `sp.js` no longer has the
+expected code, the original is used and the page stays hidden.
+`MWXR_STEAM_COMPATIBILITY_PAGE=0` turns the redirect off.
+
+On 2026-10-28 (client 1792617903, beta): choosing macos-wine-xr on Amnesia: The Dark
+Descent's page (a game with a macOS build, not installed) wrote `57300` to `games`, and
+after a restart through Steam Play.app Steam logged `Mapping AppID 57300 to tool
+"macos-wine-xr-proton" with priority 250`. Choosing "None" then showed the note and the
+button; the button restarted Steam in the same process (pid unchanged, Steam Play gate
+opened again) and the page showed the choice with no note.
+
+Keep Steam Play.app in the Dock, not the running Steam. Once started, the client
+registers with macOS as Valve's app (`com.valvesoftware.steam`, the bundle in
+`Steam.AppBundle`), so it shows its own Dock icon; keeping that one in the Dock would
+start Steam without Steam Play. Opening Steam Play.app while Steam runs brings Steam
+forward.
+
+Debugging the page: start Steam with `open -a ~/Applications/Steam\ Play.app --args
+-cef-enable-debugging`, which opens Chromium's DevTools on 127.0.0.1:8080 for that run
+(`/json/list` names the pages; the interface's code runs in `SharedJSContext`). Start it
+normally afterwards to close the port.
 
 ## Launch Options
 

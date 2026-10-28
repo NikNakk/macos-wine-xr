@@ -19,6 +19,8 @@
 // It patches only when there is exactly one such site. Nothing on disk is changed.
 //
 // Children of Steam inherit DYLD_INSERT_LIBRARIES, so it does nothing outside steam_osx.
+// steam_ui_patch.c, in the same library, shows the Compatibility page in a game's
+// Properties, in Steam's web helper.
 // Log: ~/Library/Logs/macos-wine-xr/steam-compat-gate.log (MWXR_STEAM_COMPAT_GATE_LOG).
 
 #include <dlfcn.h>
@@ -42,7 +44,8 @@
 #define TARGET_IMAGE "/steamclient.dylib"
 #define HOST_PROCESS "steam_osx"
 
-static void log_line(const char *fmt, ...)
+// Shared with steam_ui_patch.c, which is built into the same library.
+void mwxr_gate_log(const char *fmt, ...)
 {
 	char path[PATH_MAX];
 	const char *override = getenv("MWXR_STEAM_COMPAT_GATE_LOG");
@@ -131,13 +134,13 @@ static int write_insn(uint32_t *addr, uint32_t insn)
 	kern_return_t kr = vm_protect(mach_task_self(), page, vm_page_size, FALSE,
 	                              VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
 	if (kr != KERN_SUCCESS) {
-		log_line("vm_protect(rw) failed: %d", kr);
+		mwxr_gate_log("vm_protect(rw) failed: %d", kr);
 		return 0;
 	}
 	*addr = insn;
 	kr = vm_protect(mach_task_self(), page, vm_page_size, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
 	if (kr != KERN_SUCCESS)
-		log_line("vm_protect(rx) failed: %d", kr);
+		mwxr_gate_log("vm_protect(rx) failed: %d", kr);
 	sys_icache_invalidate(addr, sizeof(*addr));
 	return 1;
 }
@@ -147,7 +150,7 @@ static void patch_gate(const struct mach_header_64 *mh, int apply)
 	uintptr_t strings[MAX_STRINGS];
 	int nstrings = find_strings(mh, strings);
 	if (nstrings == 0) {
-		log_line("no \"linux\" string in steamclient.dylib; Steam Play stays off");
+		mwxr_gate_log("no \"linux\" string in steamclient.dylib; Steam Play stays off");
 		return;
 	}
 	unsigned long size = 0;
@@ -172,7 +175,7 @@ static void patch_gate(const struct mach_header_64 *mh, int apply)
 			    && (cset & 0xFFFFFFE0u) == 0x1A9F17E0u          // cset wN, eq
 			    && (strb & 0xFFC00000u) == 0x39000000u          // strb wN, [xM, #imm]
 			    && (strb & 0x1F) == (cset & 0x1F)) {
-				log_line("candidate at steamclient+0x%lx: field 0x%x",
+				mwxr_gate_log("candidate at steamclient+0x%lx: field 0x%x",
 				         (unsigned long)((uintptr_t)&w[j + 2] - (uintptr_t)mh),
 				         (strb >> 10) & 0xFFF);
 				site = &w[j + 2];
@@ -182,14 +185,14 @@ static void patch_gate(const struct mach_header_64 *mh, int apply)
 		}
 	}
 	if (sites != 1) {
-		log_line("found %d sites, expected 1; Steam Play stays off", sites);
+		mwxr_gate_log("found %d sites, expected 1; Steam Play stays off", sites);
 		return;
 	}
 	uint32_t reg = *site & 0x1F;
 	if (!apply)
 		return;
 	if (write_insn(site, 0x52800020u | reg)) // movz wN, #1
-		log_line("Steam Play gate open (cset w%u -> mov w%u, #1)", reg, reg);
+		mwxr_gate_log("Steam Play gate open (cset w%u -> mov w%u, #1)", reg, reg);
 }
 
 #endif
@@ -203,11 +206,11 @@ static void on_image(const struct mach_header *mh, intptr_t slide)
 	size_t len = strlen(info.dli_fname), tail = strlen(TARGET_IMAGE);
 	if (len < tail || strcmp(info.dli_fname + len - tail, TARGET_IMAGE) != 0)
 		return;
-	log_line("steamclient.dylib loaded: %s", info.dli_fname);
+	mwxr_gate_log("steamclient.dylib loaded: %s", info.dli_fname);
 #if defined(__aarch64__)
 	patch_gate((const struct mach_header_64 *)mh, 1);
 #else
-	log_line("Steam is running as x86_64; only the arm64 client is patched");
+	mwxr_gate_log("Steam is running as x86_64; only the arm64 client is patched");
 #endif
 }
 
@@ -215,7 +218,7 @@ __attribute__((constructor)) static void init(void)
 {
 	if (!in_steam_client())
 		return;
-	log_line("attached to %s", HOST_PROCESS);
+	mwxr_gate_log("attached to %s", HOST_PROCESS);
 	// Called for images already loaded and for each later one, including the dlopen of
 	// steamclient.dylib, which happens before the compatibility manager is built.
 	_dyld_register_func_for_add_image(on_image);
