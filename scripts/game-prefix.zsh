@@ -32,15 +32,27 @@ wine_env() {
 # only through a file there, and CrossOver's prefix setup does not place DXMT's dxgi.dll):
 # synced on every ensure, as APFS clones of the runtime's files, so a DXMT or
 # lsteamclient update reaches every game prefix.
-SYNCED=(d3d10core.dll d3d11.dll dxgi.dll winemetal.dll lsteamclient.dll)
+SYNCED=(d3d10core.dll d3d11.dll dxgi.dll winemetal.dll lsteamclient.dll ntdll.dll)
 sync_runtime_dlls() {  # prefix
   local f src dst
+  if [[ -f ${MWXR_IN_PROCESS_WINE}/lib/wine/i386-windows/lsteamclient.dll &&
+        ! -f $1/drive_c/windows/syswow64/ntdll.dll ]]; then
+    print -u2 "Prefix $1 has no WoW64 system DLLs; initialize/update it with the WoW64 runtime before use"
+    return 1
+  fi
   for f in ${SYNCED}; do
     src=${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-windows/${f} dst=$1/drive_c/windows/system32/${f}
     [[ -f ${src} ]] || continue
     cmp -s "${src}" "${dst}" 2>/dev/null && continue
     cp -c "${src}" "${dst}.new" && mv "${dst}.new" "${dst}"
   done
+  if [[ -f ${MWXR_IN_PROCESS_WINE}/lib/wine/i386-windows/lsteamclient.dll ]]; then
+    for f in ntdll.dll lsteamclient.dll; do
+      src=${MWXR_IN_PROCESS_WINE}/lib/wine/i386-windows/${f} dst=$1/drive_c/windows/syswow64/${f}
+      cmp -s "${src}" "${dst}" 2>/dev/null && continue
+      cp -c "${src}" "${dst}.new" && mv "${dst}.new" "${dst}"
+    done
+  fi
 }
 
 make_template() {

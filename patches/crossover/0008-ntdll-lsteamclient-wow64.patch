@@ -1,0 +1,175 @@
+# WoW64 support for the macOS Steam redirect; apply after 0007.
+# Copyright 2026, Nick Kennedy
+# SPDX-License-Identifier: LGPL-2.1-or-later
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -1166,7 +1166,7 @@
+ /* name: a file name with or without its directory, len characters long */
+ static BOOL is_steamclient_module( const WCHAR *name, ULONG len )
+ {
+-    static const WCHAR *names[] = { L"steamclient64", L"gameoverlayrenderer64" };
++    static const WCHAR *names[] = { L"steamclient64", L"gameoverlayrenderer64", L"steamclient", L"gameoverlayrenderer" };
+     unsigned int i;
+     ULONG start;
+ 
+@@ -1217,7 +1217,8 @@
+     }
+ 
+     /* The redirected steamclient64.dll never runs, so don't load Steam's runtime for it. */
+-    if (use_lsteamclient() && (!strcmp( name, "tier0_s64.dll" ) || !strcmp( name, "vstdlib_s64.dll" )) &&
++    if (use_lsteamclient() && (!strcmp( name, "tier0_s64.dll" ) || !strcmp( name, "vstdlib_s64.dll" ) ||
++                                    !strcmp( name, "tier0_s.dll" ) || !strcmp( name, "vstdlib_s.dll" )) &&
+         wm->ldr.BaseDllName.Buffer &&
+         is_steamclient_module( wm->ldr.BaseDllName.Buffer, wm->ldr.BaseDllName.Length / sizeof(WCHAR) ))
+     {
+@@ -2360,12 +2361,14 @@
+             (lsteamclient || LdrLoadDll( load_path, 0, &lsteamclient_us, &lsteamclient ) == STATUS_SUCCESS))
+         {
+             struct steamclient_setup_trampolines_params params = { .src_mod = *module, .tgt_mod = lsteamclient };
+-            if (!WINE_UNIX_CALL( unix_steamclient_setup_trampolines, &params ))
++            NTSTATUS redirect_status = WINE_UNIX_CALL( unix_steamclient_setup_trampolines, &params );
++            if (!redirect_status)
+             {
+                 NtFlushInstructionCache( NtCurrentProcess(), *module, map_size );
+                 wm->ldr.Flags |= MWXR_LDR_SKIP_INIT;
+                 TRACE( "%s redirected to lsteamclient\n", debugstr_us( nt_name ) );
+             }
++            else WARN( "Steam redirect failed for %s: %#lx\n", debugstr_us( nt_name ), redirect_status );
+             RtlFreeUnicodeString( &lsteamclient_us );
+         }
+     }
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -1397,7 +1397,7 @@
+     }
+     return STATUS_SUCCESS;
+ }
+-#elif defined(__x86_64__)
++#elif defined(__x86_64__) || defined(__i386__)
+ static NTSTATUS pe_module_loaded( void *args ) { return STATUS_NOT_IMPLEMENTED; }
+ #endif
+ 
+@@ -1414,7 +1414,7 @@
+     unixcall_wine_server_handle_to_fd,
+     unixcall_wine_spawnvp,
+     system_time_precise,
+-#if defined(__x86_64__)
++#if defined(__x86_64__) || defined(__i386__)
+     pe_module_loaded,
+ #endif
+     steamclient_setup_trampolines,
+@@ -1439,7 +1439,16 @@
+ #if defined(__x86_64__)
+ static NTSTATUS wow64_pe_module_loaded( void *args ) { return STATUS_NOT_IMPLEMENTED; }
+ #endif
+-static NTSTATUS wow64_steamclient_setup_trampolines( void *args ) { return STATUS_NOT_SUPPORTED; }
++static NTSTATUS wow64_steamclient_setup_trampolines( void *args )
++{
++    const struct { UINT32 src_mod, tgt_mod; } *params32 = args;
++    struct steamclient_setup_trampolines_params params =
++    {
++        .src_mod = ULongToPtr( params32->src_mod ),
++        .tgt_mod = ULongToPtr( params32->tgt_mod ),
++    };
++    return steamclient_setup_trampolines( &params );
++}
+ 
+ const unixlib_entry_t unix_call_wow64_funcs[] =
+ {
+@@ -1912,14 +1921,26 @@
+ /* macos-wine-xr: Proton's lsteamclient redirect (ValveSoftware/wine, proton_11.0,
+  * dlls/ntdll/unix/loader.c). Point each export of the mapped Windows steamclient64.dll,
+  * and its entry point, at the export of the same name in lsteamclient.dll, which
+- * forwards to the host Steam client. x86_64 only. */
+-static void steamclient_write_jump( void *src_addr, ULONG_PTR tgt_addr )
+-{
+-    static const unsigned char mov[] = {0x48, 0xb8};   /* mov rax, imm64 */
+-    static const unsigned char jmp[] = {0xff, 0xe0};   /* jmp rax */
+-    memcpy( src_addr, mov, sizeof(mov) );
+-    memcpy( (char *)src_addr + sizeof(mov), &tgt_addr, sizeof(tgt_addr) );
+-    memcpy( (char *)src_addr + sizeof(mov) + sizeof(tgt_addr), jmp, sizeof(jmp) );
++ * forwards to the host Steam client. PE32 and PE32+ share the x86_64 unixlib. */
++static void steamclient_write_jump( void *src_addr, ULONG_PTR tgt_addr, BOOL wow64 )
++{
++    BYTE *code = src_addr;
++    if (wow64)
++    {
++        UINT32 target = tgt_addr;
++        *code++ = 0xb8;  /* mov eax, imm32; jmp eax */
++        memcpy( code, &target, sizeof(target) );
++        code += sizeof(target);
++    }
++    else
++    {
++        *code++ = 0x48;  /* mov rax, imm64; jmp rax */
++        *code++ = 0xb8;
++        memcpy( code, &tgt_addr, sizeof(tgt_addr) );
++        code += sizeof(tgt_addr);
++    }
++    *code++ = 0xff;
++    *code = 0xe0;
+ }
+ 
+ static NTSTATUS steamclient_setup_trampolines( void *args )
+@@ -1934,8 +1955,13 @@
+     const DWORD *names;
+     void *src_addr, *tgt_addr;
+     unsigned int i;
+-
+-    if (src_nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) return STATUS_NOT_SUPPORTED;
++    BOOL wow64 = src_nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC;
++
++    if ((!wow64 && src_nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) ||
++        src_nt->OptionalHeader.Magic != tgt_nt->OptionalHeader.Magic ||
++        src_nt->FileHeader.Machine != tgt_nt->FileHeader.Machine ||
++        (src_nt->FileHeader.Machine != IMAGE_FILE_MACHINE_I386 &&
++         src_nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64)) return STATUS_NOT_SUPPORTED;
+     if (!(src_exp = get_module_data_dir( src_mod, IMAGE_FILE_EXPORT_DIRECTORY, NULL )) ||
+         !(tgt_exp = get_module_data_dir( tgt_mod, IMAGE_FILE_EXPORT_DIRECTORY, NULL )))
+         return STATUS_INVALID_IMAGE_FORMAT;
+@@ -1946,8 +1972,9 @@
+         size_t size;
+         if (memcmp( src_sec[i].Name, ".text", 5 )) continue;
+         addr = (void *)(((UINT_PTR)src_mod + src_sec[i].VirtualAddress) & ~page_mask);
+-        size = (src_sec[i].Misc.VirtualSize + page_mask) & ~page_mask;
+-        mprotect( addr, size, PROT_READ | PROT_WRITE | PROT_EXEC );
++        size = (((UINT_PTR)src_mod + src_sec[i].VirtualAddress +
++                 src_sec[i].Misc.VirtualSize + page_mask) & ~page_mask) - (UINT_PTR)addr;
++        if (mprotect( addr, size, PROT_READ | PROT_WRITE | PROT_EXEC )) return STATUS_ACCESS_DENIED;
+     }
+ 
+     names = get_rva( src_mod, src_exp->AddressOfNames );
+@@ -1957,12 +1984,15 @@
+         if (!names[i] || !(name = get_rva( src_mod, names[i] ))) continue;
+         if (!(src_addr = (void *)find_named_export( src_mod, src_exp, name ))) continue;
+         if (!(tgt_addr = (void *)find_named_export( tgt_mod, tgt_exp, name ))) continue;
+-        steamclient_write_jump( src_addr, (ULONG_PTR)tgt_addr );
+-    }
+-
+-    src_addr = get_rva( src_mod, src_nt->OptionalHeader.AddressOfEntryPoint );
+-    tgt_addr = get_rva( tgt_mod, tgt_nt->OptionalHeader.AddressOfEntryPoint );
+-    steamclient_write_jump( src_addr, (ULONG_PTR)tgt_addr );
++        steamclient_write_jump( src_addr, (ULONG_PTR)tgt_addr, wow64 );
++    }
++
++    if (src_nt->OptionalHeader.AddressOfEntryPoint && tgt_nt->OptionalHeader.AddressOfEntryPoint)
++    {
++        src_addr = get_rva( src_mod, src_nt->OptionalHeader.AddressOfEntryPoint );
++        tgt_addr = get_rva( tgt_mod, tgt_nt->OptionalHeader.AddressOfEntryPoint );
++        steamclient_write_jump( src_addr, (ULONG_PTR)tgt_addr, wow64 );
++    }
+     return STATUS_SUCCESS;
+ }
+ 
+--- a/dlls/ntdll/unixlib.h
++++ b/dlls/ntdll/unixlib.h
+@@ -89,7 +89,8 @@
+     unix_wine_server_handle_to_fd,
+     unix_wine_spawnvp,
+     unix_system_time_precise,
+-#if defined(__x86_64__)
++#if defined(__x86_64__) || defined(__i386__)
++    /* Reserve the native x86_64 slot for PE32 calls through WoW64 too. */
+     unix_pe_module_loaded,
+ #endif
+     unix_steamclient_setup_trampolines,
