@@ -26,6 +26,16 @@ unset XR_RUNTIME_JSON WINEDLLOVERRIDES
 [[ -f ${WINEPREFIX}/system.reg ]] || WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine_root}/bin/wine" wineboot --init
 mkdir -p "${WINEPREFIX}/drive_c/openxr"
 cp "${root}/x86_64-windows/wineopenxr.dll" "${WINEPREFIX}/drive_c/windows/system32/"
+# xrizer loads openxr_loader.dll by name. Keeping it next to vrclient_x64.dll
+# does not put it on the Windows process DLL search path. Provision the
+# Khronos Win64 loader into this prefix, not the host's arm64 dylib directory.
+windows_loader=${MWXR_WINDOWS_OPENXR_LOADER:-${MWXR_XRIZER_ROOT:-}/openxr_loader.dll}
+if [[ -n ${MWXR_WINDOWS_OPENXR_LOADER:-} || -n ${MWXR_XRIZER_ROOT:-} ]]; then
+ [[ -f ${windows_loader} ]] || {
+  print -u2 "Windows OpenXR loader is missing: ${windows_loader}"; exit 1
+ }
+ cp "${windows_loader}" "${WINEPREFIX}/drive_c/windows/system32/openxr_loader.dll"
+fi
 cat > "${WINEPREFIX}/drive_c/openxr/wineopenxr64.json" <<'JSON'
 {"file_format_version":"1.0.0","runtime":{"library_path":"C:\\windows\\system32\\wineopenxr.dll"}}
 JSON
