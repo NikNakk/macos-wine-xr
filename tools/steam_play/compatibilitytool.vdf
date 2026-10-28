@@ -1,0 +1,15 @@
+// The macos-wine-xr Steam Play tool (docs/steam-play.md). The key must match the folder
+// it is installed in (compatibilitytools.d/macos-wine-xr) and the launcher's mapping.
+"compatibilitytools"
+{
+	"compat_tools"
+	{
+		"macos-wine-xr"
+		{
+			"install_path"	"."
+			"display_name"	"macos-wine-xr (Wine + DXMT + OpenXR)"
+			"from_oslist"	"windows"
+			"to_oslist"	"macos"
+		}
+	}
+}

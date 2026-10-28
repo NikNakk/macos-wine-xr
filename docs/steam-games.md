@@ -16,8 +16,9 @@ makes Steam download the Windows depots into `steamapps/common`, keep a prefix i
 `steamapps/compatdata/<appid>`, and launch `proton waitforexitandrun game.exe`, whose
 `steam_helper` and `lsteamclient` play the parts of the stand-in and lsteamclient here.
 NotProton switches macOS Steam's copy of that machinery on by injecting a library that
-hooks Steam's own functions, found by byte signatures per Steam build; that is not
-attempted here.
+hooks Steam's own functions, found by byte signatures per Steam build.
+[steam-play.md](steam-play.md) switches it on in memory instead, for chosen games, with
+this rig's runner as the compatibility tool; Steam then does all three itself.
 
 ## Layout: shared where practical, cloned where not
 

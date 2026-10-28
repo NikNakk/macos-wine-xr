@@ -15,6 +15,9 @@
 #                  games in the shared library; rig: MWXR_IN_PROCESS_PREFIX, the default for
 #                  games installed inside it
 #   GAME_DRY_RUN=1 print the launch without starting the game
+#   GAME_EXE       the game's exe (unix path) instead of its launch entry, and GAME_WORKDIR
+#                  its working folder: set by the Steam Play tool (docs/steam-play.md), for
+#                  games macOS Steam installed itself; these get their own prefix
 # Stopping this script (SIGTERM, SIGINT or SIGHUP, as a launcher's Stop does) closes the
 # game: the whole prefix's wineserver for a per-game prefix, the game's processes in the
 # rig prefix.
@@ -42,17 +45,25 @@ stand_in=${ALYX_STEAM_STAND_IN:-${repo}/build-in-process/lsteamclient/mwxr-steam
   print -u2 "No lsteamclient in ${MWXR_IN_PROCESS_WINE}: run scripts/install-lsteamclient.zsh"; exit 1; }
 [[ -f ${stand_in} ]] || { print -u2 "Need ${stand_in} (scripts/build-lsteamclient.zsh)"; exit 1; }
 
-spec=$(python3 "${repo}/tools/steam_games/steam_games.py" launch-spec "${appid}" --mode "${GAME_MODE:-vr}" --json)
-field() { python3 -c 'import json,sys; print(json.loads(sys.argv[1])[sys.argv[2]])' "${spec}" "$1"; }
-name=$(field name) exe=$(field exe) arguments=$(field arguments) workdir=$(field workdir) entry=$(field type)
-library=$(field library)
+if [[ -n ${GAME_EXE:-} ]]; then
+  # Started by macOS Steam's Steam Play (tools/steam_play): Steam installed the game in its
+  # own library and chose the launch entry, whose arguments come as this script's.
+  name=$(python3 "${repo}/tools/steam_games/steam_games.py" info "${appid}" --json 2>/dev/null |
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])' 2>/dev/null) || name="App ${appid}"
+  exe=${GAME_EXE} arguments='' workdir=${GAME_WORKDIR:-${GAME_EXE:h}} entry=steam-play library=steam
+else
+  spec=$(python3 "${repo}/tools/steam_games/steam_games.py" launch-spec "${appid}" --mode "${GAME_MODE:-vr}" --json)
+  field() { python3 -c 'import json,sys; print(json.loads(sys.argv[1])[sys.argv[2]])' "${spec}" "$1"; }
+  name=$(field name) exe=$(field exe) arguments=$(field arguments) workdir=$(field workdir) entry=$(field type)
+  library=$(field library)
+fi
 [[ -f ${exe} ]] || { print -u2 "${name}: ${exe} is missing"; exit 1; }
 # Reject unsupported launcher architectures before touching the prefix or
 # starting Wine, and keep the normal Steam entry rather than guessing a game EXE.
 python3 "${repo}/tools/steam_games/check_launch.py" \
  --exe "${exe}" --wine-runtime "${MWXR_IN_PROCESS_WINE}" --name "${name}"
 
-prefix_kind=${GAME_PREFIX:-$([[ ${library} == shared ]] && print pergame || print rig)}
+prefix_kind=${GAME_PREFIX:-$([[ ${library} == (shared|steam) ]] && print pergame || print rig)}
 case ${prefix_kind} in
   pergame) MWXR_IN_PROCESS_PREFIX=$("${repo}/scripts/game-prefix.zsh" ensure "${appid}") ;;
   rig) ;;
@@ -85,7 +96,9 @@ if [[ ${GAME_DRY_RUN:-0} == 1 ]]; then
   print -r -- "working directory: ${workdir}"
   exit 0
 fi
-pgrep -x steam_osx >/dev/null || { print -u2 'Start macOS Steam first'; exit 1; }
+# A game Steam started (GAME_EXE) has Steam running by definition, and pgrep run under
+# Steam does not list steam_osx.
+[[ -n ${GAME_EXE:-} ]] || pgrep -x steam_osx >/dev/null || { print -u2 'Start macOS Steam first'; exit 1; }
 pgrep -f 'steam\.exe' >/dev/null && { print -u2 'Quit Windows Steam first: one account cannot be signed in to both'; exit 1; }
 
 # OpenVR games reach xrizer through the prefix's OpenVR path files, which SteamVR also

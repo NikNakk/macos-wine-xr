@@ -1,0 +1,8 @@
+// Steam runs <install_path>/mwxr-steam-play <verb> <game exe> [arguments...] with the
+// STEAM_COMPAT_* environment, from the game's working folder.
+"manifest"
+{
+	"version"	"2"
+	"commandline"	"/mwxr-steam-play %verb%"
+	"use_sessions"	"1"
+}
