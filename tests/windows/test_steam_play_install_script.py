@@ -86,6 +86,11 @@ class InstallScriptTests(unittest.TestCase):
         self.assertEqual(len(log), 1)
         self.assertIn("skipped installer 'dxsetup'", log[0])
 
+    def test_uninstall_scripts_are_recognised(self):
+        self.assertFalse(install_script.is_uninstall(parse_vdf(MR_ROBOT)))
+        self.assertFalse(install_script.is_uninstall(parse_vdf(CANYON_CAPERS)))
+        self.assertTrue(install_script.is_uninstall(parse_vdf(CANYON_CAPERS.replace('"mode"\t\t"2"', '"mode"\t\t"3"'))))
+
     def test_unknown_root_is_skipped(self):
         script = MR_ROBOT.replace('HKEY_LOCAL_MACHINE', 'HKEY_NOWHERE')
         reg, log = install_script.convert(parse_vdf(script))

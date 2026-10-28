@@ -7,10 +7,12 @@
 //
 //   DYLD_INSERT_LIBRARIES           the compat gate library (steam_compat_gate.c)
 //   STEAM_EXTRA_COMPAT_TOOLS_PATHS  the folder holding the macos-wine-xr Steam Play tool
-//   STEAM_COMPAT_TOOL_MAPPINGS      "APPID 250 macos-wine-xr,..." for each app ID listed in
-//                                   the payload's "games" file (250 is the lowest priority
-//                                   the client applies). Not the "0" catch-all: that also
-//                                   moves games with a macOS build to their Windows depots.
+//   STEAM_COMPAT_TOOL_MAPPINGS      "APPID 250 macos-wine-xr-proton,..." for each game in the
+//                                   payload's "mapped" file (250 is the lowest priority the
+//                                   client applies): every Windows-only game in the library
+//                                   plus those listed in "games", which steam_play_games.py
+//                                   sync writes before Steam starts. Not the "0" catch-all:
+//                                   that also moves games with a macOS build to Windows.
 //
 // Valve's outer Steam.app has the hardened runtime, which drops DYLD_* variables; the
 // client it starts, steam_osx in ~/Library/Application Support/Steam, does not. So this
@@ -22,6 +24,7 @@
 #include <limits.h>
 #include <mach/machine.h>
 #include <spawn.h>
+#include <sys/wait.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,7 +33,9 @@
 
 extern char **environ;
 
-#define TOOL_NAME "macos-wine-xr"
+// Steam maps Windows Cloud folders into compatdata/<appid>/pfx only for a tool whose name
+// contains "proton" (docs/steam-play.md, Steam Cloud).
+#define TOOL_NAME "macos-wine-xr-proton"
 
 static int exists(const char *path)
 {
@@ -60,13 +65,32 @@ static void prepend(const char *name, const char *value)
 	free(merged);
 }
 
-// "APPID 250 macos-wine-xr" for each app ID in <payload>/games (one per line, # comments),
-// joined with commas as the client splits them. NULL if there is no list.
+// Brings <payload>/mapped up to date from Steam's library (steam_play_games.py sync). On
+// failure the previous file, or "games" alone, is used.
+static void sync_mapped(const char *payload)
+{
+	char script[PATH_MAX];
+	snprintf(script, sizeof(script), "%s/steam_play_games.py", payload);
+	char *args[] = {"/usr/bin/python3", "-I", script, "sync", "--payload", (char *)payload, NULL};
+	pid_t pid;
+	int status = 0;
+	if (posix_spawn(&pid, args[0], NULL, NULL, args, environ) != 0 || waitpid(pid, &status, 0) < 0 ||
+	    !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+		fprintf(stderr, "Steam Play: could not update the game list; using the last one\n");
+}
+
+// "APPID 250 macos-wine-xr-proton" for each app ID in <payload>/mapped, or <payload>/games if
+// there is none (one per line, # comments), joined with commas as the client splits them.
+// NULL if there is no list.
 static char *read_mappings(const char *payload)
 {
 	char path[PATH_MAX], line[256];
-	snprintf(path, sizeof(path), "%s/games", payload);
+	snprintf(path, sizeof(path), "%s/mapped", payload);
 	FILE *f = fopen(path, "r");
+	if (!f) {
+		snprintf(path, sizeof(path), "%s/games", payload);
+		f = fopen(path, "r");
+	}
 	if (!f)
 		return NULL;
 	size_t cap = 4096, len = 0;
@@ -121,6 +145,7 @@ int main(int argc, char **argv)
 
 	prepend("DYLD_INSERT_LIBRARIES", gate);
 	prepend("STEAM_EXTRA_COMPAT_TOOLS_PATHS", tools);
+	sync_mapped(payload);
 	char *mappings = read_mappings(payload);
 	if (mappings && *mappings)
 		setenv("STEAM_COMPAT_TOOL_MAPPINGS", mappings, 1);

@@ -69,6 +69,14 @@ def registry_values(block, language, install_dir, log, where):
     return out
 
 
+def is_uninstall(script):
+    """True when every step has mode 3, which Steam sends when the game is uninstalled
+    (mode 2: install finished, mode 1: before a start)."""
+    root = script.get('evaluatorscript', script)
+    modes = {str(step.get('mode', '')) for step in root.values() if isinstance(step, dict)}
+    return modes == {'3'}
+
+
 def convert(script):
     """(reg text or None, log lines) for a parsed evaluatorscript."""
     lines, log = [], []
@@ -120,9 +128,16 @@ def convert(script):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('script', type=Path)
-    p.add_argument('--reg', type=Path, required=True)
+    p.add_argument('--reg', type=Path)
+    p.add_argument('--uninstall', action='store_true',
+                   help='exit 0 if every step is an uninstall step (mode 3), 1 otherwise')
     a = p.parse_args()
-    reg, log = convert(parse_vdf(a.script.read_text(encoding='utf-8', errors='replace')))
+    script = parse_vdf(a.script.read_text(encoding='utf-8', errors='replace'))
+    if a.uninstall:
+        sys.exit(0 if is_uninstall(script) else 1)
+    if not a.reg:
+        p.error('--reg is required')
+    reg, log = convert(script)
     for line in log:
         print(line)
     if reg:

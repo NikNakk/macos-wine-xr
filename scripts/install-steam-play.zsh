@@ -36,22 +36,31 @@ clang -Wall -Wextra -O2 -arch arm64 -DMWXR_GATE_SCAN_MAIN \
 codesign -f -s - "${build}/libmwxr_steam_compat_gate.dylib" "${build}/steam-play" \
   "${build}/steam-compat-gate-scan" 2>/dev/null
 
-tool="${payload}/compatibilitytools.d/macos-wine-xr"
+tool="${payload}/compatibilitytools.d/macos-wine-xr-proton"
+# Its name before 2026-10-28, when "proton" was added for Steam Cloud.
+rm -rf "${payload}/compatibilitytools.d/macos-wine-xr"
 mkdir -p "${tool}"
 # Replaced, not overwritten: a running Steam has the old library mapped.
 rm -f "${payload}/libmwxr_steam_compat_gate.dylib" "${payload}/steam-compat-gate-scan"
 cp -c "${build}/libmwxr_steam_compat_gate.dylib" "${build}/steam-compat-gate-scan" "${payload}/"
+# The game list's sync, run by Steam Play.app before each start (docs/steam-play.md).
+cp "${repo}/tools/steam_play/steam_play_games.py" "${repo}/tools/steam_games/steam_games.py" "${payload}/"
 cp -c "${repo}/tools/steam_play/compatibilitytool.vdf" "${repo}/tools/steam_play/toolmanifest.vdf" \
   "${repo}/tools/steam_play/mwxr-steam-play" "${tool}/"
 chmod +x "${tool}/mwxr-steam-play"
 print -r -- "${runner}" > "${tool}/runner"
-# The games Steam Play is used for: only these get the Windows build and this tool.
-# Kept across reinstalls; edit it, then restart Steam through Steam Play.app.
+# Steam Play is used for every Windows-only game in the library, and for the games
+# listed here (steam_play_games.py). Kept across reinstalls; edit it, then restart Steam
+# through Steam Play.app.
 if [[ ! -f ${payload}/games ]]; then
   cat > "${payload}/games" <<'GAMES'
-# App IDs macOS Steam installs as Windows games and starts through macos-wine-xr, one per
-# line. Restart Steam through Steam Play.app after a change. A game that also has a macOS
-# build switches to its Windows build when listed, and back when removed.
+# Steam Play (macos-wine-xr) is used for every Windows-only game in your library and
+# every VR game with a Windows build. List here, one app ID per line, other games that
+# also have a macOS build and should install and start as Windows games (listing one
+# switches it to its Windows build, removing it switches it back), and -APPID for a game
+# to leave out (a VR game then goes back to its macOS build). Restart Steam
+# through Steam Play.app after a change. See what is mapped:
+#   python3 ~/Library/Application\ Support/macos-wine-xr/steam-play/steam_play_games.py list
 1256230   # Hyperbolica
 GAMES
 fi

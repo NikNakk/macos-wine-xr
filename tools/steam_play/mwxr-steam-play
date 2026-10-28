@@ -74,6 +74,24 @@ case "$exe" in
   /*) ;;
   *) exe="$PWD/$exe" ;;
 esac
+
+# Per-game settings from Steam's Launch Options (Properties > General): words of the form
+# MWXR_NAME=value are exported for this launch and not passed to the game, and a literal
+# %command% (Linux Steam's placeholder) is dropped. Example: MWXR_ALYX=native.
+count=$#
+while [ "$count" -gt 0 ]; do
+  a=$1; shift; count=$((count - 1))
+  case "$a" in
+    %command%) continue ;;
+    MWXR_*=*)
+      name=${a%%=*}
+      case "$name" in
+        *[!A-Z0-9_]*) set -- "$@" "$a" ;;
+        *) export "$a"; say "launch option $a" ;;
+      esac ;;
+    *) set -- "$@" "$a" ;;
+  esac
+done
 GAME_EXE=$exe GAME_WORKDIR=$PWD
 export GAME_EXE GAME_WORKDIR
 "$runner" "$appid" "$@" >> "$log" 2>&1
