@@ -14,6 +14,10 @@
 //                                   sync writes before Steam starts. Not the "0" catch-all:
 //                                   that also moves games with a macOS build to Windows.
 //
+// Steam's own restart (exit code 42) is handled by the gate library inside the client,
+// which starts it again in place with the game list brought up to date
+// (src/macos/steam_restart.c).
+//
 // Valve's outer Steam.app has the hardened runtime, which drops DYLD_* variables; the
 // client it starts, steam_osx in ~/Library/Application Support/Steam, does not. So this
 // starts steam_osx directly, and as arm64: the gate is only found in the arm64 client.
@@ -118,6 +122,20 @@ static char *read_mappings(const char *payload)
 	return out;
 }
 
+// STEAM_COMPAT_TOOL_MAPPINGS for the client about to start, from an up-to-date game list.
+static char *read_mappings(const char *payload);
+static void sync_mapped(const char *payload);
+static void set_mappings(const char *payload)
+{
+	sync_mapped(payload);
+	char *mappings = read_mappings(payload);
+	if (mappings && *mappings)
+		setenv("STEAM_COMPAT_TOOL_MAPPINGS", mappings, 1);
+	else
+		unsetenv("STEAM_COMPAT_TOOL_MAPPINGS");
+	free(mappings);
+}
+
 int main(int argc, char **argv)
 {
 	const char *home = getenv("HOME");
@@ -145,13 +163,7 @@ int main(int argc, char **argv)
 
 	prepend("DYLD_INSERT_LIBRARIES", gate);
 	prepend("STEAM_EXTRA_COMPAT_TOOLS_PATHS", tools);
-	sync_mapped(payload);
-	char *mappings = read_mappings(payload);
-	if (mappings && *mappings)
-		setenv("STEAM_COMPAT_TOOL_MAPPINGS", mappings, 1);
-	else
-		unsetenv("STEAM_COMPAT_TOOL_MAPPINGS");
-	free(mappings);
+	set_mappings(payload);
 
 	if (argc > 1 && strcmp(argv[1], "--print-env") == 0) {
 		printf("DYLD_INSERT_LIBRARIES=%s\n", getenv("DYLD_INSERT_LIBRARIES"));
@@ -173,6 +185,8 @@ int main(int argc, char **argv)
 			args[n++] = argv[i];
 	args[n] = NULL;
 
+	// This process becomes the client, so the Dock icon (and a pinned one) stays Steam
+	// Play.app's. Steam's own restart is handled inside the client (steam_restart.c).
 	posix_spawnattr_t attr;
 	posix_spawnattr_init(&attr);
 	posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETEXEC);
