@@ -63,6 +63,11 @@ if [[ -n ${GAME_SETUP_SCRIPT:-} ]]; then
 fi
 
 if [[ ${appid} == 546560 ]]; then
+  # From Steam Play, the copy Steam installed (STEAM_COMPAT_INSTALL_PATH) rather than the
+  # rig prefix's; the rig prefix still holds the saves and settings.
+  if [[ -n ${GAME_EXE:-} && -n ${STEAM_COMPAT_INSTALL_PATH:-} ]]; then
+    export ALYX_GAME_ROOT=${ALYX_GAME_ROOT:-${STEAM_COMPAT_INSTALL_PATH}}
+  fi
   ALYX_STEAM=macos exec "${repo}/scripts/run-alyx-xrizer.zsh" "$@"
 fi
 
