@@ -7,8 +7,12 @@
  *
  * A game's steam_api.dll only starts when HKCU\Software\Valve\Steam\ActiveProcess names a
  * running Steam (pid) and its steamclient64.dll (SteamClientDll64). This records itself
- * as that process, starts the game, waits for it and returns its exit code. The ntdll
- * redirect (MWXR_LSTEAMCLIENT=1) then sends the game's steamclient64.dll to lsteamclient.
+ * as that process, starts the game, and waits for the game and every process it starts,
+ * returning the first process's exit code: some games start a launcher and exit at once
+ * (Braid's braid.exe starts launcher.exe, which starts braid.exe -no_launcher), and Steam
+ * must stay "running" (this pid alive) until the last of them has ended. The processes are
+ * followed with a job object, as Proton's steam_helper does. The ntdll redirect
+ * (MWXR_LSTEAMCLIENT=1) then sends the game's steamclient64.dll to lsteamclient.
  *
  * Usage: mwxr-steam.exe [--steam-dir C:\path\to\Steam] -- game.exe [arguments...]
  *   --steam-dir  folder holding the Windows steamclient64.dll (default: the
@@ -61,6 +65,7 @@ int wmain( int argc, WCHAR **argv )
     PROCESS_INFORMATION pi;
     DWORD exit_code = 1, size;
     HKEY key;
+    HANDLE job, port = NULL;
     int i;
 
     for (i = 1; i < argc && wcscmp( argv[i], L"--" ); i++)
@@ -91,14 +96,51 @@ int wmain( int argc, WCHAR **argv )
     set_dword( key, L"pid", GetCurrentProcessId() );
     RegCloseKey( key );
 
-    if (!CreateProcessW( NULL, game, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi ))
+    /* The game starts suspended, joins the job, then runs; whatever it starts joins too. */
+    job = CreateJobObjectW( NULL, NULL );
+    port = job ? CreateIoCompletionPort( INVALID_HANDLE_VALUE, NULL, 0, 1 ) : NULL;
+    if (port)
+    {
+        JOBOBJECT_ASSOCIATE_COMPLETION_PORT assoc = { (void *)job, port };
+        if (!SetInformationJobObject( job, JobObjectAssociateCompletionPortInformation, &assoc, sizeof(assoc) ))
+        {
+            CloseHandle( port );
+            port = NULL;
+        }
+    }
+    if (!CreateProcessW( NULL, game, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL, &si, &pi ))
     {
         fwprintf( stderr, L"mwxr-steam: cannot start %ls (error %lu)\n", game, GetLastError() );
         return 1;
     }
+    if (port && !AssignProcessToJobObject( job, pi.hProcess ))
+    {
+        fwprintf( stderr, L"mwxr-steam: cannot follow the game's processes (error %lu); waiting for it alone\n",
+                  GetLastError() );
+        CloseHandle( port );
+        port = NULL;
+    }
+    ResumeThread( pi.hThread );
     CloseHandle( pi.hThread );
     WaitForSingleObject( pi.hProcess, INFINITE );
     GetExitCodeProcess( pi.hProcess, &exit_code );
     CloseHandle( pi.hProcess );
+    if (port)
+    {
+        /* Until the job reports that its last process has ended. */
+        DWORD message;
+        ULONG_PTR completion_key;
+        OVERLAPPED *overlapped;
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION info;
+        while (!QueryInformationJobObject( job, JobObjectBasicAccountingInformation, &info, sizeof(info), NULL ) ||
+               info.ActiveProcesses > 0)
+        {
+            if (GetQueuedCompletionStatus( port, &message, &completion_key, &overlapped, 1000 ) &&
+                message == JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO)
+                break;
+        }
+        CloseHandle( port );
+    }
+    if (job) CloseHandle( job );
     return (int)exit_code;
 }
