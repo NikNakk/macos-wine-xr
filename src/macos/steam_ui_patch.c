@@ -21,6 +21,7 @@
 // Steam's is changed on disk. If the code no longer has the expected shape, that part is
 // left out. MWXR_STEAM_COMPATIBILITY_PAGE=0 turns this off.
 
+#include <ctype.h>
 #include <errno.h>
 #include <libgen.h>
 #include <mach-o/dyld.h>
@@ -248,6 +249,99 @@ char *mwxr_patch_restart_note(const char *text, size_t len, size_t *outlen)
 	return out.data;
 }
 
+// Steam marks a game whose macOS build is 32-bit only with is_invalid_os_type: a "no entry"
+// icon in the library list, a greyed entry and a "unable to run 32-bit games" banner on its
+// page. Steam Play runs such a game's Windows build, so each "<X>.is_invalid_os_type" on an
+// app overview becomes "(<X>.is_invalid_os_type&&!globalThis.mwxrMapped?.has(<X>.appid))",
+// and the start of the file loads that set, once, from /mwxr/mapped.json: the games Steam
+// mapped to the tool when it started. Returns a new buffer, or NULL if none was found.
+char *mwxr_patch_invalid_os_type(const char *text, size_t len, size_t *outlen)
+{
+	static const char field[] = ".is_invalid_os_type",
+	    prelude[] = "globalThis.mwxrMapped=(()=>{try{const x=new XMLHttpRequest();"
+	                "x.open(\"GET\",\"/mwxr/mapped.json\",!1);x.send();return new Set(JSON.parse(x.responseText))}"
+	                "catch(e){return new Set}})();\n";
+	const char *end = text + len, *from = text;
+	struct buffer out = {0};
+	int count = 0;
+	if (!append(&out, prelude, strlen(prelude)))
+		return NULL;
+	// from: copied up to here; at: searched up to here.
+	for (const char *f, *at = text; (f = memmem(at, (size_t)(end - at), field, strlen(field))) != NULL;
+	     at = f + strlen(field)) {
+		size_t vlen;
+		const char *v = ident_before(f, from, &vlen);
+		// a plain variable (not "a.b.is_invalid_os_type"), and not a longer field name
+		if (!vlen || (v > text && (v[-1] == '.' || is_ident(v[-1]))) || is_ident(f[strlen(field)]))
+			continue;
+		char repl[160];
+		int n = snprintf(repl, sizeof(repl), "(%.*s.is_invalid_os_type&&!globalThis.mwxrMapped?.has(%.*s.appid))",
+		                 (int)vlen, v, (int)vlen, v);
+		if (n <= 0 || (size_t)n >= sizeof(repl) || !append(&out, from, (size_t)(v - from)) ||
+		    !append(&out, repl, (size_t)n)) {
+			free(out.data);
+			return NULL;
+		}
+		from = f + strlen(field);
+		count++;
+	}
+	if (!count || !append(&out, from, (size_t)(end - from))) {
+		free(out.data);
+		return NULL;
+	}
+	*outlen = out.len;
+	return out.data;
+}
+
+// In the library list, a mapped game gets Steam's monochrome Windows logo (icon Xz0, the
+// same module as the "no entry" icon WOg) where the 32-bit mark would be, with the same
+// styling (16 px, grey) and a tooltip. After mwxr_patch_invalid_os_type, the list's
+//     (Z.is_invalid_os_type&&!...has(Z.appid))?be=(0,e.jsx)(j.he,{toolTipContent:(0,S.we)(
+//     "#GameList_Entry_Invalid_OSType"),className:O().InvalidOSType,children:(0,e.jsx)(i.WOg,{})}):
+// gains "globalThis.mwxrMapped?.has(Z.appid)?be=<the same element, with Xz0>:" after it.
+char *mwxr_patch_windows_logo(const char *text, size_t len, size_t *outlen)
+{
+	static const char tip[] = "(\"#GameList_Entry_Invalid_OSType\"),className:", appid[] = ".appid))?be=",
+	                  icon[] = ".WOg,{})})";
+	const char *end = text + len;
+	for (const char *t = text; (t = memmem(t, (size_t)(end - t), tip, strlen(tip))) != NULL; t += strlen(tip)) {
+		// "?be=" within 80 bytes before: the element starts after it
+		const char *b = t;
+		while (b > text && t - b < 80 && memcmp(b, appid, strlen(appid)) != 0)
+			b--;
+		if (memcmp(b, appid, strlen(appid)) != 0)
+			continue;
+		size_t zlen;
+		const char *z = ident_before(b, text, &zlen);
+		const char *elem = b + strlen(appid);
+		const char *i = memmem(t, (size_t)(end - t) < 200 ? (size_t)(end - t) : 200, icon, strlen(icon));
+		if (!zlen || !i || i[strlen(icon)] != ':')
+			continue;
+		const char *elem_end = i + strlen(icon);  // just past "})"
+		// toolTipContent:<expr> ends at the tip's "),className:"
+		static const char tt[] = "toolTipContent:";
+		const char *tc = memmem(elem, (size_t)(t - elem), tt, strlen(tt));
+		if (!tc)
+			continue;
+		tc += strlen(tt);
+		const char *tc_end = t + strlen("(\"#GameList_Entry_Invalid_OSType\")");  // the closing ")" of the call
+		struct buffer out = {0};
+		int ok = append(&out, text, (size_t)(elem_end + 1 - text)) &&  // through the ':'
+		         append(&out, "globalThis.mwxrMapped?.has(", 27) && append(&out, z, zlen) &&
+		         append(&out, ".appid)?be=", 11) && append(&out, elem, (size_t)(tc - elem)) &&
+		         append(&out, "\"Steam Play: runs the Windows version with Wine\"", 48) &&
+		         append(&out, tc_end, (size_t)(i - tc_end)) && append(&out, ".Xz0,{})}):", 11) &&
+		         append(&out, elem_end + 1, (size_t)(end - elem_end - 1));
+		if (!ok) {
+			free(out.data);
+			return NULL;
+		}
+		*outlen = out.len;
+		return out.data;
+	}
+	return NULL;
+}
+
 // The patched copy of the sp.js at path, made if needed; NULL to use the original.
 static const char *patched_copy(const char *path, char *out, size_t outlen)
 {
@@ -257,8 +351,8 @@ static const char *patched_copy(const char *path, char *out, size_t outlen)
 		return NULL;
 	char dir[PATH_MAX], nomatch[PATH_MAX];
 	snprintf(dir, sizeof(dir), "%s/Library/Caches/macos-wine-xr/steamui", home);
-	// v6: the page, its tool service and the restart note. A new version of the patch gets new file names.
-	snprintf(out, outlen, "%s/sp-v6-%lld-%ld.js", dir, (long long)st.st_size, (long)st.st_mtimespec.tv_sec);
+	// v8: the page, its tool service, the restart note, 32-bit macOS marks, the Windows logo. A new version of the patch gets new file names.
+	snprintf(out, outlen, "%s/sp-v8-%lld-%ld.js", dir, (long long)st.st_size, (long)st.st_mtimespec.tv_sec);
 	snprintf(nomatch, sizeof(nomatch), "%s.unchanged", out);
 	struct stat have;
 	if (stat(out, &have) == 0)
@@ -297,6 +391,22 @@ static const char *patched_copy(const char *path, char *out, size_t outlen)
 			if (noted) {
 				free(text);
 				text = noted;
+			} else {
+				size = before;
+			}
+			before = size;
+			char *valid = mwxr_patch_invalid_os_type(text, size, &size);
+			if (valid) {
+				free(text);
+				text = valid;
+				before = size;
+				char *logo = mwxr_patch_windows_logo(text, size, &size);
+				if (logo) {
+					free(text);
+					text = logo;
+				} else {
+					size = before;
+				}
 			} else {
 				size = before;
 			}
@@ -476,6 +586,31 @@ static const char *answer_mwxr(const char *path, char *out, size_t outlen)
 	mkdir(dir, 0700);
 	unsigned long appid = 0;
 	char tool[96] = "";
+	if (strcmp(req, "mapped.json") == 0) {
+		// The app IDs in mapped (lines that start with one), as a JSON array.
+		char path[PATH_MAX];
+		payload_path(path, sizeof(path), "mapped");
+		char *text = read_all(path);
+		struct buffer json = {0};
+		int ok = append(&json, "[", 1);
+		for (char *line = text; ok && line && *line;) {
+			char *next = strchr(line, '\n');
+			int excluded;
+			unsigned long id = isdigit((unsigned char)*line) ? line_appid(line, &excluded) : 0;
+			if (id) {
+				char item[24];
+				int n = snprintf(item, sizeof(item), "%s%lu", json.len > 1 ? "," : "", id);
+				ok = append(&json, item, (size_t)n);
+			}
+			line = next ? next + 1 : NULL;
+		}
+		free(text);
+		ok = ok && append(&json, "]", 2);
+		snprintf(out, outlen, "%s/mapped.json", dir);
+		ok = ok && write_file(out, json.data);
+		free(json.data);
+		return ok ? out : NULL;
+	}
 	if (sscanf(req, "compat/%lu.json", &appid) == 1) {
 		char choice[16], reason[32], json[1024];
 		int active;
@@ -628,6 +763,12 @@ int main(int argc, char **argv)
 		char *noted = mwxr_patch_restart_note(grown, size, &size);
 		if (noted)
 			grown = noted;
+		char *valid = mwxr_patch_invalid_os_type(grown, size, &size);
+		if (valid)
+			grown = valid;
+		char *logo = valid ? mwxr_patch_windows_logo(grown, size, &size) : NULL;
+		if (logo)
+			grown = logo;
 	}
 	f = fopen(argv[2], "wb");
 	if (!f || fwrite(grown ? grown : text, 1, size, f) != size)
