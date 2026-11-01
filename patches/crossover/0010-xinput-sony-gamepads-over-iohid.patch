@@ -1,0 +1,459 @@
+# DualSense and DualShock 4 as XInput controllers on macOS (IOHID, no SDL): winebus marks
+# them as gamepads, and xinput and winexinput map Sony's raw report layout (sticks on
+# X/Y and Z/Rz, triggers on Rx/Ry, Y pointing down, Sony button order, hat 0-7 with 8 for
+# centred). XInput rumble on a DualSense goes out as Sony's compatible-vibration output
+# report (0x31 with CRC32 over Bluetooth, 0x02 over USB). Assetto Corsa's Gamepad (X360)
+# input reads only XInput. No DualShock 4 rumble.
+# Copyright 2026, Nick Kennedy
+# SPDX-License-Identifier: LGPL-2.1-or-later
+--- a/dlls/winebus.sys/bus_iohid.c
++++ b/dlls/winebus.sys/bus_iohid.c
+@@ -323,7 +323,9 @@
+     if (IOHIDDeviceConformsTo(IOHIDDevice, kHIDPage_GenericDesktop, kHIDUsage_GD_GamePad) ||
+        IOHIDDeviceConformsTo(IOHIDDevice, kHIDPage_GenericDesktop, kHIDUsage_GD_Joystick))
+     {
+-        if (is_xbox_gamepad(desc.vid, desc.pid))
++        /* Sony pads keep their raw report; xinput and winexinput map its layout. */
++        if (is_xbox_gamepad(desc.vid, desc.pid) || is_dualshock4_gamepad(desc.vid, desc.pid) ||
++            is_dualsense_gamepad(desc.vid, desc.pid))
+             desc.is_gamepad = TRUE;
+     }
+ 
+--- a/dlls/winexinput.sys/main.c
++++ b/dlls/winexinput.sys/main.c
+@@ -160,6 +160,7 @@
+     HIDP_VALUE_CAPS ry_caps;
+     HIDP_VALUE_CAPS rt_caps;
+     HIDP_DEVICE_DESC device_desc;
++    BOOL sony_layout;
+ 
+     /* everything below requires holding the cs */
+     CRITICAL_SECTION cs;
+@@ -192,14 +193,26 @@
+     return min + MulDiv(tmp - caps->LogicalMin, max - min, caps->LogicalMax - caps->LogicalMin);
+ }
+ 
++/* Sony's raw layout (see is_sony_gamepad): its buttons in XInput's report order
++ * A, B, X, Y, LB, RB, Back, Start, LS, RS. */
++static const USAGE sony_buttons[] = {2, 3, 1, 4, 5, 6, 9, 10, 11, 12};
++
+ static void translate_report_to_xinput_state(struct func_device *fdo)
+ {
+     ULONG lx = 0, ly = 0, rx = 0, ry = 0, lt = 0, rt = 0, hat = 0;
++    USAGE rx_usage = HID_USAGE_GENERIC_RX, ry_usage = HID_USAGE_GENERIC_RY;
++    USAGE lt_usage = HID_USAGE_GENERIC_Z, rt_usage = HID_USAGE_GENERIC_RZ;
+     PHIDP_PREPARSED_DATA preparsed;
+-    USAGE usages[10];
++    USAGE usages[32];
+     NTSTATUS status;
+-    ULONG i, count;
++    ULONG i, j, count;
+ 
++    if (fdo->sony_layout)
++    {
++        rx_usage = HID_USAGE_GENERIC_Z; ry_usage = HID_USAGE_GENERIC_RZ;
++        lt_usage = HID_USAGE_GENERIC_RX; rt_usage = HID_USAGE_GENERIC_RY;
++    }
++
+     preparsed = fdo->device_desc.CollectionDesc->PreparsedData;
+ 
+     count = ARRAY_SIZE(usages);
+@@ -215,30 +228,44 @@
+     status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Y,
+                                 &ly, preparsed, fdo->report_buf, fdo->report_len);
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue y returned %#lx\n", status);
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Z,
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, lt_usage,
+                                 &lt, preparsed, fdo->report_buf, fdo->report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue z returned %#lx\n", status);
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RX,
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue lt (%#x) returned %#lx\n", lt_usage, status);
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, rx_usage,
+                                 &rx, preparsed, fdo->report_buf, fdo->report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue rx returned %#lx\n", status);
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RY,
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue rx (%#x) returned %#lx\n", rx_usage, status);
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, ry_usage,
+                                 &ry, preparsed, fdo->report_buf, fdo->report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue ry returned %#lx\n", status);
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RZ,
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue ry (%#x) returned %#lx\n", ry_usage, status);
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, rt_usage,
+                                 &rt, preparsed, fdo->report_buf, fdo->report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue rz returned %#lx\n", status);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue rt (%#x) returned %#lx\n", rt_usage, status);
+ 
++    /* Sony's hat counts 0-7 from up, with 8 for centred */
++    if (fdo->sony_layout) hat = hat <= 7 ? hat + 1 : 0;
+     if (hat < 1 || hat > 8) fdo->xinput_state.buttons = 0;
+     else fdo->xinput_state.buttons = hat << 10;
+     for (i = 0; i < count; i++)
+     {
++        if (fdo->sony_layout)
++        {
++            for (j = 0; j < ARRAY_SIZE(sony_buttons); j++)
++                if (usages[i] == sony_buttons[j]) fdo->xinput_state.buttons |= 1 << j;
++            continue;
++        }
+         if (usages[i] < 1 || usages[i] > 10) continue;
+         fdo->xinput_state.buttons |= (1 << (usages[i] - 1));
+     }
+-    fdo->xinput_state.lx_axis = scale_value(lx, &fdo->lx_caps, 0, 65535);
+-    fdo->xinput_state.ly_axis = scale_value(-ly - 1, &fdo->ly_caps, 0, 65535);
++    /* this report's Y axes point down: Sony's already do */
++    if (!fdo->sony_layout)
++    {
++        ly = -ly - 1;
++        ry = -ry - 1;
++    }
++    fdo->xinput_state.lx_axis = scale_value(lx, &fdo->lx_caps, 0, 65535);
++    fdo->xinput_state.ly_axis = scale_value(ly, &fdo->ly_caps, 0, 65535);
+     fdo->xinput_state.rx_axis = scale_value(rx, &fdo->rx_caps, 0, 65535);
+-    fdo->xinput_state.ry_axis = scale_value(-ry - 1, &fdo->ry_caps, 0, 65535);
++    fdo->xinput_state.ry_axis = scale_value(ry, &fdo->ry_caps, 0, 65535);
+     rt = scale_value(rt, &fdo->rt_caps, 0, 255);
+     lt = scale_value(lt, &fdo->lt_caps, 0, 255);
+     fdo->xinput_state.trigger = 0x8000 + (lt - rt) * 128;
+@@ -633,8 +660,37 @@
+     return io.Status;
+ }
+ 
++/* Sony gamepads read through raw HID (macOS IOHID) keep their own report layout: X/Y
++ * left stick, Z/Rz right stick, Rx/Ry triggers, Y axes pointing down, and buttons in
++ * Square, Cross, Circle, Triangle, L1, R1, L2, R2, Create, Options, L3, R3, PS order. */
++static BOOL is_sony_gamepad(const HID_DEVICE_ATTRIBUTES *attr)
++{
++    if (attr->VendorID != 0x054c) return FALSE;
++    switch (attr->ProductID)
++    {
++    case 0x05c4: /* DualShock 4 [CUH-ZCT1x] */
++    case 0x09cc: /* DualShock 4 [CUH-ZCT2x] */
++    case 0x0ba0: /* DualShock 4 Wireless Adaptor */
++    case 0x0ce6: /* DualSense */
++    case 0x0df2: /* DualSense Edge */
++        return TRUE;
++    }
++    return FALSE;
++}
++
+ static void check_value_caps(struct func_device *fdo, USHORT usage, HIDP_VALUE_CAPS *caps)
+ {
++    if (fdo->sony_layout) switch (usage)
++    {
++    case HID_USAGE_GENERIC_X: fdo->lx_caps = *caps; return;
++    case HID_USAGE_GENERIC_Y: fdo->ly_caps = *caps; return;
++    case HID_USAGE_GENERIC_Z: fdo->rx_caps = *caps; return;
++    case HID_USAGE_GENERIC_RZ: fdo->ry_caps = *caps; return;
++    case HID_USAGE_GENERIC_RX: fdo->lt_caps = *caps; return;
++    case HID_USAGE_GENERIC_RY: fdo->rt_caps = *caps; return;
++    default: return;
++    }
++
+     switch (usage)
+     {
+     case HID_USAGE_GENERIC_X: fdo->lx_caps = *caps; break;
+@@ -654,6 +710,7 @@
+     PHIDP_PREPARSED_DATA preparsed;
+     HIDP_BUTTON_CAPS *button_caps;
+     HID_DESCRIPTOR hid_desc = {0};
++    HID_DEVICE_ATTRIBUTES attr = {0};
+     HIDP_VALUE_CAPS *value_caps;
+     HIDP_REPORT_IDS *reports;
+     NTSTATUS status;
+@@ -661,6 +718,10 @@
+ 
+     if ((status = sync_ioctl(fdo->bus_device, IOCTL_HID_GET_DEVICE_DESCRIPTOR, NULL, 0, &hid_desc, sizeof(hid_desc))))
+         return status;
++    attr.Size = sizeof(attr);
++    if (!sync_ioctl(fdo->bus_device, IOCTL_HID_GET_DEVICE_ATTRIBUTES, NULL, 0, &attr, sizeof(attr)) &&
++        (fdo->sony_layout = is_sony_gamepad(&attr)))
++        TRACE("Using the Sony gamepad layout for %04x:%04x\n", attr.VendorID, attr.ProductID);
+ 
+     if (!(report_desc_len = hid_desc.DescriptorList[0].wReportLength)) return STATUS_UNSUCCESSFUL;
+     if (!(report_desc = malloc(report_desc_len))) return STATUS_NO_MEMORY;
+--- a/dlls/xinput1_3/main.c
++++ b/dlls/xinput1_3/main.c
+@@ -72,6 +72,9 @@
+         HIDP_VALUE_CAPS rx_caps;
+         HIDP_VALUE_CAPS ry_caps;
+         HIDP_VALUE_CAPS rt_caps;
++        BOOL sony_layout;
++        BYTE sony_rumble_report; /* DualSense output report: 0x31 Bluetooth, 0x02 USB */
++        BYTE sony_rumble_seq;
+ 
+         HANDLE read_event;
+         OVERLAPPED read_ovl;
+@@ -136,8 +139,119 @@
+     return FALSE;
+ }
+ 
++/* Sony gamepads read through raw HID (macOS IOHID) keep their own report layout: X/Y
++ * left stick, Z/Rz right stick, Rx/Ry triggers, Y axes pointing down, and buttons in
++ * Square, Cross, Circle, Triangle, L1, R1, L2, R2, Create, Options, L3, R3, PS order. */
++static BOOL is_sony_gamepad(HANDLE device, BOOL *dualsense)
++{
++    HIDD_ATTRIBUTES attr = {sizeof(attr)};
++
++    *dualsense = FALSE;
++    if (!HidD_GetAttributes(device, &attr) || attr.VendorID != 0x054c) return FALSE;
++    switch (attr.ProductID)
++    {
++    case 0x05c4: /* DualShock 4 [CUH-ZCT1x] */
++    case 0x09cc: /* DualShock 4 [CUH-ZCT2x] */
++    case 0x0ba0: /* DualShock 4 Wireless Adaptor */
++        return TRUE;
++    case 0x0ce6: /* DualSense */
++    case 0x0df2: /* DualSense Edge */
++        *dualsense = TRUE;
++        return TRUE;
++    }
++    return FALSE;
++}
++
++/* DualSense rumble, as Linux's hid-playstation sends it: an output report whose common
++ * block marks only the compatible-vibration fields valid, so the light bar and LEDs are
++ * left alone. Bluetooth adds a sequence tag and a CRC32 seeded with the 0xa2 HID header. */
++#define DS_BT_REPORT_LEN 78
++#define DS_USB_REPORT_LEN 48
++
++static UINT32 sony_crc32(UINT32 crc, const BYTE *data, UINT len)
++{
++    UINT i, bit;
++
++    crc = ~crc;
++    for (i = 0; i < len; i++)
++    {
++        crc ^= data[i];
++        for (bit = 0; bit < 8; bit++) crc = (crc >> 1) ^ (0xedb88320 & -(crc & 1));
++    }
++    return ~crc;
++}
++
++static BYTE dualsense_rumble_report(PHIDP_PREPARSED_DATA preparsed, ULONG output_len)
++{
++    BYTE id = 0;
++    char *buf;
++
++    if (!output_len || !(buf = malloc(output_len))) return 0;
++    if (output_len >= DS_BT_REPORT_LEN &&
++        HidP_InitializeReportForID(HidP_Output, 0x31, preparsed, buf, output_len) == HIDP_STATUS_SUCCESS)
++        id = 0x31;
++    else if (output_len >= DS_USB_REPORT_LEN &&
++             HidP_InitializeReportForID(HidP_Output, 0x02, preparsed, buf, output_len) == HIDP_STATUS_SUCCESS)
++        id = 0x02;
++    free(buf);
++    TRACE("DualSense rumble report %#x\n", id);
++    return id;
++}
++
++static void dualsense_set_rumble(struct xinput_controller *controller, XINPUT_VIBRATION *state)
++{
++    BYTE report[DS_BT_REPORT_LEN] = {0}, *common;
++    BYTE header = 0xa2;
++    UINT32 crc;
++    ULONG len;
++    BOOL ret;
++
++    report[0] = controller->hid.sony_rumble_report;
++    if (report[0] == 0x31)
++    {
++        report[1] = controller->hid.sony_rumble_seq << 4;
++        controller->hid.sony_rumble_seq = (controller->hid.sony_rumble_seq + 1) & 0xf;
++        report[2] = 0x10; /* output tag */
++        common = report + 3;
++        len = DS_BT_REPORT_LEN;
++    }
++    else
++    {
++        common = report + 1;
++        len = DS_USB_REPORT_LEN;
++    }
++
++    common[0] = 0x01 | 0x02; /* compatible vibration, haptics select */
++    common[2] = state->wRightMotorSpeed >> 8; /* right: light, high frequency */
++    common[3] = state->wLeftMotorSpeed >> 8;  /* left: heavy, low frequency */
++
++    if (report[0] == 0x31)
++    {
++        crc = sony_crc32(0, &header, 1);
++        crc = sony_crc32(crc, report, len - 4);
++        report[len - 4] = crc;
++        report[len - 3] = crc >> 8;
++        report[len - 2] = crc >> 16;
++        report[len - 1] = crc >> 24;
++    }
++
++    ret = HidD_SetOutputReport(controller->device, report, len);
++    if (!ret) WARN("HidD_SetOutputReport (DualSense rumble) failed with error %lu\n", GetLastError());
++}
++
+ static void check_value_caps(struct xinput_controller *controller, USHORT usage, HIDP_VALUE_CAPS *caps)
+ {
++    if (controller->hid.sony_layout) switch (usage)
++    {
++    case HID_USAGE_GENERIC_X: controller->hid.lx_caps = *caps; return;
++    case HID_USAGE_GENERIC_Y: controller->hid.ly_caps = *caps; return;
++    case HID_USAGE_GENERIC_Z: controller->hid.rx_caps = *caps; return;
++    case HID_USAGE_GENERIC_RZ: controller->hid.ry_caps = *caps; return;
++    case HID_USAGE_GENERIC_RX: controller->hid.lt_caps = *caps; return;
++    case HID_USAGE_GENERIC_RY: controller->hid.rt_caps = *caps; return;
++    default: return;
++    }
++
+     switch (usage)
+     {
+     case HID_USAGE_GENERIC_X: controller->hid.lx_caps = *caps; break;
+@@ -217,10 +331,13 @@
+     ULONG collections_count = 0;
+     HIDP_VALUE_CAPS *value_caps;
+     int i, u, button_count = 0;
++    BOOL dualsense;
+     NTSTATUS status;
+ 
+     /* Count buttons */
+     memset(caps, 0, sizeof(XINPUT_CAPABILITIES));
++    if ((controller->hid.sony_layout = is_sony_gamepad(device, &dualsense))) TRACE("Using the Sony gamepad layout\n");
++    controller->hid.sony_rumble_report = 0;
+ 
+     if (!(button_caps = malloc(sizeof(*button_caps) * controller->hid.caps.NumberInputButtonCaps))) return FALSE;
+     status = HidP_GetButtonCaps(HidP_Input, button_caps, &controller->hid.caps.NumberInputButtonCaps, preparsed);
+@@ -284,9 +401,12 @@
+     }
+     for (i = 0; i < waveform_caps_count; ++i) check_waveform_caps(controller, device, preparsed, collections, waveform_caps + i);
+     free(collections);
++
++    if (dualsense)
++        controller->hid.sony_rumble_report = dualsense_rumble_report(preparsed, controller->hid.caps.OutputReportByteLength);
+ 
+     if (controller->hid.haptics_rumble_caps.UsagePage ||
+-        controller->hid.haptics_buzz_caps.UsagePage)
++        controller->hid.haptics_buzz_caps.UsagePage || controller->hid.sony_rumble_report)
+     {
+         caps->Flags |= XINPUT_CAPS_FFB_SUPPORTED;
+         caps->Vibration.wLeftMotorSpeed = 255;
+@@ -316,6 +436,12 @@
+     if (!controller->enabled) return ERROR_SUCCESS;
+     if (!update_rumble && !update_buzz) return ERROR_SUCCESS;
+ 
++    if (controller->hid.sony_rumble_report)
++    {
++        dualsense_set_rumble(controller, state);
++        return ERROR_SUCCESS;
++    }
++
+     report_id = controller->hid.haptics_report;
+     status = HidP_InitializeReportForID(HidP_Output, report_id, preparsed, report_buf, report_len);
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_InitializeReportForID returned %#lx\n", status);
+@@ -564,9 +690,10 @@
+ {
+     ULONG read_len, report_len = controller->hid.caps.InputReportByteLength;
+     char *report_buf = controller->hid.input_report_buf;
++    BOOL sony = controller->hid.sony_layout;
+     XINPUT_STATE state;
+     NTSTATUS status;
+-    USAGE buttons[11];
++    USAGE buttons[32];
+     ULONG i, button_length, value;
+     BOOL ret;
+ 
+@@ -587,10 +714,27 @@
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsages HID_USAGE_PAGE_BUTTON returned %#lx\n", status);
+ 
+     state.Gamepad.wButtons = 0;
+-    for (i = 0; i < button_length; i++)
++    if (sony) for (i = 0; i < button_length; i++)
+     {
+         switch (buttons[i])
+         {
++        case 1: state.Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
++        case 2: state.Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
++        case 3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
++        case 4: state.Gamepad.wButtons |= XINPUT_GAMEPAD_Y; break;
++        case 5: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
++        case 6: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
++        case 9: state.Gamepad.wButtons |= XINPUT_GAMEPAD_BACK; break;
++        case 10: state.Gamepad.wButtons |= XINPUT_GAMEPAD_START; break;
++        case 11: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
++        case 12: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
++        case 13: state.Gamepad.wButtons |= XINPUT_GAMEPAD_GUIDE; break;
++        }
++    }
++    else for (i = 0; i < button_length; i++)
++    {
++        switch (buttons[i])
++        {
+         case 1: state.Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
+         case 2: state.Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
+         case 3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
+@@ -610,6 +754,8 @@
+     if (button_length) state.Gamepad.wButtons |= XINPUT_GAMEPAD_GUIDE;
+ 
+     status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_HATSWITCH, &value, controller->hid.preparsed, report_buf, report_len);
++    /* Sony's hat counts 0-7 from up, with 8 for centred */
++    if (sony) value = value <= 7 ? value + 1 : 0;
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_HATSWITCH returned %#lx\n", status);
+     else switch (value)
+     {
+@@ -627,29 +773,43 @@
+     case 8: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_UP; break;
+     }
+ 
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_X, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_X returned %#lx\n", status);
+-    else state.Gamepad.sThumbLX = scale_value(value, &controller->hid.lx_caps, -32768, 32767);
+-
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Y, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Y returned %#lx\n", status);
+-    else state.Gamepad.sThumbLY = scale_value(value, &controller->hid.ly_caps, -32768, 32767);
++    /* the stick and trigger usages, by layout */
++    {
++        USAGE lx = HID_USAGE_GENERIC_X, ly = HID_USAGE_GENERIC_Y, rx = HID_USAGE_GENERIC_RX,
++              ry = HID_USAGE_GENERIC_RY, lt = HID_USAGE_GENERIC_Z, rt = HID_USAGE_GENERIC_RZ;
++        /* Sony's Y axes point down; XInput's point up */
++        LONG y_min = sony ? 32767 : -32768, y_max = sony ? -32768 : 32767;
+ 
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RX, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RX returned %#lx\n", status);
+-    else state.Gamepad.sThumbRX = scale_value(value, &controller->hid.rx_caps, -32768, 32767);
++        if (sony)
++        {
++            rx = HID_USAGE_GENERIC_Z; ry = HID_USAGE_GENERIC_RZ;
++            lt = HID_USAGE_GENERIC_RX; rt = HID_USAGE_GENERIC_RY;
++        }
+ 
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RY, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RY returned %#lx\n", status);
+-    else state.Gamepad.sThumbRY = scale_value(value, &controller->hid.ry_caps, -32768, 32767);
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, lx, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue left stick X (%#x) returned %#lx\n", lx, status);
++        else state.Gamepad.sThumbLX = scale_value(value, &controller->hid.lx_caps, -32768, 32767);
+ 
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RZ, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RZ returned %#lx\n", status);
+-    else state.Gamepad.bRightTrigger = scale_value(value, &controller->hid.rt_caps, 0, 255);
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, ly, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue left stick Y (%#x) returned %#lx\n", ly, status);
++        else state.Gamepad.sThumbLY = scale_value(value, &controller->hid.ly_caps, y_min, y_max);
+ 
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Z, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Z returned %#lx\n", status);
+-    else state.Gamepad.bLeftTrigger = scale_value(value, &controller->hid.lt_caps, 0, 255);
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, rx, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue right stick X (%#x) returned %#lx\n", rx, status);
++        else state.Gamepad.sThumbRX = scale_value(value, &controller->hid.rx_caps, -32768, 32767);
++
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, ry, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue right stick Y (%#x) returned %#lx\n", ry, status);
++        else state.Gamepad.sThumbRY = scale_value(value, &controller->hid.ry_caps, y_min, y_max);
++
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, rt, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue right trigger (%#x) returned %#lx\n", rt, status);
++        else state.Gamepad.bRightTrigger = scale_value(value, &controller->hid.rt_caps, 0, 255);
++
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, lt, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue left trigger (%#x) returned %#lx\n", lt, status);
++        else state.Gamepad.bLeftTrigger = scale_value(value, &controller->hid.lt_caps, 0, 255);
++    }
+ 
+     EnterCriticalSection(&controller->crit);
+     if (controller->enabled)
