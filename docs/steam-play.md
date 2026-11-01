@@ -388,6 +388,41 @@ Corsa runs all the way through to the menu (2026-10-28). WPF logged a non-fatal
 OpenGL framebuffer error. Racing, VR, wheel input and force feedback have
 not been validated.
 
+Starting a race then failed: the launcher started `acs.exe`, which closed at once and
+returned to the launcher with no message. The per-launch `game.log` showed Wine aborting
+it at `d3dx11_43.dll.D3DX11CreateShaderResourceViewFromFileW`, a stub in CrossOver 26.3
+(as were `CreateTextureFromFile`, `GetImageInfoFromFile` and
+`CreateShaderResourceViewFromMemory`). `patches/crossover/0009-d3dx11-load-textures-from-files.patch`
+implements them on Wine's existing texture loader. Wine's d3dx11 tests, run in the
+244210 prefix against DXMT, pass the new file paths, with the same 7 pre-existing
+memory-path failures (test 17 data, invalid load info 4–7) repeated for the file
+variants. The rebuilt `d3dx11_43.dll` (both architectures) is installed in
+`runtime-wow64` and the 244210 prefix, with the old copies kept as `*.pre-d3dx11-file`.
+The user confirmed races start and run (2026-11-01).
+
+A Bluetooth DualSense then worked in the launcher's controls screen but not in a race.
+`cfg/controls.ini` had `INPUT_METHOD=X360` (the Gamepad method), which reads only XInput,
+and this Wine (no SDL; macOS IOHID) presented only Xbox pads to XInput: the DualSense
+reached games through DirectInput alone.
+`patches/crossover/0010-xinput-sony-gamepads-over-iohid.patch` marks DualSense and
+DualShock 4 pads as gamepads in winebus and maps Sony's raw report in xinput and
+winexinput (sticks X/Y and Z/Rz, triggers Rx/Ry, Y axes pointing down, Sony button order,
+hat 0–7 with 8 for centred). winebus's existing Bluetooth DualSense fixup already turns
+extended `0x31` reports into report 1, the layout mapped. With the controller held, an XInput
+probe in the 244210 prefix read Cross/Circle/Square/Triangle as A/B/X/Y, d-pad up, both
+triggers to 255, left stick up as +Y and right stick right as +X (2026-11-01).
+
+The same patch adds DualSense rumble to XInput. A raw DualSense has no HID haptics usages,
+so `XInputSetState` sends Sony's output report the way Linux's hid-playstation does: only
+the compatible-vibration valid flags set (light bar and LEDs untouched), left (heavy) motor
+from `wLeftMotorSpeed`, right (light) from `wRightMotorSpeed`; report 0x31 with a sequence
+tag and a CRC32 seeded with 0xa2 over Bluetooth, report 0x02 over USB. On the Bluetooth
+controller the user felt heavy, light and both motors from an XInput test in the 244210
+prefix, and `XInputGetCapabilities` reports force feedback with 255/255 motors
+(2026-11-01). USB and DualShock 4 rumble are untested and not implemented respectively.
+Installed in `runtime-wow64` (winebus.so, winexinput.sys, xinput1_1–1_4) and the
+244210 prefix, with old copies kept as `*.pre-sony-pad`; `runtime-lsteamclient` does not have it.
+
 Unit checks cover Assetto Corsa's selection, other-game defaults, explicit
 overrides, architecture-specific bridge provisioning and launch preflight:
 
