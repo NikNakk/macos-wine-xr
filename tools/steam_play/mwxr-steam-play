@@ -92,6 +92,13 @@ while [ "$count" -gt 0 ]; do
     *) set -- "$@" "$a" ;;
   esac
 done
+# Wine's tracing for one game, for debugging: the contents of winedebug-<appid> in the
+# Steam Play folder (beside compatibilitytools.d) become WINEDEBUG for its launches.
+debug_file="$here/../../winedebug-$appid"
+if [ -r "$debug_file" ]; then
+  read -r WINEDEBUG < "$debug_file" && export WINEDEBUG && say "WINEDEBUG=$WINEDEBUG (from winedebug-$appid)"
+  env | grep -v '^SteamUser=\|^SteamAppUser=' | sort > "$logs/steam-play-launch-env-$appid.txt"
+fi
 GAME_EXE=$exe GAME_WORKDIR=$PWD
 export GAME_EXE GAME_WORKDIR
 "$runner" "$appid" "$@" >> "$log" 2>&1
