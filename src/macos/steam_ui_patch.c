@@ -27,6 +27,7 @@
 #include <mach-o/dyld.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -566,6 +567,32 @@ static int choose(unsigned long appid, const char *tool)
 	return ok;
 }
 
+// With live mapping on in the running client (steam_live_mapping.c writes its pid to
+// live-mapping), waits up to 4 s for it to bring mapped, and Steam, up to date with a
+// choice, so the page's answer that follows shows no "Applies when Steam restarts".
+// 1 if it did.
+static int wait_for_live_mapping(unsigned long appid)
+{
+	char path[PATH_MAX];
+	payload_path(path, sizeof(path), "live-mapping");
+	char *text = read_all(path);
+	int pid = text ? atoi(text) : 0;
+	free(text);
+	if (pid <= 0 || kill(pid, 0) != 0)
+		return 0;
+	for (int i = 0; i < 40; i++) {
+		char choice[16], reason[32];
+		int active;
+		game_state(appid, choice, sizeof(choice), reason, sizeof(reason), &active);
+		int automatic = reason[0] && strcmp(reason, "listed") != 0;
+		int after = strcmp(choice, "listed") == 0 || (automatic && strcmp(choice, "excluded") != 0);
+		if (active == after)
+			return 1;
+		usleep(100 * 1000);
+	}
+	return 0;
+}
+
 // Answers /mwxr/... requests from the patched page with a generated file; NULL if path
 // is not one.
 static const char *answer_mwxr(const char *path, char *out, size_t outlen)
@@ -631,7 +658,9 @@ static const char *answer_mwxr(const char *path, char *out, size_t outlen)
 	}
 	if (sscanf(req, "select/%lu/%95[^.].json", &appid, tool) == 2) {
 		int ok = choose(appid, tool);
-		mwxr_gate_log("Compatibility page: app %lu -> %s%s", appid, tool, ok ? "" : " (games file not written)");
+		int applied = ok && wait_for_live_mapping(appid);
+		mwxr_gate_log("Compatibility page: app %lu -> %s%s%s", appid, tool, ok ? "" : " (games file not written)",
+		              applied ? " (mapped in Steam now)" : "");
 		snprintf(out, outlen, "%s/select.json", dir);
 		return write_file(out, ok ? "{\"ok\":true}" : "{\"ok\":false}") ? out : NULL;
 	}

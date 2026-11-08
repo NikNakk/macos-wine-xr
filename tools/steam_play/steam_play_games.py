@@ -11,7 +11,8 @@ payload's "games" file, minus those listed there as -APPID. Mapping a game that 
 a macOS build makes Steam install its Windows build instead. Reads macOS Steam's
 offline caches (appinfo.vdf and the library cache).
 
-  steam_play_games.py sync [--payload DIR]   write DIR/mapped, which Steam Play.app reads
+  steam_play_games.py sync [--payload DIR] [--output FILE]
+                                             write DIR/mapped (or FILE), which Steam Play.app reads
   steam_play_games.py list [--payload DIR]   what is mapped and why
 """
 import argparse
@@ -109,6 +110,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('command', choices=('sync', 'list'))
     p.add_argument('--payload', type=Path, default=PAYLOAD)
+    p.add_argument('--output', type=Path, help='sync: write here instead of DIR/mapped (live mapping)')
     a = p.parse_args()
     apps = steam_games.read_appinfo()
     listed, excluded = read_games(a.payload / 'games')
@@ -120,9 +122,10 @@ def main():
         automatic = mapping(apps, owned_apps(), set(), set())
         lines += [f'#excluded {appid}   # {name(apps, appid)} ({automatic[appid]})'
                   for appid in sorted(excluded) if appid in automatic]
-        tmp = a.payload / 'mapped.new'
+        out = a.output or a.payload / 'mapped'
+        tmp = out.with_name(out.name + '.new')
         tmp.write_text('# Written by steam_play_games.py sync; edit "games" instead.\n' + '\n'.join(lines) + '\n')
-        tmp.replace(a.payload / 'mapped')
+        tmp.replace(out)
         count = lambda why: sum(w == why for w in mapped.values())  # noqa: E731
         print(f'{len(mapped)} games mapped: {count("listed")} listed, {count("vr")} VR with a macOS build, '
               f'{count("mac-32-bit")} with a 32-bit macOS build, {count("windows-only")} Windows-only, '

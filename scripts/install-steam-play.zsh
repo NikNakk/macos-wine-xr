@@ -29,11 +29,12 @@ mkdir -p "${build}"
 clang -Wall -Wextra -O2 -arch arm64 -arch x86_64 -mmacosx-version-min=13.0 -dynamiclib \
   -install_name @rpath/libmwxr_steam_compat_gate.dylib \
   "${repo}/src/macos/steam_compat_gate.c" "${repo}/src/macos/steam_ui_patch.c" "${repo}/src/macos/steam_restart.c" \
+  "${repo}/src/macos/steam_live_mapping.c" \
   -o "${build}/libmwxr_steam_compat_gate.dylib"
 clang -Wall -Wextra -O2 -arch arm64 -mmacosx-version-min=13.0 \
   "${repo}/src/macos/steam_play_launcher.c" -o "${build}/steam-play"
 clang -Wall -Wextra -O2 -arch arm64 -DMWXR_GATE_SCAN_MAIN \
-  "${repo}/src/macos/steam_compat_gate.c" -o "${build}/steam-compat-gate-scan"
+  "${repo}/src/macos/steam_compat_gate.c" "${repo}/src/macos/steam_live_mapping.c" -o "${build}/steam-compat-gate-scan"
 codesign -f -s - "${build}/libmwxr_steam_compat_gate.dylib" "${build}/steam-play" \
   "${build}/steam-compat-gate-scan" 2>/dev/null
 
@@ -51,16 +52,16 @@ cp -c "${repo}/tools/steam_play/compatibilitytool.vdf" "${repo}/tools/steam_play
 chmod +x "${tool}/mwxr-steam-play"
 print -r -- "${runner}" > "${tool}/runner"
 # Steam Play is used for every Windows-only game in the library, and for the games
-# listed here (steam_play_games.py). Kept across reinstalls; edit it, then restart Steam
-# through Steam Play.app.
+# listed here (steam_play_games.py). Kept across reinstalls; a running Steam picks up
+# changes (docs/steam-play.md, Live mapping).
 if [[ ! -f ${payload}/games ]]; then
   cat > "${payload}/games" <<'GAMES'
 # Steam Play (macos-wine-xr) is used for every Windows-only game in your library and
 # every VR game with a Windows build. List here, one app ID per line, other games that
 # also have a macOS build and should install and start as Windows games (listing one
 # switches it to its Windows build, removing it switches it back), and -APPID for a game
-# to leave out (a VR game then goes back to its macOS build). Restart Steam
-# through Steam Play.app after a change. See what is mapped:
+# to leave out (a VR game then goes back to its macOS build). A change applies in
+# a running Steam (or at its next start through Steam Play.app). See what is mapped:
 #   python3 ~/Library/Application\ Support/macos-wine-xr/steam-play/steam_play_games.py list
 1256230   # Hyperbolica
 GAMES
