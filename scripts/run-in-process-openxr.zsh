@@ -5,6 +5,7 @@ set -euo pipefail
 repo=${0:A:h:h}
 : ${MWXR_NATIVE_RUNTIME_JSON:?x86_64 Monado runtime manifest}
 [[ $# -gt 0 ]] || { print -u2 'usage: run-in-process-openxr.zsh executable [args...]'; exit 1; }
+source "${repo}/scripts/openxr-launch-settings.zsh"
 root=${MWXR_IN_PROCESS_BUILD:-${repo}/build-in-process/gate}
 # MWXR_IN_PROCESS_WINE selects another runtime, for example a GPTK/D3DMetal Wine.
 wine_root=${MWXR_IN_PROCESS_WINE:-${MWXR_WINE_TREE:-$HOME/Code/wine-crossover/runtime}}
