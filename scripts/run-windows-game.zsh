@@ -200,6 +200,8 @@ print "Logs: ${logs}"
 export MWXR_LSTEAMCLIENT=1 STEAM_COMPAT_CLIENT_INSTALL_PATH=${mac_steam}
 export SteamAppId=${appid} SteamGameId=${appid}
 export VR_OVERRIDE=${xrizer_windows} XDG_STATE_HOME="Z:${logs//\//\\}"
+# Wine does not pass XDG_* variables to Windows programs; xrizer also reads this one.
+export XRIZER_STATE_HOME=${XDG_STATE_HOME}
 export RUST_LOG=${RUST_LOG:-xrizer=info,openvr=warn}
 cd "${workdir}"
 # The game runs as a background job so a stop signal is handled at once rather than after
