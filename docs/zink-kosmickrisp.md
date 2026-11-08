@@ -58,6 +58,25 @@ and GLSL 1.50 but still cannot run geometry shaders or transform feedback. The
 proper fix is to add both to KosmicKrisp with Mesa's `src/poly` emulation (already
 used for its tessellation, and by Honeykrisp for both).
 
+Those are the only gaps. Of everything Mesa requires for OpenGL 3.0–3.2, Zink on
+KosmicKrisp lacks only `GL_EXT_transform_feedback` (and `ARB_transform_feedback2`/`3`)
+and `GL_ARB_geometry_shader4`; the other 36 extensions and limits are present. With
+the override it reports GLSL 4.60 and has `ARB_ES3_compatibility`, so Earth VR's
+`#version 100`, `110` and `300 es` shaders compile.
+
+The override hides the gaps rather than reporting them: `glCreateShader(GL_GEOMETRY_SHADER)`
+succeeds with no error (`WGL_PROBE_GEOMETRY=1 wgl_probe.exe`). Our Mesa therefore
+logs one warning (`mesa_logw`: stderr, so the game log, and the Windows debugger
+output) when an application creates a geometry shader or uses transform feedback
+that the driver lacks, only while `MESA_GL_VERSION_OVERRIDE` is set; without it
+Mesa reports the usual GL errors. Earth VR triggered neither
+in two minutes of loading, terrain streaming and the opening scene
+(`348250-zink-glcheck3`). Its ION engine names both as optional features
+(`ARB_geometry_shader4`, "Unable to create transform feedback object"), so it
+probably checks the extension strings, which Zink does not advertise. Flying, Street
+View and tours have not been exercised; watch the game log for `MESA: warning:
+the application …` lines.
+
 `tools/gl_probe/wgl_probe.c` asks for Earth VR's context and draws frames:
 
 | OpenGL | Request | Result |
