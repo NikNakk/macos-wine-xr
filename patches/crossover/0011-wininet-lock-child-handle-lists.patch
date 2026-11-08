@@ -1,0 +1,125 @@
+--- a/dlls/wininet/internet.h
++++ b/dlls/wininet/internet.h
+@@ -361,6 +361,7 @@
+ void *alloc_async_task(object_header_t*,async_task_proc_t,size_t);
+ 
+ void *alloc_object(object_header_t*,const object_vtbl_t*,size_t);
++void add_child_object(object_header_t*,object_header_t*);
+ object_header_t *get_handle_object( HINTERNET hinternet );
+ object_header_t *WININET_AddRef( object_header_t *info );
+ BOOL WININET_Release( object_header_t *info );
+--- a/dlls/wininet/internet.c
++++ b/dlls/wininet/internet.c
+@@ -75,6 +75,17 @@
+ };
+ static CRITICAL_SECTION WININET_cs = { &WININET_cs_debug, -1, 0, 0, 0, 0 };
+ 
++/* Guards every handle's children list and valid_handle. Applications connect and
++ * close from several threads on one InternetOpen handle at once. */
++static CRITICAL_SECTION children_cs;
++static CRITICAL_SECTION_DEBUG children_cs_debug =
++{
++    0, 0, &children_cs,
++    { &children_cs_debug.ProcessLocksList, &children_cs_debug.ProcessLocksList },
++      0, 0, { (DWORD_PTR)(__FILE__ ": children_cs") }
++};
++static CRITICAL_SECTION children_cs = { &children_cs_debug, -1, 0, 0, 0, 0 };
++
+ static object_header_t **handle_table;
+ static UINT_PTR next_handle;
+ static UINT_PTR handle_table_size;
+@@ -217,14 +228,24 @@
+     TRACE("handle %Id -> %p\n", handle, info);
+ 
+     return info;
++}
++
++void add_child_object(object_header_t *parent, object_header_t *child)
++{
++    EnterCriticalSection( &children_cs );
++    list_add_head( &parent->children, &child->entry );
++    LeaveCriticalSection( &children_cs );
+ }
+ 
+ static void invalidate_handle(object_header_t *info)
+ {
+     object_header_t *child, *next;
+ 
+-    if(!info->valid_handle)
++    EnterCriticalSection( &children_cs );
++    if(!info->valid_handle) {
++        LeaveCriticalSection( &children_cs );
+         return;
++    }
+     info->valid_handle = FALSE;
+ 
+     /* Free all children as native does */
+@@ -233,6 +254,7 @@
+         TRACE("invalidating child handle %p for parent %p\n", child->hInternet, info);
+         invalidate_handle( child );
+     }
++    LeaveCriticalSection( &children_cs );
+ 
+     WININET_Release(info);
+ }
+@@ -259,7 +281,11 @@
+         }
+         TRACE( "destroying object %p\n", info);
+         if ( info->htype != WH_HINIT )
++        {
++            EnterCriticalSection( &children_cs );
+             list_remove( &info->entry );
++            LeaveCriticalSection( &children_cs );
++        }
+         info->vtbl->Destroy( info );
+ 
+         if(info->hInternet) {
+--- a/dlls/wininet/http.c
++++ b/dlls/wininet/http.c
+@@ -3487,7 +3487,7 @@
+ 
+     WININET_AddRef( &session->hdr );
+     request->session = session;
+-    list_add_head( &session->hdr.children, &request->hdr.entry );
++    add_child_object( &session->hdr, &request->hdr );
+ 
+     port = session->hostPort;
+     if (port == INTERNET_INVALID_PORT_NUMBER)
+@@ -5942,7 +5942,7 @@
+ 
+     WININET_AddRef( &hIC->hdr );
+     session->appInfo = hIC;
+-    list_add_head( &hIC->hdr.children, &session->hdr.entry );
++    add_child_object( &hIC->hdr, &session->hdr );
+ 
+     session->hostName = wcsdup(lpszServerName);
+     if (lpszUserName && lpszUserName[0])
+--- a/dlls/wininet/ftp.c
++++ b/dlls/wininet/ftp.c
+@@ -1350,7 +1350,7 @@
+ 
+         WININET_AddRef( &lpwfs->hdr );
+         lpwh->lpFtpSession = lpwfs;
+-        list_add_head( &lpwfs->hdr.children, &lpwh->hdr.entry );
++        add_child_object( &lpwfs->hdr, &lpwh->hdr );
+ 	
+ 	/* Indicate that a download is currently in progress */
+ 	lpwfs->download_in_progress = lpwh;
+@@ -2470,7 +2470,7 @@
+ 
+     WININET_AddRef( &hIC->hdr );
+     lpwfs->lpAppInfo = hIC;
+-    list_add_head( &hIC->hdr.children, &lpwfs->hdr.entry );
++    add_child_object( &hIC->hdr, &lpwfs->hdr );
+ 
+     if(hIC->proxy && hIC->accessType == INTERNET_OPEN_TYPE_PROXY) {
+         if(wcschr(hIC->proxy, ' '))
+@@ -3566,7 +3566,7 @@
+ 
+             WININET_AddRef( &lpwfs->hdr );
+             lpwfn->lpFtpSession = lpwfs;
+-            list_add_head( &lpwfs->hdr.children, &lpwfn->hdr.entry );
++            add_child_object( &lpwfs->hdr, &lpwfn->hdr );
+         }
+     }
+ 
