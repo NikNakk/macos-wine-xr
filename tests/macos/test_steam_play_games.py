@@ -44,6 +44,14 @@ class SteamPlayGamesTests(unittest.TestCase):
         self.assertEqual(games.mapping(APPS, set(APPS), listed=set(), excluded={6}),
                          {1: 'windows-only', 4: 'windows-only', 8: 'mac-32-bit'})
 
+    def test_apps_and_demos_are_mapped_like_games(self):
+        apps = {10: app('A Windows VR app', 'windows', kind='Application'),
+                11: app('A Windows demo', 'windows', kind='demo'),
+                12: app('Windows DLC', 'windows', kind='dlc'),
+                13: app('A soundtrack', 'windows', kind='music'),
+                14: app('macOS listed with a space', 'windows, macos', kind='game')}
+        self.assertEqual(games.windows_only(apps, set(apps)), {10, 11})
+
     def test_exclusions_win(self):
         mapped = games.mapping(APPS, set(APPS), listed={2}, excluded={1, 2, 6, 8})
         self.assertEqual(mapped, {4: 'windows-only'})
