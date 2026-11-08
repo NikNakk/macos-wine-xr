@@ -77,7 +77,10 @@ below), which writes the payload's `mapped` file from two sources:
 
 - every game in the library (the app IDs in `appcache/librarycache`) whose app info lists
   Windows and not macOS: these cannot be played on macOS Steam otherwise, so mapping them
-  changes nothing else;
+  changes nothing else. "Game" here, and below, takes in Steam's types game, application
+  and demo (Get Lost With Luke In Nature, a VR app, is an application; on 2026-11-08 it
+  and eight other apps and demos were left out until this), not DLC, soundtracks or
+  Steam's "tool" entries;
 - every VR game with a Windows build, macOS build or not (`steam_games.is_vr`: OpenVR,
   OpenXR or VR-only support, or a VR launch entry), since macOS builds have no VR. Such a
   game installs as Windows; one already installed as macOS would be switched (downloaded

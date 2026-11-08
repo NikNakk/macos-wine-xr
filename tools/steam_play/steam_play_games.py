@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Which games macOS Steam maps to the Steam Play tool (docs/steam-play.md, Choosing games).
 
-Mapped: every game in your library that has a Windows build and no macOS build, every VR
+Mapped: every game (or app or demo) in your library that has a Windows build and no macOS build, every VR
 game with a Windows build (macOS builds have no VR), every game whose macOS build is
 32-bit only (no "macos64" in its app info; macOS has not run 32-bit apps since 10.15) and
 that has a Windows build, plus the app IDs listed in the
@@ -41,15 +41,25 @@ def read_games(path):
 
 
 def oslist(info):
-    return set(str((info or {}).get('common', {}).get('oslist', '')).split(','))
+    # Some app info has spaces in the list (" macos").
+    return {o.strip() for o in str((info or {}).get('common', {}).get('oslist', '')).split(',')}
+
+
+# What Steam can install and start: games, and apps and demos (Get Lost With Luke In Nature,
+# a VR app, is an "Application"). Not DLC, soundtracks or Steam's "tool" entries.
+PLAYABLE_TYPES = {'game', 'application', 'demo'}
+
+
+def playable(info, appid):
+    common = (info or {}).get('common', {})
+    return bool(info) and str(common.get('type', '')).lower() in PLAYABLE_TYPES and appid not in steam_games.TOOLS
 
 
 def windows_only(apps, owned):
     out = set()
     for appid in owned:
         info = apps.get(appid)
-        common = (info or {}).get('common', {})
-        if not info or str(common.get('type', '')).lower() != 'game' or appid in steam_games.TOOLS:
+        if not playable(info, appid):
             continue
         if 'windows' in oslist(info) and 'macos' not in oslist(info):
             out.add(appid)
@@ -62,8 +72,7 @@ def vr_games(apps, owned):
     out = set()
     for appid in owned:
         info = apps.get(appid)
-        common = (info or {}).get('common', {})
-        if not info or str(common.get('type', '')).lower() != 'game' or appid in steam_games.TOOLS:
+        if not playable(info, appid):
             continue
         if 'windows' in oslist(info) and steam_games.is_vr(info):
             out.add(appid)
@@ -77,7 +86,7 @@ def mac_32_bit(apps, owned):
     for appid in owned:
         info = apps.get(appid)
         common = (info or {}).get('common', {})
-        if not info or str(common.get('type', '')).lower() != 'game' or appid in steam_games.TOOLS:
+        if not playable(info, appid):
             continue
         if {'windows', 'macos'} <= oslist(info) and 'macos64' not in str(common.get('osextended', '')).split(','):
             out.add(appid)
