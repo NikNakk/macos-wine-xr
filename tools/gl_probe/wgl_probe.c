@@ -89,6 +89,9 @@ int main(int argc, char **argv)
       return 1;
    }
    printf("legacy context: %s | %s\n", glGetString(GL_RENDERER), glGetString(GL_VERSION));
+   if (getenv("WGL_PROBE_EXTENSIONS"))
+      printf("GLSL %s\nextensions: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION),
+             glGetString(GL_EXTENSIONS));
 
    create_attribs = (create_attribs_fn)wglGetProcAddress("wglCreateContextAttribsARB");
    if (!create_attribs) {
@@ -136,6 +139,14 @@ int main(int argc, char **argv)
                 metal.mtl_texture, metal.dxgi_format, metal.width, metal.height, metal.levels,
                 metal.samples);
       glDeleteTextures(1, &tex);
+   }
+
+   if (getenv("WGL_PROBE_GEOMETRY")) {
+      /* A geometry shader: Zink on KosmicKrisp has none, so this should fail. */
+      typedef GLuint(WINAPI *create_shader_fn)(GLenum);
+      create_shader_fn create_shader = (create_shader_fn)wglGetProcAddress("glCreateShader");
+      GLuint shader = create_shader ? create_shader(0x8DD9 /* GL_GEOMETRY_SHADER */) : 0;
+      printf("glCreateShader(GL_GEOMETRY_SHADER) = %u, glGetError 0x%x\n", shader, glGetError());
    }
 
    for (int i = 0; i < frames; i++) {
