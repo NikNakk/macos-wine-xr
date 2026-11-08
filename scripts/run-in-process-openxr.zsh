@@ -7,18 +7,19 @@ repo=${0:A:h:h}
 [[ $# -gt 0 ]] || { print -u2 'usage: run-in-process-openxr.zsh executable [args...]'; exit 1; }
 root=${MWXR_IN_PROCESS_BUILD:-${repo}/build-in-process/gate}
 # MWXR_IN_PROCESS_WINE selects another runtime, for example a GPTK/D3DMetal Wine.
-wine_root=${MWXR_IN_PROCESS_WINE:-${repo}/build-in-process/wine-direct}
+wine_root=${MWXR_IN_PROCESS_WINE:-${MWXR_WINE_TREE:-$HOME/Code/wine-crossover/runtime}}
 # Explicitly separate from the proxy, native-host and smoke-test prefixes.
 export WINEPREFIX=${MWXR_IN_PROCESS_PREFIX:-${repo}/build-in-process/prefix-openxr}
 export WINEARCH=win64
 export WINEDEBUG=${WINEDEBUG:--all}
 export WINEDLLPATH=${root}
+export WINESERVER=${wine_root}/bin/wineserver
 # Wine loads GnuTLS, FreeType and friends by name from the runtime's lib.
 export DYLD_FALLBACK_LIBRARY_PATH=${wine_root}/lib/wine/x86_64-unix:${wine_root}/lib
 export MWXR_NATIVE_RUNTIME_JSON
 unset XR_RUNTIME_JSON WINEDLLOVERRIDES
 [[ -x ${wine_root}/bin/wine && -f ${root}/x86_64-unix/wineopenxr.so ]] || {
- print -u2 'Build the in-process runtime and install direct-object DXMT first'; exit 1
+ print -u2 'Build the in-process runtime and select a compatible Wine runtime (MWXR_IN_PROCESS_WINE)'; exit 1
 }
 # Wine updates a prefix itself when its runtime's wine.inf changes. An explicit
 # "wineboot -u" on every launch left a temporary copy of each DLL a running process

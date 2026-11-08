@@ -1,17 +1,19 @@
 #!/bin/zsh
 # Copyright 2026, Nick Kennedy
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Runs the graphics interop probe under a Wine runtime: by default the private
-# direct-object DXMT runtime. Set MWXR_PROBE_WINE to a GPTK/D3DMetal Wine to
+# Runs the graphics interop probe under the main CrossOver source-build runtime.
+# Set MWXR_PROBE_WINE to a GPTK/D3DMetal Wine to
 # test that backend; MWXR_GRAPHICS_BACKEND selects as in wineopenxr.
 set -euo pipefail
 repo=${0:A:h:h}
 root=${MWXR_IN_PROCESS_BUILD:-${repo}/build-in-process/gate}
-wine_root=${MWXR_PROBE_WINE:-${repo}/build-in-process/wine-direct}
+wine_root=${MWXR_PROBE_WINE:-${MWXR_IN_PROCESS_WINE:-${MWXR_WINE_TREE:-$HOME/Code/wine-crossover/runtime}}}
 export WINEPREFIX=${MWXR_PROBE_PREFIX:-${repo}/build-in-process/prefix-metal}
 export WINEARCH=win64
 export WINEDEBUG=${WINEDEBUG:--all}
 export WINEDLLPATH=${root}
+export WINESERVER=${wine_root}/bin/wineserver
+export DYLD_FALLBACK_LIBRARY_PATH=${wine_root}/lib/wine/x86_64-unix:${wine_root}/lib
 export MTL_DEBUG_LAYER=${MTL_DEBUG_LAYER:-1}
 unset WINEDLLOVERRIDES
 [[ -x ${wine_root}/bin/wine && -f ${root}/graphics_interop_probe.exe ]] || {

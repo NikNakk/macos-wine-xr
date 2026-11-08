@@ -468,12 +468,27 @@ scripts/run-direct-metal-probe.zsh
 ```
 
 The helper uses a test-only PE/unixlib DLL, so it creates Metal objects on the
-actual DXMT device in the Wine process. The new runtime is copied to
-build-in-process/wine-direct; the probe prefix is build-in-process/prefix-metal.
+actual DXMT device in the Wine process. The installer above copies an experimental
+runtime to `build-in-process/wine-direct`; select that copy explicitly with
+`MWXR_IN_PROCESS_WINE=$PWD/build-in-process/wine-direct` when running its probe.
+The probe prefix is `build-in-process/prefix-metal`.
 Do not use WINEDLLPATH alone to replace an existing engine DLL: Wine searches
 its installed builtin directory first. The dedicated runtime avoids changing
 either fallback engine. The recorded first successful run used prefix-core
 with only test files replaced; the dedicated runner now keeps the probes apart.
+
+As of 2026-11-01, `run-direct-metal-probe.zsh`,
+`run-graphics-interop-probe.zsh` and `run-in-process-openxr.zsh` default to the
+main rig runtime at `~/Code/wine-crossover/runtime`. Set `MWXR_IN_PROCESS_WINE`
+to select another runtime (for example `runtime-wow64` or `runtime-lsteamclient`);
+`MWXR_WINE_TREE` supplies the fallback used by the SteamVR rig wrapper.
+The graphics probe's `MWXR_PROBE_WINE` override takes precedence over both.
+All three runners select the matching Wine server and library search path.
+The probes retain their separate test prefixes, and running them does not
+install DXMT into the selected runtime. The direct Metal probe requires that
+runtime's DXMT to support the direct-object interface. `wine-direct` is optional
+for these runners; keep it only for isolated experiments. Runtime selection and
+shell syntax were checked; a fresh GPU probe run remains unverified.
 
 
 ## D3D11/Metal vertical slice and validation
