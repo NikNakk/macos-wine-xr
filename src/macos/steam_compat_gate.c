@@ -20,7 +20,8 @@
 //
 // Children of Steam inherit DYLD_INSERT_LIBRARIES, so it does nothing outside steam_osx.
 // steam_ui_patch.c, in the same library, shows the Compatibility page in a game's
-// Properties, in Steam's web helper.
+// Properties, in Steam's web helper; steam_live_mapping.c maps games chosen or bought while
+// Steam runs.
 // Log: ~/Library/Logs/macos-wine-xr/steam-compat-gate.log (MWXR_STEAM_COMPAT_GATE_LOG).
 
 #include <dlfcn.h>
@@ -109,8 +110,8 @@ static int64_t sign_extend(uint64_t value, int bits)
 }
 
 // The address "adrp xR, page; add xD, xR, #lo" puts in xD, or 0 if w[i] is not such an
-// add with its adrp in the eight instructions before it.
-static uintptr_t adrp_add_target(const uint32_t *w, size_t i, size_t first)
+// add with its adrp in the eight instructions before it. Shared with steam_live_mapping.c.
+uintptr_t mwxr_adrp_add_target(const uint32_t *w, size_t i, size_t first)
 {
 	uint32_t add = w[i];
 	if ((add & 0xFF000000u) != 0x91000000u) // add (immediate), 64-bit
@@ -128,20 +129,23 @@ static uintptr_t adrp_add_target(const uint32_t *w, size_t i, size_t first)
 	return 0;
 }
 
-static int write_insn(uint32_t *addr, uint32_t insn)
+// Writes count instructions over the image's code (the pages they span), in memory only.
+// Shared with steam_live_mapping.c.
+int mwxr_write_code(uint32_t *addr, const uint32_t *insns, size_t count)
 {
 	vm_address_t page = (vm_address_t)addr & ~(vm_address_t)(vm_page_size - 1);
-	kern_return_t kr = vm_protect(mach_task_self(), page, vm_page_size, FALSE,
+	vm_size_t len = ((vm_address_t)(addr + count) - page + vm_page_size - 1) & ~(vm_address_t)(vm_page_size - 1);
+	kern_return_t kr = vm_protect(mach_task_self(), page, len, FALSE,
 	                              VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
 	if (kr != KERN_SUCCESS) {
 		mwxr_gate_log("vm_protect(rw) failed: %d", kr);
 		return 0;
 	}
-	*addr = insn;
-	kr = vm_protect(mach_task_self(), page, vm_page_size, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+	memcpy(addr, insns, count * sizeof(*insns));
+	kr = vm_protect(mach_task_self(), page, len, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
 	if (kr != KERN_SUCCESS)
 		mwxr_gate_log("vm_protect(rx) failed: %d", kr);
-	sys_icache_invalidate(addr, sizeof(*addr));
+	sys_icache_invalidate(addr, count * sizeof(*insns));
 	return 1;
 }
 
@@ -159,7 +163,7 @@ static void patch_gate(const struct mach_header_64 *mh, int apply)
 	uint32_t *site = NULL;
 	int sites = 0;
 	for (size_t i = 0; w && i < n; i++) {
-		uintptr_t target = adrp_add_target(w, i, 0);
+		uintptr_t target = mwxr_adrp_add_target(w, i, 0);
 		if (!target || (w[i] & 0x1F) != 1) // the string goes in x1, the second argument
 			continue;
 		int is_linux = 0;
@@ -191,11 +195,15 @@ static void patch_gate(const struct mach_header_64 *mh, int apply)
 	uint32_t reg = *site & 0x1F;
 	if (!apply)
 		return;
-	if (write_insn(site, 0x52800020u | reg)) // movz wN, #1
+	uint32_t mov = 0x52800020u | reg; // movz wN, #1
+	if (mwxr_write_code(site, &mov, 1))
 		mwxr_gate_log("Steam Play gate open (cset w%u -> mov w%u, #1)", reg, reg);
 }
 
 #endif
+
+// steam_live_mapping.c: finds CCompatManager::AddMapping and, with apply, hooks it.
+int mwxr_live_mapping_attach(const void *mh, int apply);
 
 static void on_image(const struct mach_header *mh, intptr_t slide)
 {
@@ -209,6 +217,7 @@ static void on_image(const struct mach_header *mh, intptr_t slide)
 	mwxr_gate_log("steamclient.dylib loaded: %s", info.dli_fname);
 #if defined(__aarch64__)
 	patch_gate((const struct mach_header_64 *)mh, 1);
+	mwxr_live_mapping_attach(mh, 1);
 #else
 	mwxr_gate_log("Steam is running as x86_64; only the arm64 client is patched");
 #endif
@@ -240,6 +249,7 @@ int main(int argc, char **argv)
 	if (image == MAP_FAILED)
 		return 2;
 	patch_gate(image, 0);
+	mwxr_live_mapping_attach(image, 0);
 	return 0;
 }
 #endif

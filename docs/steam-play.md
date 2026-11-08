@@ -71,8 +71,9 @@ on its Windows one, so nothing changed, but keep to Steam Play.app).
 
 A game's choice can be made in Steam, on the Compatibility page of its Properties (next
 section), or in the payload's `games` file, which that page writes. Steam Play.app runs
-`steam_play_games.py sync` before each start (0.2 s, from Steam's offline caches), which
-writes the payload's `mapped` file from two sources:
+`steam_play_games.py sync` before each start (0.2 s, from Steam's offline caches), and
+the running client runs it again when `games` or Steam's caches change (Live mapping,
+below), which writes the payload's `mapped` file from two sources:
 
 - every game in the library (the app IDs in `appcache/librarycache`) whose app info lists
   Windows and not macOS: these cannot be played on macOS Steam otherwise, so mapping them
@@ -189,7 +190,8 @@ library, supplies both, in memory:
   the macOS build otherwise), macos-wine-xr (adds the app ID) and "None: the macOS build"
   (adds `-APPID`). A choice is shown at once. While it differs from what Steam loaded at
   its start (the answer's `mwxr_pending`), the dropdown's description reads "Applies when
-  Steam restarts" with a Restart Steam button, which calls Steam's own restart.
+  Steam restarts" with a Restart Steam button, which calls Steam's own restart. With live
+  mapping on, the choice is applied at once and the note does not appear (below).
 - Steam's restart: Steam ends the client with exit code 42 and leaves the new start to
   its parent, which for Valve's Steam.app is its launcher (`steam.sh`, a binary with
   `-alwaysrelaunch` and `ReLaunchCmdLine`). Steam Play.app replaces itself with the
@@ -223,6 +225,47 @@ Debugging the page: start Steam with `open -a ~/Applications/Steam\ Play.app --a
 -cef-enable-debugging`, which opens Chromium's DevTools on 127.0.0.1:8080 for that run
 (`/json/list` names the pages; the interface's code runs in `SharedJSContext`). Start it
 normally afterwards to close the port.
+
+## Live mapping
+
+Steam reads `STEAM_COMPAT_TOOL_MAPPINGS` once, at its start, so before this a game bought
+or chosen while Steam ran was mapped only after a restart. `src/macos/steam_live_mapping.c`,
+in the gate library, maps it while Steam runs:
+
+- At load it finds `CCompatManager::AddMapping(manager, appid, {tool, config, priority})`,
+  the function Steam's startup code calls for each entry of that variable: the one called
+  after the code that loads the `"STEAM_COMPAT_TOOL_MAPPINGS"` string whose first
+  instructions use the `"CCompatManager::AddMapping"` profiling label
+  (`steamclient+0x6bbe30` in 1794079253). Exactly one must match, and its first four
+  instructions must be a plain prologue.
+- Those four instructions move to a trampoline (a `MAP_JIT` page) that records the first
+  argument and the calling thread, and returns to the function. Steam's own calls at
+  startup record the compat manager and its thread, `IPC:CSteamEngine`.
+- A watcher runs `steam_play_games.py sync --output mapped.live` when the payload's `games`
+  changes (at once) or Steam's `appcache/appinfo.vdf` or `appcache/librarycache` change
+  (checked every 5 s; Steam writes both while it runs, so a new game is seen once its
+  app info is there). It calls `AddMapping` for each game added (priority 250, as at
+  startup) and with an empty tool for each one removed, which Steam treats as an unmap.
+  The calls run on Steam's engine thread, from an interposed `kevent`, which that thread
+  waits in between frames. Then `mapped.live` becomes `mapped`.
+- `live-mapping` in the payload holds the client's pid while this works. The web helper
+  then waits up to 4 s after a Compatibility page choice for `mapped` to show it, so the
+  page shows the choice as applied.
+
+Steam logs each change in `logs/compat_log.txt` (`Mapping AppID N to tool
+"macos-wine-xr-proton" with priority 250`, `Unmapping AppID N`), and the gate log has
+`live mapping: on (compat manager ..., thread IPC:CSteamEngine)` and `live mapping:
++N -M`. If the function is not found, a change does not run on the recorded thread
+within 30 s, or `MWXR_STEAM_LIVE_MAPPING=0` is set, the change waits for a restart as
+before, and the page shows its restart note. Mapping a game whose macOS build is
+installed switches it to its Windows depot at once, as a restart would. The library's
+32-bit mark (`mwxrMapped`, above) is loaded once per interface load, so a newly mapped
+game with a 32-bit macOS build keeps the "no entry" icon until Steam's interface reloads.
+
+On 2026-11-08 (client 1794079253): listing Uplink (1510, a macOS game, not installed) in
+`games` logged `Mapping AppID 1510` in Steam a second later, and removing it logged
+`Unmapping AppID 1510`; Steam kept running. A game bought while Steam runs has not been
+tried yet.
 
 ## Launch Options
 
@@ -309,8 +352,10 @@ removed (it stays, as Proton's would not, until removed by hand).
 - Setup scripts: registry values are applied, redistributable installers are not.
 - Under Steam, `pgrep` does not list `steam_osx`, so the runner and
   `run-alyx-xrizer.zsh` skip their "is Steam running" checks for games Steam starts.
-- Steam client updates: the gate depends on the `"linux"` comparison keeping its shape.
-  `install-steam-play.zsh` and the test check it without starting Steam.
+- Steam client updates: the gate depends on the `"linux"` comparison keeping its shape,
+  live mapping on `AddMapping`'s. `install-steam-play.zsh` and the test check both
+  without starting Steam (live mapping missing is a warning: changes then wait for a
+  restart).
 - The launch preflight checks both Wine and Steam bridge architecture support.
 
 
