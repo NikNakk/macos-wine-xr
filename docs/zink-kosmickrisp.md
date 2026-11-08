@@ -1,8 +1,9 @@
 # OpenGL through Zink on KosmicKrisp
 
 Date: 2026-11-08. **Google Earth VR (348250) runs through Mesa's Zink on
-KosmicKrisp, and its frames reach Monado with one Metal blit per eye** (no CPU
-copy). Checked with frame captures and timings; not yet looked at in the headset.
+KosmicKrisp, and its frames reach Monado with one GPU copy per eye** (no CPU
+copy), upright in Monado's own composited output (session-mark captures). Not yet
+looked at in the headset.
 
 Windows OpenGL applications normally go through Wine's `winemac.drv`, which uses
 Apple's CGL: OpenGL 2.1, or 3.2–4.1 forward-compatible core profiles only. Here
@@ -100,12 +101,12 @@ D3D11 backend in a GL-source mode (`D3D11Data::new_for_gl`), so the OpenXR sessi
 stays D3D11 → wineopenxr → Metal → Monado. GL functions are looked up at runtime, so
 D3D games never load `opengl32`.
 
-### One Metal blit per eye
+### One GPU copy per eye
 
 ```
 Earth VR's GL texture ─ Zink VkImage ─ KosmicKrisp MTLTexture (2D view, same storage)
    └─ wglExportMetalTextureMWXR ─ IDXMTNativeDevice2::ImportMetalTexture (no copy)
-        └─ CopySubresourceRegion → DXMT Metal blit → Monado's swapchain image
+        └─ flipping draw (one Metal render pass) → Monado's swapchain image
 ```
 
 - **Mesa** (`kk-zink`): `wglExportMetalTextureMWXR(texture, &info)` returns the
@@ -125,13 +126,22 @@ Earth VR's GL texture ─ Zink VkImage ─ KosmicKrisp MTLTexture (2D view, same
   were rebuilt together and installed in `runtime-lsteamclient` (originals
   `*.pre-metal-objects`). The build tree's `include/config.h` needs the
   `SONAME_LIBVULKAN` define from [graphics-interop.md](graphics-interop.md).
-- **xrizer**: imports the texture once (re-imported if the GL texture's storage
-  changes), calls `glFinish` so the blit on DXMT's queue sees finished rendering,
-  and copies each eye's region. The image keeps GL's bottom-to-top rows; the
-  projection layer presents it flipped by swapping the field of view's top and
-  bottom (`GraphicsBackend::submits_bottom_up`, as xrizer already did for inverted
-  bounds; Monado does not validate the angles). Overlays still use the CPU path,
-  which flips their rows.
+- **xrizer**: imports the texture once, typeless (re-imported if the GL texture's
+  storage changes), calls `glFinish` so the copy on DXMT's queue sees finished
+  rendering, and copies each eye's region with one draw that reads GL's
+  bottom-to-top rows in reverse (`FlipCopy` in `d3d11_gl.rs`; `Load`, no
+  filtering). It reads the source in the swapchain's format, so sRGB values decode
+  and re-encode unchanged. A Metal blit cannot flip; when an application's bounds
+  already invert the image, the copy is a plain blit
+  (`CopySubresourceRegion`). The layer is never flipped for GL
+  (`GraphicsBackend::copies_apply_inverted_bounds`).
+- **Not the field of view.** A first version left the image upside down in the
+  swapchain and swapped the projection layer's field-of-view top and bottom, as
+  xrizer does for inverted bounds. Monado drops such a layer: its composited output
+  was black (session-mark capture), and correct but upside down with the swap
+  turned off. OpenXR does not define a layer whose top is below its bottom, so
+  xrizer's existing inverted-bounds handling for D3D11 and Vulkan probably fails on
+  Monado too.
 - **Fallback**: CPU copies (`glReadPixels` → staging texture) when Mesa or DXMT
   lacks the interface or the texture does not fit (format, mip levels, samples), or
   with `XRIZER_GL_CPU=1`. The reason is logged once.
@@ -147,20 +157,25 @@ averages, from xrizer's log:
 
 | Path | xrizer per eye | of which waiting for Earth VR's GL work | Frame rate |
 | --- | --- | --- | --- |
-| Metal blit | 4.4–4.7 ms | 4.4–4.7 ms (`glFinish`) | 56–59 fps |
-| CPU copy (`XRIZER_GL_CPU=1`) | 5.1–5.4 ms | inside the readback | 53–55 fps |
+| GPU flipping copy | 4.1–4.2 ms | 4.1–4.2 ms (`glFinish`) | 58–60 fps |
+| CPU copy (`XRIZER_GL_CPU=1`) | 4.7–5.4 ms | inside the readback | 53–59 fps |
 
-With the blit, xrizer's own cost is about 0.01 ms per eye: what remains is Earth
+On the GPU path xrizer's own cost is about 0.04 ms per eye: what remains is Earth
 VR's rendering, which the CPU path waits for too. At the headset's 2800×2856 per
-eye the CPU copy took **25.3 ms per eye** (about 15 fps), so the blit's gain there
-should be far larger. Not yet measured: the PS VR2 display was absent.
+eye the CPU copy took **25.3 ms per eye** (about 15 fps), so the GPU path's gain
+there should be far larger. Not yet measured: the PS VR2 display was absent.
 
-`XRIZER_GL_CAPTURE=<Windows folder>` saves eye images as presented (flipped as the
-layer flips them) every 600 copies of an eye, up to 5 each, encoded off the
-submit thread; on the blit path through a one-off GPU readback. Monado has no file
-capture of its own (its mirror goes to the debug GUI). Captures in
-`~/Library/Logs/macos-wine-xr/348250-zink-blit-20261108c/capture` show Earth VR's
-loading scene upright.
+**Monado's own output**: the session recorder (`XRT_SESSION_RECORD_DIR`, then
+creating `<dir>/mark-request` or holding both thumbsticks) writes the next
+composited left eye as `mark_N.ppm`. Under Wine the Monado client reads it from
+the native environment, so it works with Windows games. Marks in
+`~/Library/Logs/macos-wine-xr/348250-zink-flipdraw-{gpu,cpu}/record` show Earth
+VR's opening scene upright and identical on both paths.
+
+`XRIZER_GL_CAPTURE=<Windows folder>` saves the eye images xrizer sends, as they
+should be presented, every 600 copies of an eye, up to 5 each, encoded off the
+submit thread (on the GPU path through a one-off readback). They show xrizer's
+input to the runtime, not what Monado composited: prefer Monado's marks.
 
 xrizer's log works under Wine now: Wine does not pass `XDG_*` variables to Windows
 programs, so `run-windows-game.zsh` also sets `XRIZER_STATE_HOME`, which xrizer
@@ -181,6 +196,14 @@ and AppKit aborted (`~/Library/Logs/Monado/monado-service.err.log`).
    it continue.
 3. **Real OpenGL 3.2+.** Geometry shaders and transform feedback in KosmicKrisp
    with `src/poly`, removing the version override.
+4. **Inverted bounds for D3D11 and Vulkan games.** xrizer still swaps the field of
+   view for them, which Monado drops; flipping in the copy, as for GL, would fix it
+   on any runtime.
+5. **Dropping D3D for GL games (optional).** D3D11/DXMT only carries xrizer's
+   session. A GL session type in wineopenxr (`XR_KHR_opengl_enable`, importing
+   Monado's Metal swapchain images into Zink with `VK_EXT_external_memory_metal`)
+   would let xrizer's existing GL backend copy and flip with one `glBlitFramebuffer`
+   on Zink's own queue, with no DXMT and no cross-queue `glFinish`.
 
 ## Building
 
