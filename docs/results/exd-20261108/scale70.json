@@ -1,0 +1,18 @@
+{
+  "source": "/Users/nickkennedy/Library/Logs/Monado/timing/monado_psvr2_52397_app_pacing.csv",
+  "warmup_seconds": 30,
+  "requested_sample_seconds": 60,
+  "observed_sample_seconds": 59.970280083,
+  "frames": 3584,
+  "delivered_fps": 59.74626089858277,
+  "interval_ms_median": 16.674917,
+  "interval_ms_p95": 17.264875,
+  "interval_ms_p99": 18.905625,
+  "interval_ms_max": 41.235334,
+  "gaps_over_25ms": 15,
+  "gaps_over_50ms": 0,
+  "gpu_actual_ms_median": 14.2260835,
+  "gpu_actual_ms_p95": 14.944959,
+  "gpu_samples": 3584,
+  "window_complete": true
+}
