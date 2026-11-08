@@ -31,7 +31,10 @@ feedback as optional.
 MWXR_OPENGL=zink ~/Windows/run-windows-game.zsh APPID
 ```
 
-From Steam: Launch Options `MWXR_OPENGL=zink %command%`.
+Google Earth VR (348250) gets `MWXR_OPENGL=zink` by default
+(`scripts/steam-play-game-settings.zsh`), so it starts from Steam's library as it is.
+For another game, set Launch Options `MWXR_OPENGL=zink %command%`;
+`MWXR_OPENGL=wine %command%` keeps Wine's OpenGL for Earth VR.
 `scripts/run-in-process-openxr.zsh` then:
 
 - puts `$MWXR_ZINK_ROOT/lib` (default `~/Code/alyx-native/build/zink-wine/lib`, the

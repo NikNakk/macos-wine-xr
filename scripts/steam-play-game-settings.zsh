@@ -22,6 +22,10 @@ if [[ -z ${_mwxr_wow64} && -n ${_mwxr_settings_app} &&
   [[ ${_mwxr_arch} == 32 ]] && _mwxr_wow64=1
 fi
 [[ -z ${_mwxr_wow64} && ${_mwxr_settings_app} == 244210 ]] && _mwxr_wow64=1
+# Google Earth VR asks for an OpenGL 3.2 compatibility context, which winemac's OpenGL
+# does not offer: it runs on Zink over KosmicKrisp (docs/zink-kosmickrisp.md).
+# MWXR_OPENGL=wine, also from the game's Launch Options, keeps Wine's OpenGL.
+[[ ${_mwxr_settings_app} == 348250 ]] && export MWXR_OPENGL=${MWXR_OPENGL:-zink}
 if [[ ${_mwxr_wow64} == 1 ]]; then
   export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-$HOME/Code/wine-crossover/runtime-wow64}
   export MWXR_GAME_PREFIXES=${MWXR_GAME_PREFIXES:-$HOME/Windows/prefixes-wow64}
