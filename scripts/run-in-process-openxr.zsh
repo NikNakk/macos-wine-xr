@@ -18,6 +18,26 @@ export WINESERVER=${wine_root}/bin/wineserver
 export DYLD_FALLBACK_LIBRARY_PATH=${wine_root}/lib/wine/x86_64-unix:${wine_root}/lib
 export MWXR_NATIVE_RUNTIME_JSON
 unset XR_RUNTIME_JSON WINEDLLOVERRIDES
+# MWXR_OPENGL=zink: the application's OpenGL through Mesa's Zink over KosmicKrisp
+# instead of winemac's CGL (docs/zink-kosmickrisp.md). MWXR_ZINK_ROOT holds bin/
+# (opengl32.dll, libgallium_wgl.dll, libwinpthread-1.dll), lib/libvulkan.1.dylib (an
+# x86_64 Vulkan loader for winevulkan) and icd/kosmickrisp_x86_64.json.
+if [[ ${MWXR_OPENGL:-} == zink ]]; then
+ zink=${MWXR_ZINK_ROOT:-$HOME/Code/alyx-native/build/zink-wine}
+ [[ -f ${zink}/bin/opengl32.dll && -f ${zink}/lib/libvulkan.1.dylib ]] || {
+  print -u2 "MWXR_OPENGL=zink: no Zink build in ${zink}"; exit 1
+ }
+ export DYLD_FALLBACK_LIBRARY_PATH=${zink}/lib:${DYLD_FALLBACK_LIBRARY_PATH}
+ export VK_DRIVER_FILES=${zink}/icd/kosmickrisp_x86_64.json GALLIUM_DRIVER=zink
+ # KosmicKrisp has neither transform feedback nor geometry shaders, so Zink offers 2.1.
+ export MESA_GL_VERSION_OVERRIDE=${MESA_GL_VERSION_OVERRIDE-3.2COMPAT}
+ export MESA_KK_EXPERIMENTAL=${MESA_KK_EXPERIMENTAL-custom_border}
+ # Wine finds system32's builtin stub before PATH, so the DLLs go in system32. Other
+ # programs in the prefix keep Wine's builtin opengl32: only "n,b" loads this one.
+ zink_copy=1
+ export MWXR_WINEDLLOVERRIDES="opengl32=n,b${MWXR_WINEDLLOVERRIDES:+;${MWXR_WINEDLLOVERRIDES}}"
+ print -u2 "OpenGL: Zink over KosmicKrisp from ${zink} (GL override ${MESA_GL_VERSION_OVERRIDE:-none})"
+fi
 [[ -x ${wine_root}/bin/wine && -f ${root}/x86_64-unix/wineopenxr.so ]] || {
  print -u2 'Build the in-process runtime and select a compatible Wine runtime (MWXR_IN_PROCESS_WINE)'; exit 1
 }
@@ -27,6 +47,8 @@ unset XR_RUNTIME_JSON WINEDLLOVERRIDES
 [[ -f ${WINEPREFIX}/system.reg ]] || WINEDLLOVERRIDES="mscoree=;mshtml=" "${wine_root}/bin/wine" wineboot --init
 mkdir -p "${WINEPREFIX}/drive_c/openxr"
 cp "${root}/x86_64-windows/wineopenxr.dll" "${WINEPREFIX}/drive_c/windows/system32/"
+[[ -n ${zink_copy:-} ]] && cp "${zink}"/bin/{opengl32,libgallium_wgl,libwinpthread-1}.dll \
+ "${WINEPREFIX}/drive_c/windows/system32/"
 # xrizer loads openxr_loader.dll by name. Keeping it next to vrclient_x64.dll
 # does not put it on the Windows process DLL search path. Provision the
 # Khronos Win64 loader into this prefix, not the host's arm64 dylib directory.
