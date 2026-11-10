@@ -11,7 +11,9 @@
 #   7 sharp50   50% view scale, Catmull-Rom (green) compositor filter
 #   8 depthoff  EXD submitting depth, reprojection off (needs the depth-gate bridge and
 #               the build-in-process/exd-depth copy with the depth-import DXMT patch)
-#   9 depthon   the same with depth reprojection on
+#   9 depthon   the same with the opt-in depth reprojection on. It has no disocclusion
+#               fill, so expect the known silhouettes and trails; optional (--only 1,2,3,4,5,6,7
+#               skips them).
 # Before each run it says what to look for and waits for Enter; afterwards it asks for
 # an optional one-line note. At the end it prints GPU time per frame with the notes.
 # Usage (from the main checkout, which has the DXMT investigation's scripts):
@@ -47,7 +49,7 @@ steps=(
  "scale50|msaa2|XRT_COMPOSITOR_SOURCE_FILTER=bilinear|MWXR_QUAD_VIEWS=0 MWXR_VIEWPORT_SCALE_PERCENTAGE=50|Half resolution with the usual filter, for reference. Note how soft text and fine edges look at the centre and edges."
  "sharp50|msaa2|XRT_COMPOSITOR_SOURCE_FILTER=catmull-rom-green|MWXR_QUAD_VIEWS=0 MWXR_VIEWPORT_SCALE_PERCENTAGE=50|Half resolution with the sharper compositor filter. Compared with the last check: is it sharper, and is there any ringing (halos) or colour fringing at edges?"
  "depthoff|msaa2|XRT_COMPOSITOR_DEPTH_REPROJECTION=0|MWXR_QUAD_VIEWS=0 MWXR_EXD_BUILD=depth-gate MWXR_EXD_EXPERIMENT_ROOT=${repo}/build-in-process/exd-depth|Reference for depth: stand near an object with things behind it, then lean and step side to side. Note how the scene judders or swims as you move."
- "depthon|msaa2|XRT_COMPOSITOR_DEPTH_REPROJECTION=1|MWXR_QUAD_VIEWS=0 MWXR_EXD_BUILD=depth-gate MWXR_EXD_EXPERIMENT_ROOT=${repo}/build-in-process/exd-depth|Depth reprojection on. Lean and step the same way: is movement smoother, and do near edges smear, stretch or tear as background is uncovered?"
+ "depthon|msaa2|XRT_COMPOSITOR_DEPTH_REPROJECTION=1|MWXR_QUAD_VIEWS=0 MWXR_EXD_BUILD=depth-gate MWXR_EXD_EXPERIMENT_ROOT=${repo}/build-in-process/exd-depth|Depth reprojection on (no disocclusion fill, so artefacts are expected). Lean and step the same way: how bad are the trails and doubled edges around near objects, and is anything smoother?"
 )
 
 summary=${repo}/build-in-process/exd-ngx/headset-checks-$(date +%Y%m%d-%H%M%S).txt
