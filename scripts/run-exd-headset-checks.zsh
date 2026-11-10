@@ -7,6 +7,8 @@
 #   3 mask08    lens mask at r2 0.8 (about 44% hidden)
 #   4 quad      quad views on the graphics compositor, fixed inset
 #   5 gaze      quad views with the inset following your eyes
+#   6 scale50   50% view scale, the compositor's usual bilinear filter
+#   7 sharp50   50% view scale, Catmull-Rom (green) compositor filter
 # Before each run it says what to look for and waits for Enter; afterwards it asks for
 # an optional one-line note. At the end it prints GPU time per frame with the notes.
 # Usage (from the main checkout, which has the DXMT investigation's scripts):
@@ -39,6 +41,8 @@ steps=(
  "mask08|msaa2|PSVR2_VISIBILITY_MASK_R2=0.8|MWXR_QUAD_VIEWS=0|Lens mask, about 44% hidden. Same as before: is the black edge visible now, and where (sides, top, bottom)?"
  "quad|msaa0|XRT_COMPOSITOR_QUAD_VIEW_FAST_PATH=1|MWXR_QUAD_CONTEXT_SCALE=0.4 MWXR_QUAD_INSET_SCALE=0.5|Quad views on the normal compositor. The centre is sharp and the outside blurrier. Look for a visible box or seam where they meet, shimmer, or anything wrong in either eye."
  "gaze|msaa0|XRT_COMPOSITOR_QUAD_VIEW_FAST_PATH=1|MWXR_QUAD_CONTEXT_SCALE=0.4 MWXR_QUAD_INSET_SCALE=0.25 OXR_QUAD_INSET_GAZE=1 OXR_QUAD_INSET_DEGREES=30 OXR_QUAD_INSET_LOG=1|Gaze-following inset (30 degrees). Look around with your eyes: does the sharp area follow, how late does it arrive, and does it pop or flicker?"
+ "scale50|msaa2|XRT_COMPOSITOR_SOURCE_FILTER=bilinear|MWXR_QUAD_VIEWS=0 MWXR_VIEWPORT_SCALE_PERCENTAGE=50|Half resolution with the usual filter, for reference. Note how soft text and fine edges look at the centre and edges."
+ "sharp50|msaa2|XRT_COMPOSITOR_SOURCE_FILTER=catmull-rom-green|MWXR_QUAD_VIEWS=0 MWXR_VIEWPORT_SCALE_PERCENTAGE=50|Half resolution with the sharper compositor filter. Compared with the last check: is it sharper, and is there any ringing (halos) or colour fringing at edges?"
 )
 
 summary=${repo}/build-in-process/exd-ngx/headset-checks-$(date +%Y%m%d-%H%M%S).txt
