@@ -434,6 +434,21 @@ would likely wobble. Not worth a headset check.
   the run scripts need them (`scripts/run-exd-scene-trace.zsh`,
   `tools/analyze_dxmt_tbdr_audit.py`, the prepared `build-in-process/exd-ngx`
   copy), so run them from the main checkout.
+- xrizer: branch `claude/upstream-fixes` (worktree `~/Code/xrizer-upstream-fixes`),
+  five fixes cherry-picked from upstream `Supreeeme/xrizer` onto
+  `windows-openxr-d3d11`: an input crash with empty action sets, the
+  non-standard "grab" input slot, a workaround for apps with bad quaternion
+  conversions, `IsSteamVRDrawingControllers` and `GetLastFrameRenderer`.
+  Upstream's `openxrs` 0.22 update (a Steam Linux Runtime loading fix) and
+  the extension that needs it were left out; our own `Submit` release and
+  output-device code already covers the rest. macOS and Windows builds pass.
+- KosmicKrisp: branch `claude/kk-disk-cache` (worktree
+  `~/Code/alyx-native/workspace/kk-disk-cache`, build `build/kk-disk-cache`),
+  Mesa's shader disk cache plus a device pipeline cache. Upstream Mesa has
+  the same gap. Monado's render tests (126 shaders) take 2.36–2.42 s per run
+  on the current driver and 1.44–1.47 s once the cache is warm, with the same
+  results. Not yet measured in native Alyx. The installed `build/kk-integration`
+  is unchanged; upstream KosmicKrisp has 29 commits since its base.
 - The Monado client and service compare `git describe` versions. The private
   builds now report `v25.1.0-2496-g0e9c82206`, which no longer matches the
   installed LaunchAgent service: always run the modified client with the
