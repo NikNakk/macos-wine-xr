@@ -290,6 +290,43 @@ The gaze inset moves only when the game calls `xrLocateViews`, so at ~30 fps
 it lags a saccade by roughly 70–100 ms. The inset needs a margin around the
 fovea for that.
 
+## Where DLSS mode's extra cost goes
+
+On the headset, DLSS → MetalFX was a little cheaper than native at the same
+output size (65.9 against 71.0 ms at 100%), but much dearer than rendering
+its internal size directly: DLSS at 60% (about 40% internally) took 26.8 ms
+against 14.5 ms for native 40%.
+
+Metal System Traces of the loaded level on the simulated headset (1280×1440
+output per eye, DLSS Quality rendering 856×964, 2× MSAA), five seconds each,
+GPU time per frame by encoder:
+
+| Work only in the DLSS run | GPU per frame |
+|---|---:|
+| MetalFX temporal (pre, mid and post stages, once per eye) | 2.84 ms |
+| Unlabelled compute ("Compute Command 0", ~6 per frame; probably MetalFX internals) | 0.94 ms |
+| Unreal's extra compute in DLSS mode ("C dispatches=1", ~7 per frame) | 1.43 ms |
+| DXMT's per-eye region copies (blits) | ~0.55 ms |
+
+Compute per frame rose from 0.9 ms (native at the same 856×964) to 6.4 ms,
+while drawing fell (12.5 to 7.8 ms of fragment work: DLSS replaces some of
+Unreal's own passes). Frame totals from the audit: DLSS 13.95 ms, native at
+856×964 12.30 ms, so a net 1.65 ms here, where the GPU had spare time to
+overlap the compute with drawing.
+
+The headset's output is 2800×2856 per eye at 100%, 4.3× these pixels, and the
+GPU is saturated, so little overlaps. Scaled by output pixels, the DLSS-only
+work would be about 8.5 ms at 60% and 24 ms at 100%, in line with the
+headset measurements. Almost all of it is MetalFX's temporal scaler and
+Unreal's DLSS-mode passes. DXMT's own copies are about a tenth; skipping the
+left eye's input copies (MetalFX can read a top-left subregion) would save
+roughly half of that.
+
+So DLSS is not worth pursuing for speed: rendering at a lower resolution and
+letting the compositor stretch it costs much less for the same internal
+pixels. Its only possible advantage is image quality, which nobody has
+compared by eye.
+
 ## MetalFX spatial instead of temporal (not worth pursuing)
 
 DXMT's NGX layer turns EXD's DLSS calls into MetalFX temporal upscaling.
