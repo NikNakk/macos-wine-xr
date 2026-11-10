@@ -290,26 +290,41 @@ The gaze inset moves only when the game calls `xrLocateViews`, so at ~30 fps
 it lags a saccade by roughly 70–100 ms. The inset needs a margin around the
 fovea for that.
 
-## Depth reprojection
+## Depth layers and opt-in depth reprojection
 
-From the [VeRantyx review](#where-the-work-is): their frame predictor moves each
-pixel by the game's depth and motion. The depth half has a standard OpenXR
-route, `XR_KHR_composition_layer_depth`, which EXD supports. With depth, the
-compositor can correct for head translation (leaning, stepping), not just
-rotation, between the game's frames.
+EXD supports `XR_KHR_composition_layer_depth`, the standard OpenXR way to hand
+the runtime its depth. This branch adds the plumbing for it end to end, and
+gives the graphics compositor the same opt-in depth reprojection the compute
+compositor already had. It does **not** solve disocclusion, which is why
+depth reprojection is off on macOS in the first place.
 
-What it took:
+What the reprojection does, per output pixel (both compositors): take the
+rotationally timewarped source position, read one depth sample there
+(nearest), assume the pixel's ray hits a surface at that depth, and sample
+the colour where the ray from the new eye position meets it. That is a
+single-step approximation with no hole detection or fill. It is right on
+smooth surfaces and for small translations; at depth edges the sample often
+belongs to the wrong surface, so foreground edges are dragged or doubled
+and uncovered background is filled with stretched foreground. These are the
+silhouettes and trails recorded in `monado-2/doc/macos-env-toggles.md`. The
+earlier `macos-depth-aware-reprojection` branch went further (forward depth
+splatting with jump-flood, local and directional disocclusion fill) and
+still did not reach a usable result on hardware. VeRantyx's warp, which fills
+uncovered pixels from the background's displacement in a nearby ring, is a
+variant of those fills, not a new approach.
 
-- **Monado** (`0e9c82206`): depth reprojection existed only in the compute
-  compositor. The graphics compositor now does the same per pixel (one
-  nearest depth sample at the rotationally timewarped UV, then the ray from
-  the new eye position), opt-in with `XRT_COMPOSITOR_DEPTH_REPROJECTION=1`.
-  The extension stays off by default on macOS: configure with
-  `-DXRT_FEATURE_OPENXR_LAYER_DEPTH=ON` (the private builds are).
+What is here:
+
+- **Monado** (`0e9c82206`): the graphics compositor reprojects depth layers
+  when `XRT_COMPOSITOR_DEPTH_REPROJECTION=1` (default off), matching the
+  compute compositor, so any future fill experiment can target either path.
+  `XR_KHR_composition_layer_depth` stays off by default on macOS; configure
+  with `-DXRT_FEATURE_OPENXR_LAYER_DEPTH=ON` (the private builds are).
 - **Bridge** (branch `claude/depth-layers`): offers the extension
   (`MWXR_DEPTH_LAYERS=0` hides it), maps D32/D32S8/D16 depth swapchains to
   Metal, imports them as typeless DirectX 11 depth textures, and passes each
-  view's depth info through.
+  view's depth info through. This is the platform plumbing the upstreaming
+  review recommends keeping separate from reprojection.
 - **DXMT**: `patches/dxmt-experiments/import-depth-swapchain.patch` lets
   single-sample depth textures be imported. Tested in
   `build-in-process/exd-depth`, an APFS clone of the private EXD copy with
@@ -318,9 +333,8 @@ What it took:
 On the simulated headset EXD asks for the extension, creates a depth
 swapchain matching its colour one, and submits depth for every view.
 Reprojection cost 0.30 → 0.42 ms per composite; the game's GPU time was
-unchanged. The simulated headset does not move, so the visible effect, and
-the disocclusion artefacts the fork switched it off over, need headset
-checks 8 and 9.
+unchanged. Headset checks 8 and 9 compare reprojection off and on; expect
+them to re-confirm the known artefacts rather than show a usable result.
 
 ## Sharper compositor filter for lower view scales
 
