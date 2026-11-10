@@ -9,6 +9,9 @@
 #   5 gaze      quad views with the inset following your eyes
 #   6 scale50   50% view scale, the compositor's usual bilinear filter
 #   7 sharp50   50% view scale, Catmull-Rom (green) compositor filter
+#   8 depthoff  EXD submitting depth, reprojection off (needs the depth-gate bridge and
+#               the build-in-process/exd-depth copy with the depth-import DXMT patch)
+#   9 depthon   the same with depth reprojection on
 # Before each run it says what to look for and waits for Enter; afterwards it asks for
 # an optional one-line note. At the end it prints GPU time per frame with the notes.
 # Usage (from the main checkout, which has the DXMT investigation's scripts):
@@ -43,6 +46,8 @@ steps=(
  "gaze|msaa0|XRT_COMPOSITOR_QUAD_VIEW_FAST_PATH=1|MWXR_QUAD_CONTEXT_SCALE=0.4 MWXR_QUAD_INSET_SCALE=0.25 OXR_QUAD_INSET_GAZE=1 OXR_QUAD_INSET_DEGREES=30 OXR_QUAD_INSET_LOG=1|Gaze-following inset (30 degrees). Look around with your eyes: does the sharp area follow, how late does it arrive, and does it pop or flicker?"
  "scale50|msaa2|XRT_COMPOSITOR_SOURCE_FILTER=bilinear|MWXR_QUAD_VIEWS=0 MWXR_VIEWPORT_SCALE_PERCENTAGE=50|Half resolution with the usual filter, for reference. Note how soft text and fine edges look at the centre and edges."
  "sharp50|msaa2|XRT_COMPOSITOR_SOURCE_FILTER=catmull-rom-green|MWXR_QUAD_VIEWS=0 MWXR_VIEWPORT_SCALE_PERCENTAGE=50|Half resolution with the sharper compositor filter. Compared with the last check: is it sharper, and is there any ringing (halos) or colour fringing at edges?"
+ "depthoff|msaa2|XRT_COMPOSITOR_DEPTH_REPROJECTION=0|MWXR_QUAD_VIEWS=0 MWXR_EXD_BUILD=depth-gate MWXR_EXD_EXPERIMENT_ROOT=${repo}/build-in-process/exd-depth|Reference for depth: stand near an object with things behind it, then lean and step side to side. Note how the scene judders or swims as you move."
+ "depthon|msaa2|XRT_COMPOSITOR_DEPTH_REPROJECTION=1|MWXR_QUAD_VIEWS=0 MWXR_EXD_BUILD=depth-gate MWXR_EXD_EXPERIMENT_ROOT=${repo}/build-in-process/exd-depth|Depth reprojection on. Lean and step the same way: is movement smoother, and do near edges smear, stretch or tear as background is uncovered?"
 )
 
 summary=${repo}/build-in-process/exd-ngx/headset-checks-$(date +%Y%m%d-%H%M%S).txt
@@ -56,11 +61,11 @@ for step in "${steps[@]}"; do
  (( prompt )) && read -r "?Press Enter when you are ready (headset on)... "
  for i in {1..30}; do pgrep -x monado-service >/dev/null || break; sleep 1; done
  # The run script restores the game's settings and stops its private service itself.
- env ${=game_env} MWXR_EXD_BUILD=quad-gate MWXR_EXD_TAG=check-${tag} \
+ env MWXR_EXD_BUILD=quad-gate ${=game_env} MWXR_EXD_TAG=check-${tag} \
   MWXR_EXD_SERVICE_ENV="XRT_LOG=info PSVR2_LOG=info ${service_env} ${MWXR_CHECKS_SERVICE_EXTRA:-}" \
   MWXR_EXD_SERVICE_BIN=${service_bin} MWXR_EXD_RUNTIME_JSON=${runtime_json} \
   "${repo}/scripts/run-exd-headset-compare.zsh" ${config} ${seconds} > /dev/null 2>&1 || print "run failed (exit $?)"
- run=$(ls -td "${repo}"/build-in-process/exd-ngx/headset-*-check-${tag} | head -1)
+ run=$(ls -td "${repo}"/build-in-process/exd-*/headset-*-check-${tag} | head -1)
  note=''
  (( prompt )) && read -r "note?What did you see? (one line, Enter to skip) "
  # GPU time over 600 frames of the loaded level, starting 300 frames after it appears.

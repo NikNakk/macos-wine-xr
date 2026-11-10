@@ -38,6 +38,8 @@ static const char *const display_distortion_extension = XR_MNDX_DISPLAY_DISTORTI
 // Adds only a view configuration type; views, swapchains and layers pass through unchanged.
 static const char *const quad_views_extension = "XR_VARJO_quad_views";
 static const char *const visibility_mask_extension = XR_KHR_VISIBILITY_MASK_EXTENSION_NAME;
+// Depth swapchains and a chained depth info per projection view; the PE side translates both.
+static const char *const depth_layer_extension = XR_KHR_COMPOSITION_LAYER_DEPTH_EXTENSION_NAME;
 typedef XrResult (XRAPI_PTR *pfn_timespec_to_time)(XrInstance, const struct timespec *, XrTime *);
 typedef XrResult (XRAPI_PTR *pfn_time_to_timespec)(XrInstance, XrTime, struct timespec *);
 
@@ -86,12 +88,14 @@ XrResult wine_xrCreateInstance(const XrInstanceCreateInfo *info, XrInstance *ins
         } else if (!strcmp(name, visibility_mask_extension) && native_extension_present(visibility_mask_extension)) {
             // A plain session function and an event; the PE side translates the event's session.
             wrapper->visibility_mask_enabled = 1;
+        } else if (!strcmp(name, depth_layer_extension) && native_extension_present(depth_layer_extension)) {
+            wrapper->depth_layers_enabled = 1;
         } else {
             pthread_mutex_unlock(&instance_mutex);
             return XR_ERROR_EXTENSION_NOT_PRESENT;
         }
     }
-    const char *native_names[6];
+    const char *native_names[7];
     uint32_t native_count = 0;
     if (wrapper->d3d11_enabled) native_names[native_count++] = XR_KHR_METAL_ENABLE_EXTENSION_NAME;
     if (wrapper->win32_time_enabled) native_names[native_count++] = native_timespec_extension;
@@ -99,6 +103,7 @@ XrResult wine_xrCreateInstance(const XrInstanceCreateInfo *info, XrInstance *ins
     if (wrapper->refresh_rate_enabled) native_names[native_count++] = refresh_rate_extension;
     if (wrapper->quad_views_enabled) native_names[native_count++] = quad_views_extension;
     if (wrapper->visibility_mask_enabled) native_names[native_count++] = visibility_mask_extension;
+    if (wrapper->depth_layers_enabled) native_names[native_count++] = depth_layer_extension;
     XrInstanceCreateInfo native_info = *info;
     native_info.enabledExtensionCount = native_count;
     native_info.enabledExtensionNames = native_count ? native_names : NULL;
@@ -189,8 +194,8 @@ XrResult wine_xrEnumerateInstanceExtensionProperties(const char *layer, uint32_t
 {
     if (!count) return XR_ERROR_VALIDATION_FAILURE;
     if (layer) return XR_ERROR_API_LAYER_NOT_PRESENT;
-    const char *names[6];
-    uint32_t versions[6], exposed = 0;
+    const char *names[7];
+    uint32_t versions[7], exposed = 0;
     if (native_extension_present(XR_KHR_METAL_ENABLE_EXTENSION_NAME)) {
         names[exposed] = XR_KHR_D3D11_ENABLE_EXTENSION_NAME;
         versions[exposed++] = XR_KHR_D3D11_enable_SPEC_VERSION;
@@ -218,6 +223,12 @@ XrResult wine_xrEnumerateInstanceExtensionProperties(const char *layer, uint32_t
     if (native_extension_present(visibility_mask_extension) && !(mask && !strcmp(mask, "0"))) {
         names[exposed] = visibility_mask_extension;
         versions[exposed++] = XR_KHR_visibility_mask_SPEC_VERSION;
+    }
+    // MWXR_DEPTH_LAYERS=0 hides depth submission from applications.
+    const char *depth = getenv("MWXR_DEPTH_LAYERS");
+    if (native_extension_present(depth_layer_extension) && !(depth && !strcmp(depth, "0"))) {
+        names[exposed] = depth_layer_extension;
+        versions[exposed++] = XR_KHR_composition_layer_depth_SPEC_VERSION;
     }
     *count = exposed;
     if (!capacity) return XR_SUCCESS;
