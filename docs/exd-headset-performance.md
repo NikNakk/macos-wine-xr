@@ -290,6 +290,38 @@ The gaze inset moves only when the game calls `xrLocateViews`, so at ~30 fps
 it lags a saccade by roughly 70–100 ms. The inset needs a margin around the
 fovea for that.
 
+## Sharper compositor filter for lower view scales
+
+A lower view scale is the biggest lever measured (50% runs at about 3.5× the
+frame rate of 100%), and it beats DLSS on cost. What it loses is sharpness:
+Monado's distortion pass magnifies the image with one bilinear sample per
+colour channel. `XRT_COMPOSITOR_SOURCE_FILTER` (service) selects a sharper
+filter in both compositors; it needs nothing from the game:
+
+- `bilinear` (default): unchanged.
+- `catmull-rom`: bicubic Catmull-Rom, five bilinear samples per channel.
+- `catmull-rom-green`: Catmull-Rom for green only (most of the perceived
+  sharpness), bilinear for red and blue.
+
+The filter is a pipeline specialization, so the default costs nothing extra.
+Sample positions stay inside each view's part of a shared swapchain image,
+and foveated sources keep the hardware filter. Offscreen tests check that
+gradients match bilinear, edges are 1.25× steeper, and views never bleed into
+each other.
+
+GPU per composite (both eyes):
+
+| Filter | Compute benchmark, 2000×2040 from 1400×1428 | EXD, simulated headset, graphics compositor |
+|---|---:|---:|
+| bilinear | 0.99 ms | 0.52 ms |
+| catmull-rom-green | 1.40 ms | 1.02 ms |
+| catmull-rom | 2.26 ms | 1.63 ms |
+
+On the PS VR2 the green mode would probably add 0.6–0.8 ms per composite,
+roughly 5–7% of the GPU at 90 Hz. It pays only if it lets the view scale
+drop a notch, so headset checks 6 and 7 compare 50% scale with and without
+it. The game's own GPU time was unchanged in these runs.
+
 ## Where DLSS mode's extra cost goes
 
 On the headset, DLSS → MetalFX was a little cheaper than native at the same
@@ -361,7 +393,8 @@ would likely wobble. Not worth a headset check.
 - Monado, branch `claude/quad-gaze-inset` (worktree
   `~/Code/alyx-native/workspace/monado-quad-gaze`), three commits on the
   installed `e468db58f`: the gaze-following inset (client), one-pass
-  quad-view composition (compositor), and the PS VR2 lens mask (driver).
+  quad-view composition (compositor), the PS VR2 lens mask (driver) and the
+  optional Catmull-Rom source filter (compositor).
   Builds: `~/Code/alyx-native/build/monado-quad-gaze-{arm64,x86_64}`.
 - Bridge, docs and scripts: branch `claude/exd-quad-views-mask` in this
   repository (worktree `~/Code/macos-wine-xr-quad`), based on `97d6309`.
@@ -370,7 +403,7 @@ would likely wobble. Not worth a headset check.
   `tools/analyze_dxmt_tbdr_audit.py`, the prepared `build-in-process/exd-ngx`
   copy), so run them from the main checkout.
 - The Monado client and service compare `git describe` versions. The private
-  builds now report `v25.1.0-2494-gf6078926b`, which no longer matches the
+  builds now report `v25.1.0-2495-g632985ad8`, which no longer matches the
   installed LaunchAgent service: always run the modified client with the
   modified service (`MWXR_EXD_SERVICE_BIN` and `MWXR_EXD_RUNTIME_JSON`), and
   rebuild both after any new commit.
@@ -379,8 +412,8 @@ would likely wobble. Not worth a headset check.
 
 `scripts/run-exd-headset-checks.zsh` runs the checks that need someone
 wearing the headset, one 90 s EXD run each: reference corners, lens mask at
-r² 0.9 and 0.8, quad views on the graphics compositor, and the gaze-following
-inset. Before each run it says what to look for and waits for Enter;
+r² 0.9 and 0.8, quad views on the graphics compositor, the gaze-following
+inset, and 50% view scale with and without the sharper compositor filter. Before each run it says what to look for and waits for Enter;
 afterwards it takes an optional one-line note. At the end it prints GPU time
 per frame (600 frames of the loaded level) with the notes, and saves them as
 `build-in-process/exd-ngx/headset-checks-*.txt`. `--only 2,3` picks checks.
@@ -404,6 +437,8 @@ MWXR_EXD_BUILD=quad-gate MWXR_EXD_SERVICE_ENV="XRT_COMPOSITOR_COMPUTE=1" \
   MWXR_EXD_RUNTIME_JSON=$B/monado-quad-gaze-x86_64/openxr_monado-dev.json \
   OXR_QUAD_INSET_GAZE=1 OXR_QUAD_INSET_DEGREES=30 OXR_QUAD_INSET_LOG=1 \
   MWXR_QUAD_CONTEXT_SCALE=0.4 MWXR_QUAD_INSET_SCALE=0.25 scripts/run-exd-headset-compare.zsh msaa0 90
+# Sharper compositor filter: add XRT_COMPOSITOR_SOURCE_FILTER=catmull-rom-green to MWXR_EXD_SERVICE_ENV.
+#   tests/tests_render_compute '[source_filter_benchmark]'   (cost at PS VR2 size)
 # Add XRT_COMPOSITOR_QUAD_VIEW_FAST_PATH=1 to MWXR_EXD_SERVICE_ENV for the fast path; with it,
 # XRT_COMPOSITOR_COMPUTE=0 (the graphics compositor) also gets quad views. Without a
 # headset, also add SIMULATED_DESKTOP=1 XRT_MACOS_REFRESH_RATE_HZ=0 (simulated HMD in a window).
