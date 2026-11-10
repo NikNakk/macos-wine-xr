@@ -336,7 +336,8 @@ spatial scaler on the colour image instead, ignoring depth and motion. It
 runs only when the content fills its texture, which the per-eye fix
 (`DXMT_NGX_SUBRECTS=1`) guarantees, and otherwise falls back to temporal.
 The patched `d3d11.dll` was tested in an APFS clone of the private EXD copy
-(`build-in-process/exd-spatial`, run with `MWXR_EXD_EXPERIMENT_ROOT`), so the
+(`build-in-process/exd-spatial`, run with `MWXR_EXD_EXPERIMENT_ROOT`; deleted
+afterwards, the patch is kept), so the
 DXMT investigation's copy is unchanged. A DLL linked by hand needs
 `winebuild --builtin`, or Wine silently loads the prefix's older DXMT instead.
 
