@@ -1,0 +1,84 @@
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -5401,8 +5401,81 @@
+     }
+     return WMTPixelFormatInvalid;
+   }
++
++  struct CachedSpatialScaler {
++    uint32_t input_width, input_height, output_width, output_height;
++    WMTPixelFormat color_pixel_format, output_pixel_format;
++    Rc<SpatialScaler> scaler;
++  };
++  std::vector<CachedSpatialScaler> spatial_scaler_cache_;
++
++  // DXMT_NGX_SPATIAL=1: MetalFX spatial upscaling from the colour image alone, in place of
++  // temporal. Only when the content fills the input texture (DXMT_NGX_SUBRECTS=1 crops each
++  // eye into its own texture); otherwise the temporal scaler is used.
++  bool
++  SpatialUpscale(const MTL_TEMPORAL_UPSCALE_D3D11_DESC *pDesc) {
++    Rc<Texture> input, output;
++    if (!(input = static_cast<D3D11ResourceCommon *>(pDesc->Color)->texture()))
++      return true;
++    if (!(output = static_cast<D3D11ResourceCommon *>(pDesc->Output)->texture()))
++      return true;
++    const uint32_t content_width = pDesc->InputContentWidth ? pDesc->InputContentWidth : input->width();
++    const uint32_t content_height = pDesc->InputContentHeight ? pDesc->InputContentHeight : input->height();
++    static bool logged_fallback, logged_first;
++    if (content_width != input->width() || content_height != input->height()) {
++      if (!logged_fallback) {
++        WARN("DXMT_NGX_SPATIAL: content ", content_width, "x", content_height, " does not fill input ",
++             input->width(), "x", input->height(), "; using the temporal scaler");
++        logged_fallback = true;
++      }
++      return false;
++    }
++    if (!logged_first) {
++      WARN("DXMT_NGX_SPATIAL: spatial ", input->width(), "x", input->height(), " -> ", output->width(), "x",
++           output->height(), " output usage ", (unsigned)output->usage());
++      logged_first = true;
++    }
+ 
++    Rc<SpatialScaler> scaler;
++    for (auto &entry : spatial_scaler_cache_) {
++      if (entry.input_width == input->width() && entry.input_height == input->height() &&
++          entry.output_width == output->width() && entry.output_height == output->height() &&
++          entry.color_pixel_format == input->pixelFormat() && entry.output_pixel_format == output->pixelFormat()) {
++        scaler = entry.scaler;
++        break;
++      }
++    }
++    if (!scaler) {
++      WMTFXSpatialScalerInfo info;
++      info.color_format = input->pixelFormat();
++      info.output_format = output->pixelFormat();
++      info.input_width = input->width();
++      info.input_height = input->height();
++      info.output_width = output->width();
++      info.output_height = output->height();
++      scaler = new SpatialScaler(ctx_->device->GetMTLDevice(), info);
++      spatial_scaler_cache_.push_back({info.input_width, info.input_height, info.output_width, info.output_height,
++                                       info.color_format, info.output_format, scaler});
++    }
++
++    ctx_->InvalidateCurrentPass();
++    ctx_->EmitOP([input = std::move(input), output = std::move(output),
++                  scaler = std::move(scaler)](ArgumentEncodingContext &enc) mutable {
++      auto &scaler_info = enc.currentFrameStatistics().last_scaler_info;
++      scaler_info.type = ScalerType::Spatial;
++      scaler_info.input_width = input->width();
++      scaler_info.input_height = input->height();
++      scaler_info.output_width = output->width();
++      scaler_info.output_height = output->height();
++      enc.upscale(input, output, scaler);
++    });
++    return true;
++  }
++
+   void STDMETHODCALLTYPE TemporalUpscale(const MTL_TEMPORAL_UPSCALE_D3D11_DESC *pDesc) final {
++    static const bool spatial = env::getEnvVar("DXMT_NGX_SPATIAL") == "1";
++    if (spatial && SpatialUpscale(pDesc))
++      return;
+     Rc<Texture> input, output, depth, motion_vector, exposure;
+     if (!(input = static_cast<D3D11ResourceCommon *>(pDesc->Color)->texture()))
+       return;

@@ -290,6 +290,65 @@ The gaze inset moves only when the game calls `xrLocateViews`, so at ~30 fps
 it lags a saccade by roughly 70–100 ms. The inset needs a margin around the
 fovea for that.
 
+## MetalFX spatial instead of temporal (not worth pursuing)
+
+DXMT's NGX layer turns EXD's DLSS calls into MetalFX temporal upscaling.
+`patches/dxmt-experiments/ngx-metalfx-spatial.patch` (on top of the DXMT
+investigation's patches) adds `DXMT_NGX_SPATIAL=1`, which uses MetalFX's
+spatial scaler on the colour image instead, ignoring depth and motion. It
+runs only when the content fills its texture, which the per-eye fix
+(`DXMT_NGX_SUBRECTS=1`) guarantees, and otherwise falls back to temporal.
+The patched `d3d11.dll` was tested in an APFS clone of the private EXD copy
+(`build-in-process/exd-spatial`, run with `MWXR_EXD_EXPERIMENT_ROOT`), so the
+DXMT investigation's copy is unchanged. A DLL linked by hand needs
+`winebuild --builtin`, or Wine silently loads the prefix's older DXMT instead.
+
+Simulated headset, DLSS template with 2× MSAA, views at Monado's maximum
+1280×1440 (DLSS input 640×720 per eye), one 90 s run each:
+
+| Route | GPU per frame |
+|---|---:|
+| DLSS → MetalFX temporal | 13.52 ms |
+| DLSS → MetalFX spatial | 13.23 ms |
+| No upscaler, 134% scale | 13.58 ms |
+
+All three hit the simulator's 60 fps cap, so the GPU was not the limit, but
+the upscaler's share is clearly small: spatial saved about 0.3 ms over
+temporal, against EXD frames of 44–66 ms on the headset. Spatial also cannot
+undo the per-frame camera jitter that Unreal adds in DLSS mode, so the image
+would likely wobble. Not worth a headset check.
+
+## Where the work is
+
+- Monado, branch `claude/quad-gaze-inset` (worktree
+  `~/Code/alyx-native/workspace/monado-quad-gaze`), three commits on the
+  installed `e468db58f`: the gaze-following inset (client), one-pass
+  quad-view composition (compositor), and the PS VR2 lens mask (driver).
+  Builds: `~/Code/alyx-native/build/monado-quad-gaze-{arm64,x86_64}`.
+- Bridge, docs and scripts: branch `claude/exd-quad-views-mask` in this
+  repository (worktree `~/Code/macos-wine-xr-quad`), based on `97d6309`.
+  The DXMT investigation's files stay uncommitted in the main checkout, and
+  the run scripts need them (`scripts/run-exd-scene-trace.zsh`,
+  `tools/analyze_dxmt_tbdr_audit.py`, the prepared `build-in-process/exd-ngx`
+  copy), so run them from the main checkout.
+- The Monado client and service compare `git describe` versions. The private
+  builds now report `v25.1.0-2494-gf6078926b`, which no longer matches the
+  installed LaunchAgent service: always run the modified client with the
+  modified service (`MWXR_EXD_SERVICE_BIN` and `MWXR_EXD_RUNTIME_JSON`), and
+  rebuild both after any new commit.
+
+## Headset checks
+
+`scripts/run-exd-headset-checks.zsh` runs the checks that need someone
+wearing the headset, one 90 s EXD run each: reference corners, lens mask at
+r² 0.9 and 0.8, quad views on the graphics compositor, and the gaze-following
+inset. Before each run it says what to look for and waits for Enter;
+afterwards it takes an optional one-line note. At the end it prints GPU time
+per frame (600 frames of the loaded level) with the notes, and saves them as
+`build-in-process/exd-ngx/headset-checks-*.txt`. `--only 2,3` picks checks.
+A dry run on the simulated headset (checks 1 and 4, no prompts) worked end to
+end: 14.2 ms and 10.1 ms GPU per frame at the 60 fps cap.
+
 ## Reproduce
 
 ```sh
@@ -319,6 +378,7 @@ MWXR_EXD_BUILD=quad-gate MWXR_EXD_SERVICE_ENV="XRT_COMPOSITOR_COMPUTE=1" \
 MWXR_EXD_BUILD=quad-gate MWXR_QUAD_VIEWS=0 MWXR_EXD_SERVICE_ENV="PSVR2_LOG=info PSVR2_VISIBILITY_MASK_R2=0.8" \
   MWXR_EXD_SERVICE_BIN=$B/monado-quad-gaze-arm64/src/xrt/targets/service/monado-service \
   MWXR_EXD_RUNTIME_JSON=$B/monado-quad-gaze-x86_64/openxr_monado-dev.json scripts/run-exd-headset-compare.zsh msaa2 90
+scripts/run-exd-headset-checks.zsh                 # guided checks with the headset on
 python3 tools/analyze_dxmt_tbdr_audit.py RUN/game/game.log --min-frame 0 --max-frame 100000 --frames-csv frames.csv
 ```
 
