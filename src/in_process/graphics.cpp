@@ -275,6 +275,7 @@ extern "C" XrResult WINAPI xrPollEvent(XrInstance instance, XrEventDataBuffer *e
         case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: session = &((XrEventDataSessionStateChanged *)event)->session; break;
         case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED: session = &((XrEventDataInteractionProfileChanged *)event)->session; break;
         case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING: session = &((XrEventDataReferenceSpaceChangePending *)event)->session; break;
+        case XR_TYPE_EVENT_DATA_VISIBILITY_MASK_CHANGED_KHR: session = &((XrEventDataVisibilityMaskChangedKHR *)event)->session; break;
         default: break;
         }
         if (session && *session) {
@@ -288,7 +289,7 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
 {
     if (!info || info->next || info->layerCount > 1) return XR_ERROR_LAYER_INVALID;
     XrFrameEndInfo native = *info;
-    XrCompositionLayerProjection projection; XrCompositionLayerProjectionView views[2];
+    XrCompositionLayerProjection projection; XrCompositionLayerProjectionView views[4];
     const XrCompositionLayerBaseHeader *layer = nullptr;
     if (info->layerCount) {
         if (!info->layers || !info->layers[0] || info->layers[0]->type != XR_TYPE_COMPOSITION_LAYER_PROJECTION)
@@ -298,8 +299,14 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
         const auto *marker = (const XrCompositionLayerDisplayImageMNDX *)projection.next;
         if (marker && (marker->type != XR_TYPE_COMPOSITION_LAYER_DISPLAY_IMAGE_MNDX || marker->next))
             return XR_ERROR_LAYER_INVALID;
-        if (projection.viewCount != 2 || !projection.views) return XR_ERROR_LAYER_INVALID;
-        for (unsigned i = 0; i < 2; ++i) {
+        // Stereo, or XR_VARJO_quad_views' two context views followed by two insets.
+        if ((projection.viewCount != 2 && projection.viewCount != 4) || !projection.views) return XR_ERROR_LAYER_INVALID;
+        static uint32_t logged_view_count;
+        if (projection.viewCount != logged_view_count) {
+            logged_view_count = projection.viewCount;
+            fprintf(stderr, "wineopenxr: projection layer with %u views\n", projection.viewCount);
+        }
+        for (unsigned i = 0; i < projection.viewCount; ++i) {
             views[i] = projection.views[i];
             if (views[i].next || !views[i].subImage.swapchain) return XR_ERROR_LAYER_INVALID;
             views[i].subImage.swapchain = wine_swapchain_from_handle(views[i].subImage.swapchain)->host_swapchain;

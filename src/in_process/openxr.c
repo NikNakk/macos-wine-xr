@@ -6,6 +6,7 @@
 #endif
 #include "openxr_private.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -34,6 +35,9 @@ static const char *const win32_time_extension = XR_KHR_WIN32_CONVERT_PERFORMANCE
 static const char *const native_timespec_extension = "XR_KHR_convert_timespec_time";
 static const char *const refresh_rate_extension = XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME;
 static const char *const display_distortion_extension = XR_MNDX_DISPLAY_DISTORTION_EXTENSION_NAME;
+// Adds only a view configuration type; views, swapchains and layers pass through unchanged.
+static const char *const quad_views_extension = "XR_VARJO_quad_views";
+static const char *const visibility_mask_extension = XR_KHR_VISIBILITY_MASK_EXTENSION_NAME;
 typedef XrResult (XRAPI_PTR *pfn_timespec_to_time)(XrInstance, const struct timespec *, XrTime *);
 typedef XrResult (XRAPI_PTR *pfn_time_to_timespec)(XrInstance, XrTime, struct timespec *);
 
@@ -63,6 +67,8 @@ XrResult wine_xrCreateInstance(const XrInstanceCreateInfo *info, XrInstance *ins
         pthread_mutex_unlock(&instance_mutex);
         return XR_ERROR_API_LAYER_NOT_PRESENT;
     }
+    for (uint32_t i = 0; i < info->enabledExtensionCount; ++i)
+        fprintf(stderr, "wineopenxr: application requests %s\n", info->enabledExtensionNames[i]);
     for (uint32_t i = 0; i < info->enabledExtensionCount; ++i) {
         const char *name = info->enabledExtensionNames[i];
         if (!strcmp(name, XR_KHR_D3D11_ENABLE_EXTENSION_NAME)) {
@@ -75,17 +81,24 @@ XrResult wine_xrCreateInstance(const XrInstanceCreateInfo *info, XrInstance *ins
         } else if (!strcmp(name, refresh_rate_extension) && native_extension_present(refresh_rate_extension)) {
             // Plain session functions and an event, passed through by the generated thunks.
             wrapper->refresh_rate_enabled = 1;
+        } else if (!strcmp(name, quad_views_extension) && native_extension_present(quad_views_extension)) {
+            wrapper->quad_views_enabled = 1;
+        } else if (!strcmp(name, visibility_mask_extension) && native_extension_present(visibility_mask_extension)) {
+            // A plain session function and an event; the PE side translates the event's session.
+            wrapper->visibility_mask_enabled = 1;
         } else {
             pthread_mutex_unlock(&instance_mutex);
             return XR_ERROR_EXTENSION_NOT_PRESENT;
         }
     }
-    const char *native_names[4];
+    const char *native_names[6];
     uint32_t native_count = 0;
     if (wrapper->d3d11_enabled) native_names[native_count++] = XR_KHR_METAL_ENABLE_EXTENSION_NAME;
     if (wrapper->win32_time_enabled) native_names[native_count++] = native_timespec_extension;
     if (wrapper->display_distortion_enabled) native_names[native_count++] = display_distortion_extension;
     if (wrapper->refresh_rate_enabled) native_names[native_count++] = refresh_rate_extension;
+    if (wrapper->quad_views_enabled) native_names[native_count++] = quad_views_extension;
+    if (wrapper->visibility_mask_enabled) native_names[native_count++] = visibility_mask_extension;
     XrInstanceCreateInfo native_info = *info;
     native_info.enabledExtensionCount = native_count;
     native_info.enabledExtensionNames = native_count ? native_names : NULL;
@@ -106,13 +119,67 @@ XrResult wine_xrCreateInstance(const XrInstanceCreateInfo *info, XrInstance *ins
     return result;
 }
 
+// XR_VARJO_quad_views' view configuration; the generated header omits that extension's enums.
+static const XrViewConfigurationType quad_views_config = (XrViewConfigurationType)1000037000;
+
+// Unreal 4.27 takes the first listed configuration it supports, and Monado lists its
+// emulated quad views after stereo. List quad views first unless MWXR_QUAD_VIEWS=stereo-first.
+XrResult wine_xrEnumerateViewConfigurations(XrInstance instance, XrSystemId system, uint32_t capacity,
+                                            uint32_t *count, XrViewConfigurationType *types)
+{
+    XrResult result = g_xr_host_instance_dispatch_table.p_xrEnumerateViewConfigurations(
+        wine_instance_from_handle(instance)->host_instance, system, capacity, count, types);
+    if (result != XR_SUCCESS || !capacity || !types || !count) return result;
+    const char *order = getenv("MWXR_QUAD_VIEWS");
+    int quad_first = !order || strcmp(order, "stereo-first");
+    for (uint32_t i = 1; quad_first && i < *count; ++i)
+        if (types[i] == quad_views_config) {
+            memmove(types + 1, types, i * sizeof(*types));
+            types[0] = quad_views_config;
+        }
+    fprintf(stderr, "wineopenxr: view configurations:");
+    for (uint32_t i = 0; i < *count; ++i) fprintf(stderr, " %d", (int)types[i]);
+    fprintf(stderr, "\n");
+    return result;
+}
+
+// Quad views' recommended sizes: MWXR_QUAD_CONTEXT_SCALE scales the two wide context
+// views and MWXR_QUAD_INSET_SCALE the two insets (Monado recommends the stereo size for both).
+static uint32_t scaled_size(uint32_t size, uint32_t max, const char *variable)
+{
+    const char *text = getenv(variable);
+    double scale = text ? atof(text) : 1.0;
+    if (!(scale > 0.05 && scale <= 4.0)) return size;
+    uint32_t scaled = (uint32_t)(size * scale + 0.5);
+    return scaled < 16 ? 16 : scaled > max ? max : scaled;
+}
+
+XrResult wine_xrEnumerateViewConfigurationViews(XrInstance instance, XrSystemId system, XrViewConfigurationType type,
+                                                uint32_t capacity, uint32_t *count, XrViewConfigurationView *views)
+{
+    XrResult result = g_xr_host_instance_dispatch_table.p_xrEnumerateViewConfigurationViews(
+        wine_instance_from_handle(instance)->host_instance, system, type, capacity, count, views);
+    if (result != XR_SUCCESS || !capacity || !views || !count) return result;
+    for (uint32_t i = 0; type == quad_views_config && i < *count; ++i) {
+        const char *variable = i < 2 ? "MWXR_QUAD_CONTEXT_SCALE" : "MWXR_QUAD_INSET_SCALE";
+        views[i].recommendedImageRectWidth = scaled_size(views[i].recommendedImageRectWidth,
+                                                         views[i].maxImageRectWidth, variable);
+        views[i].recommendedImageRectHeight = scaled_size(views[i].recommendedImageRectHeight,
+                                                          views[i].maxImageRectHeight, variable);
+    }
+    for (uint32_t i = 0; i < *count; ++i)
+        fprintf(stderr, "wineopenxr: view configuration %d view %u recommended %ux%u\n", (int)type, i,
+                views[i].recommendedImageRectWidth, views[i].recommendedImageRectHeight);
+    return result;
+}
+
 XrResult wine_xrEnumerateInstanceExtensionProperties(const char *layer, uint32_t capacity,
                                                     uint32_t *count, XrExtensionProperties *properties)
 {
     if (!count) return XR_ERROR_VALIDATION_FAILURE;
     if (layer) return XR_ERROR_API_LAYER_NOT_PRESENT;
-    const char *names[4];
-    uint32_t versions[4], exposed = 0;
+    const char *names[6];
+    uint32_t versions[6], exposed = 0;
     if (native_extension_present(XR_KHR_METAL_ENABLE_EXTENSION_NAME)) {
         names[exposed] = XR_KHR_D3D11_ENABLE_EXTENSION_NAME;
         versions[exposed++] = XR_KHR_D3D11_enable_SPEC_VERSION;
@@ -128,6 +195,18 @@ XrResult wine_xrEnumerateInstanceExtensionProperties(const char *layer, uint32_t
     if (native_extension_present(refresh_rate_extension)) {
         names[exposed] = refresh_rate_extension;
         versions[exposed++] = XR_FB_display_refresh_rate_SPEC_VERSION;
+    }
+    // MWXR_QUAD_VIEWS=0 hides quad views from applications.
+    const char *quad = getenv("MWXR_QUAD_VIEWS");
+    if (native_extension_present(quad_views_extension) && !(quad && !strcmp(quad, "0"))) {
+        names[exposed] = quad_views_extension;
+        versions[exposed++] = 1;
+    }
+    // MWXR_VISIBILITY_MASK=0 hides the runtime's hidden-area mesh from applications.
+    const char *mask = getenv("MWXR_VISIBILITY_MASK");
+    if (native_extension_present(visibility_mask_extension) && !(mask && !strcmp(mask, "0"))) {
+        names[exposed] = visibility_mask_extension;
+        versions[exposed++] = XR_KHR_visibility_mask_SPEC_VERSION;
     }
     *count = exposed;
     if (!capacity) return XR_SUCCESS;
