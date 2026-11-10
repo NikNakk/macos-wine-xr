@@ -463,8 +463,14 @@ would likely wobble. Not worth a headset check.
   on the current driver and 1.44–1.47 s once the cache is warm, with the same
   results. Not yet measured in native Alyx. The installed `build/kk-integration`
   is unchanged; upstream KosmicKrisp has 29 commits since its base.
+- CI: Monado's branch also carries the fork's own CI fixes (cherry-picked:
+  Windows build, REUSE metadata, Node 24 actions, no macos-14 runner) plus
+  fixes for the new code on Linux, Android and Windows. xrizer's branch adds
+  the two Vulkan queries its fake runtime lacked (the macOS port's
+  portability check aborted 77 of 98 tests), runs the full macOS suite again,
+  moves macOS CI to `macos-15` and is `cargo fmt` clean.
 - The Monado client and service compare `git describe` versions. The private
-  builds now report `v25.1.0-2496-g0e9c82206`, which no longer matches the
+  builds now report `v25.1.0-2502-gf3308eb8f`, which no longer matches the
   installed LaunchAgent service: always run the modified client with the
   modified service (`MWXR_EXD_SERVICE_BIN` and `MWXR_EXD_RUNTIME_JSON`), and
   rebuild both after any new commit.
