@@ -239,7 +239,25 @@ too, see below):
 The outer ring of the lens (r² 0.9–1) reads over a fifth of the render
 because the distortion squeezes the periphery. A mask there costs little
 visible detail if the ring is hard to see, but where the lens edge sits needs
-checking by eye: try r² 0.9 and 0.8 and look for a black rim.
+checking by eye.
+
+**Finding the lens edge.** `scripts/run-psvr2-lens-rings.zsh [SECONDS]` shows
+each eye a still test image instead of a game: coloured bands between rings at
+r² 0.50, 0.55 … 1.00 plus the panel edge, each ring labelled with its r² and
+the share of the image the mask would hide there (`0.90 · 28%`), with a 10°
+angle grid and the lens centre. The rings are drawn from this headset's own
+calibration, which the PS VR2 driver now logs (`Lens calibration version`), by
+`tools/psvr2_lens_rings.py`, a port of the driver's distortion and mask
+outline using the lookup table from Monado's source; its shares match the
+driver's offscreen test (6.3%, 28.3% and 46.7% at r² 1.0, 0.9 and 0.8). So
+each ring is exactly where the mask would cut. Look straight ahead and find
+the outermost ring you can still see all the way round in each eye; that
+ring's r² is the `PSVR2_VISIBILITY_MASK_R2` to try in headset checks 2 and 3
+(magenta is past r² 1.0, black is never shown). The script runs a private
+copy of the service job from the `claude/quad-gaze-inset` build and the
+`psvr2-openxr-test --lens-images` mode, and needs Homebrew Python 3.15 with
+numpy and Pillow. Without the headset it draws typical calibration and says
+so on the image; a simulator dry run showed both images in the session.
 
 Measured on the PS VR2 on 10 November, headset connected but not worn (so
 it rested looking at one view), 2× MSAA, 100% scale, graphics compositor, one
@@ -473,7 +491,7 @@ would likely wobble. Not worth a headset check.
   portability check aborted 77 of 98 tests), runs the full macOS suite again,
   moves macOS CI to `macos-15` and is `cargo fmt` clean.
 - The Monado client and service compare `git describe` versions. The private
-  builds now report `v25.1.0-2503-gd4201368d`, which no longer matches the
+  builds now report `v25.1.0-2504-ga7c14f05c`, which no longer matches the
   installed LaunchAgent service: always run the modified client with the
   modified service (`MWXR_EXD_SERVICE_BIN` and `MWXR_EXD_RUNTIME_JSON`), and
   rebuild both after any new commit.
@@ -521,6 +539,7 @@ MWXR_EXD_BUILD=quad-gate MWXR_EXD_SERVICE_ENV="XRT_COMPOSITOR_COMPUTE=1" \
 MWXR_EXD_BUILD=quad-gate MWXR_QUAD_VIEWS=0 MWXR_EXD_SERVICE_ENV="PSVR2_LOG=info PSVR2_VISIBILITY_MASK_R2=0.8" \
   MWXR_EXD_SERVICE_BIN=$B/monado-quad-gaze-arm64/src/xrt/targets/service/monado-service \
   MWXR_EXD_RUNTIME_JSON=$B/monado-quad-gaze-x86_64/openxr_monado-dev.json scripts/run-exd-headset-compare.zsh msaa2 90
+scripts/run-psvr2-lens-rings.zsh                   # lens rings: pick PSVR2_VISIBILITY_MASK_R2
 scripts/run-exd-headset-checks.zsh                 # guided checks with the headset on
 python3 tools/analyze_dxmt_tbdr_audit.py RUN/game/game.log --min-frame 0 --max-frame 100000 --frames-csv frames.csv
 ```

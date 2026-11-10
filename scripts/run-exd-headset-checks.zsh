@@ -5,6 +5,8 @@
 #   1 corners   Monado's default corner mask, for reference
 #   2 mask09    lens mask at r2 0.9 (about 26% hidden)
 #   3 mask08    lens mask at r2 0.8 (about 44% hidden)
+#               (scripts/run-psvr2-lens-rings.zsh first shows labelled rings for every r2,
+#               to read off where this headset's lens edge is)
 #   4 quad      quad views on the graphics compositor, fixed inset
 #   5 gaze      quad views with the inset following your eyes
 #   6 scale50   50% view scale, the compositor's usual bilinear filter
