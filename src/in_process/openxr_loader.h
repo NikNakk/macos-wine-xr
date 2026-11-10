@@ -53,6 +53,7 @@ typedef struct { XrInstance host_instance; void *required_metal_device; uint32_t
     uint32_t refresh_rate_enabled; // XR_FB_display_refresh_rate, passed through natively
     uint32_t quad_views_enabled; // XR_VARJO_quad_views, passed through natively
     uint32_t visibility_mask_enabled; // XR_KHR_visibility_mask, passed through natively
+    uint32_t depth_layers_enabled; // XR_KHR_composition_layer_depth, passed through natively
 } wine_XrInstance;
 typedef struct { XrSession host_session; wine_XrInstance *instance; void *metal_device;
     void *metal_queue; void *metal_event; uint64_t fence_value; void *graphics;

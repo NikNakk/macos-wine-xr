@@ -25,7 +25,7 @@ g.NOT_OUR_FUNCTIONS = g.NOT_OUR_FUNCTIONS + ["xrCreateApiLayerInstance"]
 # points are hidden from Windows GIPA.
 g.XrRegistry._is_extension_supported = lambda self, name: name in {
     'XR_KHR_D3D11_enable', 'XR_KHR_metal_enable', 'XR_KHR_win32_convert_performance_counter_time',
-    'XR_FB_display_refresh_rate', 'XR_KHR_visibility_mask'}
+    'XR_FB_display_refresh_rate', 'XR_KHR_visibility_mask', 'XR_KHR_composition_layer_depth'}
 g.MANUAL_UNIX_THUNKS = {'xrCreateInstance', 'xrEnumerateInstanceExtensionProperties', 'xrEnumerateApiLayerProperties',
                         'xrCreateSession', 'xrCreateSwapchain', 'xrDestroyInstance', 'xrDestroySession',
     'xrGetD3D11GraphicsRequirementsKHR', 'xrEnumerateSwapchainFormats', 'xrReleaseSwapchainImage',

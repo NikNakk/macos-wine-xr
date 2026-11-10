@@ -15,8 +15,10 @@
 #undef LoadResource
 #include <stdio.h>
 static wine_XrSession *active_session;
-static const int64_t dxgi_formats[] = {28, 29, 87, 91, 10};
-static const int64_t metal_formats[] = {70, 71, 80, 81, 112};
+// Colour: RGBA8, RGBA8 sRGB, BGRA8, BGRA8 sRGB, RGBA16F. Depth (XR_KHR_composition_layer_depth):
+// D32_FLOAT, D32_FLOAT_S8X24_UINT and D16_UNORM as Depth32Float, Depth32Float_Stencil8, Depth16Unorm.
+static const int64_t dxgi_formats[] = {28, 29, 87, 91, 10, 40, 20, 55};
+static const int64_t metal_formats[] = {70, 71, 80, 81, 112, 252, 260, 250};
 static int64_t map_format(int64_t format, int to_metal)
 {
     for (unsigned i = 0; i < ARRAY_SIZE(dxgi_formats); ++i)
@@ -107,9 +109,10 @@ XrResult wine_xrCreateSwapchain(XrSession session, const XrSwapchainCreateInfo *
     if (!native.format) return XR_ERROR_SWAPCHAIN_FORMAT_UNSUPPORTED;
     if (info->next || info->faceCount != 1 || info->sampleCount != 1 || info->mipCount != 1 || !info->arraySize ||
         (info->usageFlags & ~(XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
+                             XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                              XR_SWAPCHAIN_USAGE_TRANSFER_SRC_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT |
                              XR_SWAPCHAIN_USAGE_MUTABLE_FORMAT_BIT))) {
-        fprintf(stderr, "wineopenxr: unsupported color swapchain next=%p faces=%u samples=%u mips=%u array=%u usage=0x%llx\n",
+        fprintf(stderr, "wineopenxr: unsupported swapchain next=%p faces=%u samples=%u mips=%u array=%u usage=0x%llx\n",
                 info->next, info->faceCount, info->sampleCount, info->mipCount, info->arraySize,
                 (unsigned long long)info->usageFlags);
         return XR_ERROR_FEATURE_UNSUPPORTED;

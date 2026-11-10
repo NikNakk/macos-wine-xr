@@ -290,6 +290,38 @@ The gaze inset moves only when the game calls `xrLocateViews`, so at ~30 fps
 it lags a saccade by roughly 70–100 ms. The inset needs a margin around the
 fovea for that.
 
+## Depth reprojection
+
+From the [VeRantyx review](#where-the-work-is): their frame predictor moves each
+pixel by the game's depth and motion. The depth half has a standard OpenXR
+route, `XR_KHR_composition_layer_depth`, which EXD supports. With depth, the
+compositor can correct for head translation (leaning, stepping), not just
+rotation, between the game's frames.
+
+What it took:
+
+- **Monado** (`0e9c82206`): depth reprojection existed only in the compute
+  compositor. The graphics compositor now does the same per pixel (one
+  nearest depth sample at the rotationally timewarped UV, then the ray from
+  the new eye position), opt-in with `XRT_COMPOSITOR_DEPTH_REPROJECTION=1`.
+  The extension stays off by default on macOS: configure with
+  `-DXRT_FEATURE_OPENXR_LAYER_DEPTH=ON` (the private builds are).
+- **Bridge** (branch `claude/depth-layers`): offers the extension
+  (`MWXR_DEPTH_LAYERS=0` hides it), maps D32/D32S8/D16 depth swapchains to
+  Metal, imports them as typeless DirectX 11 depth textures, and passes each
+  view's depth info through.
+- **DXMT**: `patches/dxmt-experiments/import-depth-swapchain.patch` lets
+  single-sample depth textures be imported. Tested in
+  `build-in-process/exd-depth`, an APFS clone of the private EXD copy with
+  the patched `d3d11.dll`.
+
+On the simulated headset EXD asks for the extension, creates a depth
+swapchain matching its colour one, and submits depth for every view.
+Reprojection cost 0.30 → 0.42 ms per composite; the game's GPU time was
+unchanged. The simulated headset does not move, so the visible effect, and
+the disocclusion artefacts the fork switched it off over, need headset
+checks 8 and 9.
+
 ## Sharper compositor filter for lower view scales
 
 A lower view scale is the biggest lever measured (50% runs at about 3.5× the
@@ -403,7 +435,7 @@ would likely wobble. Not worth a headset check.
   `tools/analyze_dxmt_tbdr_audit.py`, the prepared `build-in-process/exd-ngx`
   copy), so run them from the main checkout.
 - The Monado client and service compare `git describe` versions. The private
-  builds now report `v25.1.0-2495-g632985ad8`, which no longer matches the
+  builds now report `v25.1.0-2496-g0e9c82206`, which no longer matches the
   installed LaunchAgent service: always run the modified client with the
   modified service (`MWXR_EXD_SERVICE_BIN` and `MWXR_EXD_RUNTIME_JSON`), and
   rebuild both after any new commit.

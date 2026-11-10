@@ -137,6 +137,15 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
         desc.Width = wrapper->info.width; desc.Height = wrapper->info.height; desc.ArraySize = wrapper->info.arraySize;
         desc.MipLevels = 1; desc.SampleDesc.Count = 1; desc.Format = (DXGI_FORMAT)wrapper->info.format;
         desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        // Depth swapchains: typeless, so the application can make both depth and shader views.
+        switch (desc.Format) {
+        case DXGI_FORMAT_D32_FLOAT: desc.Format = DXGI_FORMAT_R32_TYPELESS; break;
+        case DXGI_FORMAT_D32_FLOAT_S8X24_UINT: desc.Format = DXGI_FORMAT_R32G8X24_TYPELESS; break;
+        case DXGI_FORMAT_D16_UNORM: desc.Format = DXGI_FORMAT_R16_TYPELESS; break;
+        default: break;
+        }
+        if (desc.Format != (DXGI_FORMAT)wrapper->info.format)
+            desc.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
         GraphicsInterop *interop = session->interop;
         uint32_t zero_copy = 0, iosurface = 0;
         if (XR_SUCCEEDED(result)) for (uint32_t i = 0; i < state->count; ++i) {
@@ -290,6 +299,7 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
     if (!info || info->next || info->layerCount > 1) return XR_ERROR_LAYER_INVALID;
     XrFrameEndInfo native = *info;
     XrCompositionLayerProjection projection; XrCompositionLayerProjectionView views[4];
+    XrCompositionLayerDepthInfoKHR depths[4];
     const XrCompositionLayerBaseHeader *layer = nullptr;
     if (info->layerCount) {
         if (!info->layers || !info->layers[0] || info->layers[0]->type != XR_TYPE_COMPOSITION_LAYER_PROJECTION)
@@ -306,10 +316,28 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
             logged_view_count = projection.viewCount;
             fprintf(stderr, "wineopenxr: projection layer with %u views\n", projection.viewCount);
         }
+        unsigned depth_views = 0;
         for (unsigned i = 0; i < projection.viewCount; ++i) {
             views[i] = projection.views[i];
-            if (views[i].next || !views[i].subImage.swapchain) return XR_ERROR_LAYER_INVALID;
+            if (!views[i].subImage.swapchain) return XR_ERROR_LAYER_INVALID;
             views[i].subImage.swapchain = wine_swapchain_from_handle(views[i].subImage.swapchain)->host_swapchain;
+            // The one chained struct passed on per view: XR_KHR_composition_layer_depth's depth info.
+            const auto *depth = (const XrCompositionLayerDepthInfoKHR *)views[i].next;
+            if (depth) {
+                if (depth->type != XR_TYPE_COMPOSITION_LAYER_DEPTH_INFO_KHR || depth->next ||
+                    !depth->subImage.swapchain || !wine_session_from_handle(session)->instance->depth_layers_enabled)
+                    return XR_ERROR_LAYER_INVALID;
+                depths[i] = *depth;
+                depths[i].subImage.swapchain = wine_swapchain_from_handle(depth->subImage.swapchain)->host_swapchain;
+                views[i].next = &depths[i];
+                ++depth_views;
+            }
+        }
+        static unsigned logged_depth_views = ~0u;
+        if (depth_views != logged_depth_views) {
+            logged_depth_views = depth_views;
+            fprintf(stderr, "wineopenxr: projection layer with depth on %u of %u views\n", depth_views,
+                    projection.viewCount);
         }
         projection.views = views; layer = (const XrCompositionLayerBaseHeader *)&projection;
         native.layers = &layer;
