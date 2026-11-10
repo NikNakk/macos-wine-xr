@@ -167,9 +167,20 @@ XrResult wine_xrEnumerateViewConfigurationViews(XrInstance instance, XrSystemId 
         views[i].recommendedImageRectHeight = scaled_size(views[i].recommendedImageRectHeight,
                                                           views[i].maxImageRectHeight, variable);
     }
-    for (uint32_t i = 0; i < *count; ++i)
+    // Unreal asks every frame; log only when the answer changes.
+    static XrViewConfigurationType logged_type;
+    static uint32_t logged_size[4][2];
+    for (uint32_t i = 0; i < *count; ++i) {
+        uint32_t *last = logged_size[i < 4 ? i : 3];
+        if (type == logged_type && last[0] == views[i].recommendedImageRectWidth &&
+            last[1] == views[i].recommendedImageRectHeight)
+            continue;
+        last[0] = views[i].recommendedImageRectWidth;
+        last[1] = views[i].recommendedImageRectHeight;
         fprintf(stderr, "wineopenxr: view configuration %d view %u recommended %ux%u\n", (int)type, i,
                 views[i].recommendedImageRectWidth, views[i].recommendedImageRectHeight);
+    }
+    logged_type = type;
     return result;
 }
 
