@@ -15,7 +15,8 @@
 set -euo pipefail
 unsetopt BG_NICE
 repo=${0:A:h:h}
-root=${repo}/build-in-process/exd-ngx
+# MWXR_EXD_EXPERIMENT_ROOT: another prepared copy (as scripts/run-exd-scene-trace.zsh).
+root=${MWXR_EXD_EXPERIMENT_ROOT:-${repo}/build-in-process/exd-ngx}
 config=${1:?config: msaa2, msaa0, msaa4, dlss, dlss-msaa0 or dlss-nofix}
 seconds=${2:-90}
 saves=${root}/prefix/drive_c/users/crossover/AppData/Local/EXD/Saved/SaveGames
