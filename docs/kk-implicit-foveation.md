@@ -541,7 +541,16 @@ frame is synchronised.
   compaction off (`KK_IMPLICIT_COMPACT=0`) until it is understood.
 - **No gaze.** The bridge reported gaze `valid=0` throughout and 3,145
   `XR_ERROR_HANDLE_INVALID` from `xrUpdateSwapchainFB` with the foveation profile, so B
-  used the fixed centre, not eye tracking.
+  used the fixed centre, not eye tracking. Cause:
+  - NMS (through xrizer) destroys its first session and creates a second, and the
+    wrapper can be allocated at the same address.
+  - The bridge kept its gaze state, including the eye-tracked foveation profile, keyed
+    by that pointer, so it went on naming the first session's profile, which the runtime
+    had destroyed with that session.
+  
+  Fixed in `graphics_native.m`: the gaze state is dropped (and its profile destroyed)
+  when its session is, and is also keyed by the runtime session handle. Not yet
+  verified in the headset.
 - **Controller prompts.** NMS's action manifest has PS VR2 Sense bindings, which
   xrizer ignores ("unknown profile playstation_vr2_sense"). It presents Oculus Touch
   instead, and the game's prompts show warning triangles.
