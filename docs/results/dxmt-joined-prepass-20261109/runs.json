@@ -1,0 +1,38 @@
+{
+  "base": "4c3a2f5ea661bd258c14cf8ccb6924791cc75a77",
+  "patches": [
+    "0001-immediate-context-metal-rate-map.patch",
+    "0002-target-specific-metal-rate-map.patch",
+    "0003-ngx-feature-routing-and-trace.patch",
+    "0004-scene-resource-provenance-trace.patch",
+    "0005-ngx-subrect-copy-and-validation.patch",
+    "0006-rate-map-position-translation.patch",
+    "0007-bounded-automatic-base-foveation.patch",
+    "0008-explicit-depth-msaa-diagnostic.patch",
+    "0009-passive-tbdr-audit.patch",
+    "0010-depth-resolve-shader-diagnostics.patch",
+    "0011-explicit-depth-only-rate-map-diagnostic.patch"
+  ],
+  "private_run": "build-in-process/joined-prepass-final",
+  "metal_validation": true,
+  "primary_audit": false,
+  "audit_verification_mapped_passes": 156,
+  "cases": 16,
+  "rounds": 65,
+  "warmup_rounds": 24,
+  "measured_rounds": 41,
+  "rates": [
+    1,
+    0.5,
+    0.75
+  ],
+  "samples": [
+    2,
+    4
+  ],
+  "logical_size": [
+    1024,
+    1024
+  ],
+  "scope": "One joined GPU interval per sequence; restricted synthetic mono D3D11 fixture, not EXD."
+}

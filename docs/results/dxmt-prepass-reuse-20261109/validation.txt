@@ -1,0 +1,10 @@
+Final six-case prepass gate: 2x/4x MSAA, logical 1024x1024, rates 1/0.5/0.75, Metal validation on.
+All ordinary/mapped prepass references pass; every full-rate seed is exact; original and hidden depth remain unchanged.
+144 actually mapped D3D render passes per case, including explicit depth-only passes.
+Every reduced-rate nearest/min/max copy has incorrect shading samples; these are counterexamples, not compatibility passes.
+Three prepass analyser regression tests pass.
+Automatic foveation suite: all ten cases pass.
+Existing depth/MSAA suite: 512/1024 at 2x/4x plus disabled-import negative control pass.
+Existing resolve-first suite: all 16 cases pass.
+DXMT private build succeeds; patches 0001-0011 reproduce all 307 source files from pinned base.
+No EXD/Steam launch, installed-runtime changes, gaze/HMD validation or whole-path speedup claimed.

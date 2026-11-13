@@ -1,0 +1,198 @@
+[
+  {
+    "case": "ordinary",
+    "enabled": 0,
+    "counters": {
+      "read_mask_draws": 0,
+      "read_mask_kept": 0,
+      "read_mask_pruned": 0,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 4,
+      "render_after": 4,
+      "mapped_render": 0
+    }
+  },
+  {
+    "case": "mapped",
+    "enabled": 0,
+    "counters": {
+      "read_mask_draws": 0,
+      "read_mask_kept": 0,
+      "read_mask_pruned": 0,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 4,
+      "render_after": 4,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "late",
+    "enabled": 0,
+    "counters": {
+      "read_mask_draws": 0,
+      "read_mask_kept": 0,
+      "read_mask_pruned": 0,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 5,
+      "render_after": 5,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "reverse",
+    "enabled": 0,
+    "counters": {
+      "read_mask_draws": 0,
+      "read_mask_kept": 0,
+      "read_mask_pruned": 0,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 5,
+      "render_after": 5,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "mixed",
+    "enabled": 0,
+    "counters": {
+      "read_mask_draws": 0,
+      "read_mask_kept": 0,
+      "read_mask_pruned": 0,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 5,
+      "render_after": 5,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "swap",
+    "enabled": 0,
+    "counters": {
+      "read_mask_draws": 0,
+      "read_mask_kept": 0,
+      "read_mask_pruned": 0,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 5,
+      "render_after": 5,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "merge",
+    "enabled": 0,
+    "counters": {
+      "read_mask_draws": 0,
+      "read_mask_kept": 0,
+      "read_mask_pruned": 0,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 6,
+      "render_after": 5,
+      "mapped_render": 0
+    }
+  },
+  {
+    "case": "ordinary",
+    "enabled": 1,
+    "counters": {
+      "read_mask_draws": 4,
+      "read_mask_kept": 0,
+      "read_mask_pruned": 3,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 4,
+      "render_after": 4,
+      "mapped_render": 0
+    }
+  },
+  {
+    "case": "mapped",
+    "enabled": 1,
+    "counters": {
+      "read_mask_draws": 4,
+      "read_mask_kept": 3,
+      "read_mask_pruned": 0,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 4,
+      "render_after": 4,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "late",
+    "enabled": 1,
+    "counters": {
+      "read_mask_draws": 6,
+      "read_mask_kept": 3,
+      "read_mask_pruned": 1,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 5,
+      "render_after": 5,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "reverse",
+    "enabled": 1,
+    "counters": {
+      "read_mask_draws": 6,
+      "read_mask_kept": 3,
+      "read_mask_pruned": 1,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 5,
+      "render_after": 5,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "mixed",
+    "enabled": 1,
+    "counters": {
+      "read_mask_draws": 5,
+      "read_mask_kept": 3,
+      "read_mask_pruned": 1,
+      "read_mask_mixed": 1,
+      "read_mask_fallback": 0,
+      "render_before": 5,
+      "render_after": 5,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "swap",
+    "enabled": 1,
+    "counters": {
+      "read_mask_draws": 6,
+      "read_mask_kept": 4,
+      "read_mask_pruned": 2,
+      "read_mask_mixed": 2,
+      "read_mask_fallback": 0,
+      "render_before": 5,
+      "render_after": 5,
+      "mapped_render": 2
+    }
+  },
+  {
+    "case": "merge",
+    "enabled": 1,
+    "counters": {
+      "read_mask_draws": 6,
+      "read_mask_kept": 0,
+      "read_mask_pruned": 4,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "render_before": 6,
+      "render_after": 5,
+      "mapped_render": 0
+    }
+  }
+]

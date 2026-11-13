@@ -1,0 +1,82 @@
+[
+  {
+    "case": "baseline",
+    "gpu_ms": 3.651875,
+    "cpu_record_ms": 0.0057,
+    "mapped_passes": 0,
+    "unwarps": 0,
+    "wrong": 0
+  },
+  {
+    "case": "enabled",
+    "gpu_ms": 0.998667,
+    "cpu_record_ms": 0.0052,
+    "mapped_passes": 24,
+    "unwarps": 24,
+    "wrong": 0
+  },
+  {
+    "case": "two-draws",
+    "gpu_ms": 3.657792,
+    "cpu_record_ms": 0.0051,
+    "mapped_passes": 0,
+    "unwarps": 0,
+    "wrong": 0
+  },
+  {
+    "case": "no-uav",
+    "gpu_ms": 3.651375,
+    "cpu_record_ms": 0.0055,
+    "mapped_passes": 0,
+    "unwarps": 0,
+    "wrong": 0
+  },
+  {
+    "case": "depth",
+    "gpu_ms": 3.651208,
+    "cpu_record_ms": 0.0049,
+    "mapped_passes": 0,
+    "unwarps": 0,
+    "wrong": 0
+  },
+  {
+    "case": "msaa",
+    "gpu_ms": 3.656042,
+    "cpu_record_ms": 0.0049,
+    "mapped_passes": 0,
+    "unwarps": 0,
+    "wrong": 0
+  },
+  {
+    "case": "no-clear",
+    "gpu_ms": 3.651583,
+    "cpu_record_ms": 0.0053,
+    "mapped_passes": 0,
+    "unwarps": 0,
+    "wrong": 0
+  },
+  {
+    "case": "unselected",
+    "gpu_ms": 3.65125,
+    "cpu_record_ms": 0.0059,
+    "mapped_passes": 0,
+    "unwarps": 0,
+    "wrong": 0
+  },
+  {
+    "case": "position-disabled",
+    "gpu_ms": 3.579709,
+    "cpu_record_ms": 0.0027,
+    "mapped_passes": 0,
+    "unwarps": 0,
+    "wrong": 0
+  },
+  {
+    "case": "default",
+    "gpu_ms": 3.581042,
+    "cpu_record_ms": 0.0031,
+    "mapped_passes": 0,
+    "unwarps": 0,
+    "wrong": 0
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "patch_reverse_check": true,
+  "matched_prefix_warp_read_suite": "PASS: mapped and identity controls; untranslated negative control fails",
+  "matched_prefix_audit_suite": "PASS: 8192 exact pixels each with audit off/on, Metal validation enabled",
+  "settings_restored": true,
+  "binary_hashes_unchanged_after_fixtures": true
+}

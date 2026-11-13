@@ -1,0 +1,924 @@
+{
+  "selector": {
+    "width": 1792,
+    "height": 1008,
+    "color_format": 92,
+    "samples": 2
+  },
+  "frames": [
+    {
+      "frame": 1200,
+      "main_encoder": 141140,
+      "prepass_encoder": 141099,
+      "main_label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=27 d0 i27 x0 g0 t0 m0 kv=309 inst<=10",
+      "prepass_label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=25 d0 i25 x0 g0 t0 m0 kv=309 inst<=12",
+      "color_attachment": {
+        "seq": "7371",
+        "frame": 1200,
+        "encoder": 141140,
+        "role": "color",
+        "resource": "0000000047f81f50",
+        "allocation": "0000000047f004e0",
+        "native": "7f9e986837d0",
+        "view": "11000010000000",
+        "width": "1792",
+        "height": "1008",
+        "layers": "1",
+        "samples": "2",
+        "format": "92",
+        "usage": "5",
+        "private": "1",
+        "managed": "0",
+        "load": "2",
+        "store": "1",
+        "resolve": "0",
+        "footprint": "14450688"
+      },
+      "depth_attachment": {
+        "seq": "7371",
+        "frame": 1200,
+        "encoder": 141140,
+        "role": "depth_stencil",
+        "resource": "00000000344603d0",
+        "allocation": "0000000018d92b00",
+        "native": "7f9eb8904080",
+        "view": "11000010000000",
+        "width": "1792",
+        "height": "1008",
+        "layers": "1",
+        "samples": "2",
+        "format": "260",
+        "usage": "21",
+        "private": "1",
+        "managed": "0",
+        "load": "1",
+        "store": "1",
+        "resolve": "0",
+        "footprint": "28901376"
+      },
+      "prepass_draws": 25,
+      "prepass_ps_null": 18,
+      "prepass_ps_coverage": 7,
+      "main_draws": 27,
+      "main_ps_coverage": 7,
+      "prepass_shaders": [
+        {
+          "vs": "5028d064c66ca16224077702dd0c2c62ef7921bf",
+          "ps": "none",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 18
+        },
+        {
+          "vs": "388cabdabf2efff444a8e578ee25916ccbd4aa2c",
+          "ps": "d5f6366985a5f05388628f9d0b4a81085e224aca",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 4
+        },
+        {
+          "vs": "6d5270217c47f66dcc861b4603bfd2a775132bd1",
+          "ps": "ea917473129a1c16be5c4e581768669784f960d5",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 3
+        }
+      ],
+      "main_shaders": [
+        {
+          "vs": "b651fe998b76488ae675cd2bd48a3ff531a8ebe7",
+          "ps": "c4ac0c6af227d476edc58d976d21fb2e63ad86b8",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 9
+        },
+        {
+          "vs": "890e826fa4f99434fcccdeedc9a02b14b47ee2a8",
+          "ps": "2a51cfd1796b7977bfa1d51e875f4ef0c7587d8b",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 4
+        },
+        {
+          "vs": "abc1ac1c0ec4d5a719612e0392bb4e439235af2b",
+          "ps": "badde16b23a30d67b8342067298766c4805a8bba",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 3
+        },
+        {
+          "vs": "7a6cb0f8300ee50a8da73da0f1b2c8e0d588dd2c",
+          "ps": "ab98905d357c7d44c07b511119040649c72f5607",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 3
+        },
+        {
+          "vs": "b301b87932176ea18e4510c8642130d013e7b5cb",
+          "ps": "d831e3e3880f91a225e72f5f52e50b67d81b98cd",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 2
+        },
+        {
+          "vs": "26110612688f8a4f1ec0ae5ad8ef04ef7e6ae110",
+          "ps": "fdd1bd7bb001925525c71c02337d990f8b67f9ab",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 2
+        },
+        {
+          "vs": "7a6cb0f8300ee50a8da73da0f1b2c8e0d588dd2c",
+          "ps": "a09c240b48e0a40f87a000f7d06402924aaeaf09",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 1
+        },
+        {
+          "vs": "26110612688f8a4f1ec0ae5ad8ef04ef7e6ae110",
+          "ps": "82c3f8c8fb0b7fee3d91489e5788ac42d2e1f5a7",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 1
+        },
+        {
+          "vs": "b301b87932176ea18e4510c8642130d013e7b5cb",
+          "ps": "bba9c5da0c88bd7884291850e789c5e1b4e054d9",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 1
+        },
+        {
+          "vs": "b301b87932176ea18e4510c8642130d013e7b5cb",
+          "ps": "64c90b6a010de6c30311a2a06f286ca9f9108a73",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 1
+        }
+      ],
+      "prepass_states": [
+        {
+          "depth_enable": "1",
+          "depth_write": "1",
+          "depth_func": "7",
+          "stencil_enable": "0",
+          "coverage": "0",
+          "uavs": "0",
+          "so": "0",
+          "dsv_flags": "0",
+          "observations": 18
+        },
+        {
+          "depth_enable": "1",
+          "depth_write": "1",
+          "depth_func": "7",
+          "stencil_enable": "0",
+          "coverage": "1",
+          "uavs": "0",
+          "so": "0",
+          "dsv_flags": "0",
+          "observations": 7
+        }
+      ],
+      "main_stencil_states": [
+        {
+          "stencil_enable": "1",
+          "stencil_read": "255",
+          "stencil_write": "240",
+          "stencil_ref": "128",
+          "front_func": "8",
+          "front_fail": "1",
+          "front_zfail": "1",
+          "front_pass": "3",
+          "back_func": "8",
+          "back_fail": "1",
+          "back_zfail": "1",
+          "back_pass": "3",
+          "dsv_flags": "1",
+          "observations": 21
+        },
+        {
+          "stencil_enable": "1",
+          "stencil_read": "255",
+          "stencil_write": "240",
+          "stencil_ref": "192",
+          "front_func": "8",
+          "front_fail": "1",
+          "front_zfail": "1",
+          "front_pass": "3",
+          "back_func": "8",
+          "back_fail": "1",
+          "back_zfail": "1",
+          "back_pass": "3",
+          "dsv_flags": "1",
+          "observations": 4
+        },
+        {
+          "stencil_enable": "1",
+          "stencil_read": "255",
+          "stencil_write": "240",
+          "stencil_ref": "64",
+          "front_func": "8",
+          "front_fail": "1",
+          "front_zfail": "1",
+          "front_pass": "3",
+          "back_func": "8",
+          "back_fail": "1",
+          "back_zfail": "1",
+          "back_pass": "3",
+          "dsv_flags": "1",
+          "observations": 2
+        }
+      ],
+      "configured_stencil_write_mask": 240,
+      "later_stencil_consumers": [],
+      "unusual_stages_or_effect_bindings": 0
+    },
+    {
+      "frame": 1201,
+      "main_encoder": 141294,
+      "prepass_encoder": 141253,
+      "main_label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=27 d0 i27 x0 g0 t0 m0 kv=309 inst<=10",
+      "prepass_label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=25 d0 i25 x0 g0 t0 m0 kv=309 inst<=12",
+      "color_attachment": {
+        "seq": "7377",
+        "frame": 1201,
+        "encoder": 141294,
+        "role": "color",
+        "resource": "0000000047f81f50",
+        "allocation": "0000000047f004e0",
+        "native": "7f9e986837d0",
+        "view": "11000010000000",
+        "width": "1792",
+        "height": "1008",
+        "layers": "1",
+        "samples": "2",
+        "format": "92",
+        "usage": "5",
+        "private": "1",
+        "managed": "0",
+        "load": "2",
+        "store": "1",
+        "resolve": "0",
+        "footprint": "14450688"
+      },
+      "depth_attachment": {
+        "seq": "7377",
+        "frame": 1201,
+        "encoder": 141294,
+        "role": "depth_stencil",
+        "resource": "00000000344603d0",
+        "allocation": "0000000018d92b00",
+        "native": "7f9eb8904080",
+        "view": "11000010000000",
+        "width": "1792",
+        "height": "1008",
+        "layers": "1",
+        "samples": "2",
+        "format": "260",
+        "usage": "21",
+        "private": "1",
+        "managed": "0",
+        "load": "1",
+        "store": "1",
+        "resolve": "0",
+        "footprint": "28901376"
+      },
+      "prepass_draws": 25,
+      "prepass_ps_null": 18,
+      "prepass_ps_coverage": 7,
+      "main_draws": 27,
+      "main_ps_coverage": 7,
+      "prepass_shaders": [
+        {
+          "vs": "5028d064c66ca16224077702dd0c2c62ef7921bf",
+          "ps": "none",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 18
+        },
+        {
+          "vs": "388cabdabf2efff444a8e578ee25916ccbd4aa2c",
+          "ps": "d5f6366985a5f05388628f9d0b4a81085e224aca",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 4
+        },
+        {
+          "vs": "6d5270217c47f66dcc861b4603bfd2a775132bd1",
+          "ps": "ea917473129a1c16be5c4e581768669784f960d5",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 3
+        }
+      ],
+      "main_shaders": [
+        {
+          "vs": "b651fe998b76488ae675cd2bd48a3ff531a8ebe7",
+          "ps": "c4ac0c6af227d476edc58d976d21fb2e63ad86b8",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 9
+        },
+        {
+          "vs": "890e826fa4f99434fcccdeedc9a02b14b47ee2a8",
+          "ps": "2a51cfd1796b7977bfa1d51e875f4ef0c7587d8b",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 4
+        },
+        {
+          "vs": "abc1ac1c0ec4d5a719612e0392bb4e439235af2b",
+          "ps": "badde16b23a30d67b8342067298766c4805a8bba",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 3
+        },
+        {
+          "vs": "7a6cb0f8300ee50a8da73da0f1b2c8e0d588dd2c",
+          "ps": "ab98905d357c7d44c07b511119040649c72f5607",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 3
+        },
+        {
+          "vs": "b301b87932176ea18e4510c8642130d013e7b5cb",
+          "ps": "d831e3e3880f91a225e72f5f52e50b67d81b98cd",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 2
+        },
+        {
+          "vs": "26110612688f8a4f1ec0ae5ad8ef04ef7e6ae110",
+          "ps": "fdd1bd7bb001925525c71c02337d990f8b67f9ab",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 2
+        },
+        {
+          "vs": "7a6cb0f8300ee50a8da73da0f1b2c8e0d588dd2c",
+          "ps": "a09c240b48e0a40f87a000f7d06402924aaeaf09",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 1
+        },
+        {
+          "vs": "26110612688f8a4f1ec0ae5ad8ef04ef7e6ae110",
+          "ps": "82c3f8c8fb0b7fee3d91489e5788ac42d2e1f5a7",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 1
+        },
+        {
+          "vs": "b301b87932176ea18e4510c8642130d013e7b5cb",
+          "ps": "bba9c5da0c88bd7884291850e789c5e1b4e054d9",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 1
+        },
+        {
+          "vs": "b301b87932176ea18e4510c8642130d013e7b5cb",
+          "ps": "64c90b6a010de6c30311a2a06f286ca9f9108a73",
+          "gs": "none",
+          "hs": "none",
+          "ds": "none",
+          "observations": 1
+        }
+      ],
+      "prepass_states": [
+        {
+          "depth_enable": "1",
+          "depth_write": "1",
+          "depth_func": "7",
+          "stencil_enable": "0",
+          "coverage": "0",
+          "uavs": "0",
+          "so": "0",
+          "dsv_flags": "0",
+          "observations": 18
+        },
+        {
+          "depth_enable": "1",
+          "depth_write": "1",
+          "depth_func": "7",
+          "stencil_enable": "0",
+          "coverage": "1",
+          "uavs": "0",
+          "so": "0",
+          "dsv_flags": "0",
+          "observations": 7
+        }
+      ],
+      "main_stencil_states": [
+        {
+          "stencil_enable": "1",
+          "stencil_read": "255",
+          "stencil_write": "240",
+          "stencil_ref": "128",
+          "front_func": "8",
+          "front_fail": "1",
+          "front_zfail": "1",
+          "front_pass": "3",
+          "back_func": "8",
+          "back_fail": "1",
+          "back_zfail": "1",
+          "back_pass": "3",
+          "dsv_flags": "1",
+          "observations": 21
+        },
+        {
+          "stencil_enable": "1",
+          "stencil_read": "255",
+          "stencil_write": "240",
+          "stencil_ref": "192",
+          "front_func": "8",
+          "front_fail": "1",
+          "front_zfail": "1",
+          "front_pass": "3",
+          "back_func": "8",
+          "back_fail": "1",
+          "back_zfail": "1",
+          "back_pass": "3",
+          "dsv_flags": "1",
+          "observations": 4
+        },
+        {
+          "stencil_enable": "1",
+          "stencil_read": "255",
+          "stencil_write": "240",
+          "stencil_ref": "64",
+          "front_func": "8",
+          "front_fail": "1",
+          "front_zfail": "1",
+          "front_pass": "3",
+          "back_func": "8",
+          "back_fail": "1",
+          "back_zfail": "1",
+          "back_pass": "3",
+          "dsv_flags": "1",
+          "observations": 2
+        }
+      ],
+      "configured_stencil_write_mask": 240,
+      "later_stencil_consumers": [
+        {
+          "encoder": 141302,
+          "label": "R 1792x1008x0 s2 c0=92:L/S d=260:L/S st=L/S draws=12 d0 i12 x0 g0 t0 m0 kv=0 inst<=1",
+          "draws": 3,
+          "states": [
+            {
+              "stencil_read": "129",
+              "stencil_ref": "129",
+              "front_func": "3",
+              "back_func": "3",
+              "dsv_flags": "1",
+              "observations": 3
+            }
+          ]
+        }
+      ],
+      "unusual_stages_or_effect_bindings": 0
+    }
+  ],
+  "shader_facts": {
+    "26110612688f8a4f1ec0ae5ad8ef04ef7e6ae110": {
+      "profile": "vs_5_0",
+      "instruction_count": 281,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_indexable(buffer)": 4,
+        "ld_structured_indexable(structured_buffer,": 8,
+        "sample_l_indexable(texturecube)": 2,
+        "sample_l_indexable(texture3d)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "2a51cfd1796b7977bfa1d51e875f4ef0c7587d8b": {
+      "profile": "ps_5_0",
+      "instruction_count": 1008,
+      "discard_instructions": 2,
+      "depth_output": false,
+      "coverage_output": true,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 12,
+        "sample_b_indexable(texture2d)": 6,
+        "sample_indexable(texture2d)": 11,
+        "sample_l_indexable(texture2d)": 3,
+        "ld_indexable(texture2d)": 7,
+        "ld_indexable(buffer)(uint,uint,uint,uint)": 6,
+        "ld_indexable(buffer)": 10,
+        "sample_l_indexable(texturecubearray)": 1,
+        "sample_l_indexable(texture3d)": 2
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "388cabdabf2efff444a8e578ee25916ccbd4aa2c": {
+      "profile": "vs_5_0",
+      "instruction_count": 82,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 4,
+        "ld_indexable(buffer)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "5028d064c66ca16224077702dd0c2c62ef7921bf": {
+      "profile": "vs_5_0",
+      "instruction_count": 76,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 4
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "64c90b6a010de6c30311a2a06f286ca9f9108a73": {
+      "profile": "ps_5_0",
+      "instruction_count": 197,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "sample_indexable(texture2d)": 2,
+        "sample_b_indexable(texture2d)": 2,
+        "sample_l_indexable(texture3d)": 2,
+        "ld_structured_indexable(structured_buffer,": 2
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "6d5270217c47f66dcc861b4603bfd2a775132bd1": {
+      "profile": "vs_5_0",
+      "instruction_count": 125,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 10,
+        "ld_indexable(buffer)": 2
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "7a6cb0f8300ee50a8da73da0f1b2c8e0d588dd2c": {
+      "profile": "vs_5_0",
+      "instruction_count": 277,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_indexable(buffer)": 3,
+        "ld_structured_indexable(structured_buffer,": 8,
+        "sample_l_indexable(texturecube)": 2,
+        "sample_l_indexable(texture3d)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "82c3f8c8fb0b7fee3d91489e5788ac42d2e1f5a7": {
+      "profile": "ps_5_0",
+      "instruction_count": 969,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 11,
+        "sample_b_indexable(texture2d)": 6,
+        "sample_l_indexable(texture2d)": 3,
+        "sample_indexable(texture2d)": 3,
+        "ld_indexable(texture2d)": 7,
+        "ld_indexable(buffer)(uint,uint,uint,uint)": 12,
+        "ld_indexable(buffer)": 10,
+        "sample_l_indexable(texturecubearray)": 1,
+        "sample_l_indexable(texture3d)": 2
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "890e826fa4f99434fcccdeedc9a02b14b47ee2a8": {
+      "profile": "vs_5_0",
+      "instruction_count": 283,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_indexable(buffer)": 4,
+        "ld_structured_indexable(structured_buffer,": 8,
+        "sample_l_indexable(texturecube)": 2,
+        "sample_l_indexable(texture3d)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "a09c240b48e0a40f87a000f7d06402924aaeaf09": {
+      "profile": "ps_5_0",
+      "instruction_count": 547,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 10,
+        "sample_l_indexable(texture2d)": 3,
+        "sample_indexable(texture2d)": 3,
+        "ld_indexable(texture2d)": 7,
+        "ld_indexable(buffer)(uint,uint,uint,uint)": 6,
+        "ld_indexable(buffer)": 10,
+        "sample_l_indexable(texture3d)": 2
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "ab98905d357c7d44c07b511119040649c72f5607": {
+      "profile": "ps_5_0",
+      "instruction_count": 814,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 12,
+        "sample_l_indexable(texture2d)": 3,
+        "sample_indexable(texture2d)": 3,
+        "ld_indexable(texture2d)": 7,
+        "ld_indexable(buffer)(uint,uint,uint,uint)": 6,
+        "ld_indexable(buffer)": 10,
+        "sample_l_indexable(texturecubearray)": 1,
+        "sample_l_indexable(texture3d)": 2
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "abc1ac1c0ec4d5a719612e0392bb4e439235af2b": {
+      "profile": "vs_5_0",
+      "instruction_count": 323,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_indexable(buffer)": 5,
+        "ld_structured_indexable(structured_buffer,": 13,
+        "sample_l_indexable(texturecube)": 2,
+        "sample_l_indexable(texture3d)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "b301b87932176ea18e4510c8642130d013e7b5cb": {
+      "profile": "vs_5_0",
+      "instruction_count": 274,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_indexable(buffer)": 3,
+        "ld_structured_indexable(structured_buffer,": 5,
+        "sample_l_indexable(texturecube)": 2,
+        "sample_l_indexable(texture3d)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "b651fe998b76488ae675cd2bd48a3ff531a8ebe7": {
+      "profile": "vs_5_0",
+      "instruction_count": 284,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_indexable(buffer)": 5,
+        "ld_structured_indexable(structured_buffer,": 8,
+        "sample_l_indexable(texturecube)": 2,
+        "sample_l_indexable(texture3d)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "badde16b23a30d67b8342067298766c4805a8bba": {
+      "profile": "ps_5_0",
+      "instruction_count": 862,
+      "discard_instructions": 2,
+      "depth_output": false,
+      "coverage_output": true,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 12,
+        "sample_b_indexable(texture2d)": 3,
+        "sample_l_indexable(texture2d)": 3,
+        "sample_indexable(texture2d)": 3,
+        "ld_indexable(texture2d)": 7,
+        "ld_indexable(buffer)(uint,uint,uint,uint)": 6,
+        "ld_indexable(buffer)": 10,
+        "sample_l_indexable(texturecubearray)": 1,
+        "sample_l_indexable(texture3d)": 2
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "bba9c5da0c88bd7884291850e789c5e1b4e054d9": {
+      "profile": "ps_5_0",
+      "instruction_count": 1014,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 5,
+        "sample_b_indexable(texture2d)": 6,
+        "sample_l_indexable(texture2d)": 3,
+        "ld_indexable(texture3d)(uint,uint,uint,uint)": 1,
+        "sample_l_indexable(texture3d)": 10,
+        "ld_indexable(texture2d)": 7,
+        "ld_indexable(buffer)(uint,uint,uint,uint)": 12,
+        "ld_indexable(buffer)": 10,
+        "sample_l_indexable(texturecubearray)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "c4ac0c6af227d476edc58d976d21fb2e63ad86b8": {
+      "profile": "ps_5_0",
+      "instruction_count": 999,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "ld_structured_indexable(structured_buffer,": 11,
+        "sample_b_indexable(texture2d)": 11,
+        "sample_l_indexable(texture2d)": 3,
+        "sample_indexable(texture2d)": 3,
+        "ld_indexable(texture2d)": 7,
+        "ld_indexable(buffer)(uint,uint,uint,uint)": 12,
+        "ld_indexable(buffer)": 10,
+        "sample_l_indexable(texturecubearray)": 1,
+        "sample_l_indexable(texture3d)": 2
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "d5f6366985a5f05388628f9d0b4a81085e224aca": {
+      "profile": "ps_5_0",
+      "instruction_count": 37,
+      "discard_instructions": 2,
+      "depth_output": false,
+      "coverage_output": true,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "sample_b_indexable(texture2d)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "d831e3e3880f91a225e72f5f52e50b67d81b98cd": {
+      "profile": "ps_5_0",
+      "instruction_count": 998,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "sample_b_indexable(texture2d)": 3,
+        "ld_structured_indexable(structured_buffer,": 4,
+        "sample_l_indexable(texture2d)": 3,
+        "ld_indexable(texture3d)(uint,uint,uint,uint)": 1,
+        "sample_l_indexable(texture3d)": 10,
+        "ld_indexable(texture2d)": 7,
+        "ld_indexable(buffer)(uint,uint,uint,uint)": 12,
+        "ld_indexable(buffer)": 10,
+        "sample_l_indexable(texturecubearray)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "ea917473129a1c16be5c4e581768669784f960d5": {
+      "profile": "ps_5_0",
+      "instruction_count": 35,
+      "discard_instructions": 2,
+      "depth_output": false,
+      "coverage_output": true,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "sample_b_indexable(texture2d)": 1
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    },
+    "fdd1bd7bb001925525c71c02337d990f8b67f9ab": {
+      "profile": "ps_5_0",
+      "instruction_count": 954,
+      "discard_instructions": 0,
+      "depth_output": false,
+      "coverage_output": false,
+      "uav_declared": false,
+      "write_instructions": {},
+      "texture_instructions": {
+        "sample_b_indexable(texture2d)": 3,
+        "ld_structured_indexable(structured_buffer,": 10,
+        "sample_l_indexable(texture2d)": 3,
+        "sample_indexable(texture2d)": 3,
+        "ld_indexable(texture2d)": 7,
+        "ld_indexable(buffer)(uint,uint,uint,uint)": 12,
+        "ld_indexable(buffer)": 10,
+        "sample_l_indexable(texturecubearray)": 1,
+        "sample_l_indexable(texture3d)": 2
+      },
+      "unresolved_replay_conditions": [
+        "Resource/constant versioning, draw/query/stream-output effects and primitive state must also be preserved."
+      ]
+    }
+  },
+  "limitations": [
+    "Two-dimensional scene selector is explicit, not a production pass recogniser.",
+    "PreDraw state is captured, not proof of primitive/resource lifetime replay safety or instruction execution.",
+    "Configured stencil writes may be suppressed by per-sample coverage/depth; later consumers demonstrate the dependency, not its visual purpose.",
+    "No GS/HS/DS/UAV/stream-output binding is not a proof of safe replay.",
+    "Original shader bytecode and assembly are excluded; facts record declarations/opcodes conservatively."
+  ]
+}

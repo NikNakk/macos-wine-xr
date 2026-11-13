@@ -1,0 +1,16 @@
+{
+  "mean_of_run_medians_ms": {
+    "baseline": 16.61654175,
+    "host": 16.949979250000002,
+    "position": 17.395937500000002,
+    "reads": 19.058405999999998,
+    "both": 19.1745415
+  },
+  "position_minus_host_ms": 0.44595825000000033,
+  "reads_minus_host_ms": 2.108426749999996,
+  "both_minus_host_ms": 2.224562249999998,
+  "both_minus_reads_ms": 0.11613550000000217,
+  "host_minus_baseline_ms": 0.3334375000000023,
+  "loaded_frames": 22280,
+  "interpretation": "The read-translation shader component is the dominant reproducible difference. Host-only and position-only increments are not isolated above control drift. Register pressure, occupancy and individual instruction costs are not measured."
+}

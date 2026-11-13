@@ -1,0 +1,14 @@
+1x-hdr.log:
+REPLAY samples=1 hdr=1 above_one_samples=3430 distinct_sample_pixels=0 nominal_bytes=459312 shaded=4766 preserved=11618 sample_comparisons=65536 replay_count=3 input_mutation=1 queued_mutation=1 caller_release=1 seed_reset=1 context_restore=1 restored_draw=1 ordinary_output_unchanged=1 negative_cases=4 PASS
+
+1x-rgba8.log:
+REPLAY samples=1 hdr=0 above_one_samples=0 distinct_sample_pixels=0 nominal_bytes=459312 shaded=4766 preserved=11618 sample_comparisons=65536 replay_count=3 input_mutation=1 queued_mutation=1 caller_release=1 seed_reset=1 context_restore=1 restored_draw=1 ordinary_output_unchanged=1 negative_cases=4 PASS
+
+2x-hdr.log:
+REPLAY samples=2 hdr=1 above_one_samples=6860 distinct_sample_pixels=24 nominal_bytes=852528 shaded=9532 preserved=23236 sample_comparisons=131072 replay_count=3 input_mutation=1 queued_mutation=1 caller_release=1 seed_reset=1 context_restore=1 restored_draw=1 ordinary_output_unchanged=1 negative_cases=4 PASS
+
+2x-rgba8.log:
+REPLAY samples=2 hdr=0 above_one_samples=0 distinct_sample_pixels=24 nominal_bytes=852528 shaded=9532 preserved=23236 sample_comparisons=131072 replay_count=3 input_mutation=1 queued_mutation=1 caller_release=1 seed_reset=1 context_restore=1 restored_draw=1 ordinary_output_unchanged=1 negative_cases=4 PASS
+
+disabled.log:
+REPLAY disabled=1 normal_draw=1 shaded=9532 PASS

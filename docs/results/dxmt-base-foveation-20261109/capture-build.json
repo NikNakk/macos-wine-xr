@@ -1,0 +1,4 @@
+{
+  "d3d11_sha256": "c73ad6df68eb599a68507267210fe127452aa11954601de39b7fa09fbdec8c5b",
+  "note": "Capture predates the final disabled-trace label-formatting guard. Enabled trace output is unchanged."
+}

@@ -1,0 +1,174 @@
+{
+ "host": "Apple M5, macOS 27.0.1, private simulated Monado service, EXD loaded level, upscaler off",
+ "image_check_1792x1008_2xMSAA_present_1400": {
+  "metric": "max channel absolute difference from baseline, 8-bit; centre = full-rate cells of each eye",
+  "second_baseline": {
+   "mean": 0.83,
+   "over16_percent": 0.07
+  },
+  "warped_rate_1.0": {
+   "mean": 0.56,
+   "over16_percent": 0.03,
+   "centre_mean": 0.54,
+   "periphery_mean": 0.56
+  },
+  "warped_rate_0.5": {
+   "mean": 2.32,
+   "over16_percent": 1.77,
+   "centre_mean": 1.27,
+   "centre_over16_percent": 0.72,
+   "periphery_mean": 2.39,
+   "periphery_over16_percent": 1.84
+  },
+  "note": "An earlier rate-0.5 dump differed in an animated light shaft; a repeat did not. Scene time is not aligned between runs."
+ },
+ "passes_frame_1390_rate_0.5": {
+  "scene_sized_mapped": 22,
+  "scene_sized_ordinary_swapchain": 2,
+  "other_sized_mapped": 0,
+  "reads_of_mapped_textures": 167,
+  "reads_untranslated": 0,
+  "compute_reads_translated": 2
+ },
+ "gpu_2560x1440_4xMSAA_loaded_frames": {
+  "metric": "median per-frame union of DXMT command-buffer GPU intervals; frame period from successive frames; simulator caps at 60 Hz",
+  "baseline": {
+   "gpu_ms": 17.01,
+   "p10": 15.48,
+   "p90": 18.12,
+   "frame_period_ms": 17.55,
+   "frames": 3169
+  },
+  "warped_rate_0.5": {
+   "gpu_ms": 12.89,
+   "p10": 12.07,
+   "p90": 14.83,
+   "frame_period_ms": 16.67,
+   "frames": 3176
+  },
+  "warped_rate_0.75": {
+   "gpu_ms": 15.58,
+   "p10": 14.41,
+   "p90": 16.96,
+   "frame_period_ms": 16.9,
+   "frames": 3166
+  },
+  "warped_rate_1.0": {
+   "gpu_ms": 21.98,
+   "p10": 19.93,
+   "p90": 22.75,
+   "frame_period_ms": 22.23,
+   "frames": 3158
+  }
+ },
+ "gpu_at_60Hz_cap_not_gpu_bound": {
+  "1792x1008_2xMSAA_frames_1000-1599": {
+   "baseline_ms": 14.32,
+   "warped_rate_0.5_ms": 11.95
+  },
+  "2560x1440_2xMSAA_frames_600-1399_mixed_scenes": {
+   "baseline_ms": 13.93,
+   "warped_rate_0.5_ms": 12.47,
+   "warped_rate_0.75_ms": 13.11,
+   "warped_rate_1.0_ms": 17.46
+  }
+ },
+ "full_rate_cost_breakdown_2560x1440_4xMSAA": {
+  "metric": "same as gpu_2560x1440_4xMSAA_loaded_frames; rate 1.0; one 90 s run each, about 3,170 loaded frames",
+  "baseline_repeat": {
+   "gpu_ms": 17.06,
+   "frame_period_ms": 17.53
+  },
+  "shader_variants_only_no_map": {
+   "gpu_ms": 16.7,
+   "frame_period_ms": 16.99
+  },
+  "map_only": {
+   "gpu_ms": 19.25,
+   "frame_period_ms": 19.49
+  },
+  "map_and_position_translation": {
+   "gpu_ms": 19.75,
+   "frame_period_ms": 20.0
+  },
+  "map_and_read_translation": {
+   "gpu_ms": 21.57,
+   "frame_period_ms": 21.81
+  },
+  "everything": {
+   "gpu_ms": 22.27,
+   "frame_period_ms": 22.53
+  }
+ },
+ "after_translation_optimisations_2560x1440_4xMSAA": {
+  "metric": "median GPU ms per loaded frame, one 90 s run each; runs listed in order taken",
+  "baseline": [
+   17.01,
+   17.06,
+   16.41
+  ],
+  "rate_1.0_before": [
+   21.98,
+   22.27
+  ],
+  "rate_1.0_after": [
+   17.99,
+   21.23,
+   20.62,
+   20.97,
+   21.19
+  ],
+  "rate_1.0_after_note": "first run is an unexplained outlier; the other four agree",
+  "map_only_no_translation": [
+   19.25,
+   19.29
+  ],
+  "rate_0.5_after": {
+   "gpu_ms": 12.81,
+   "frame_period_ms": 16.7,
+   "note": "at the 60 Hz cap"
+  },
+  "rate_0.75_before_after": {
+   "before_gpu_ms": 15.58,
+   "after_gpu_ms": 14.4,
+   "after_frame_period_ms": 16.69,
+   "note": "after is at the cap"
+  },
+  "image_1792x1008_2xMSAA_rate_1.0_vs_baseline": {
+   "mean": 0.85,
+   "over16_percent": 0.07
+  },
+  "reads_frame_1390": {
+   "mapped": 167,
+   "same_layout_as_pass": 160
+  },
+  "fixture_reduction_percent": {
+   "2x_rate_0.5": [
+    41.6,
+    43.6
+   ],
+   "2x_rate_0.75": [
+    17.1,
+    19.4
+   ],
+   "2x_rate_1.0": [
+    -11.4,
+    -7.4
+   ],
+   "4x_rate_0.5": [
+    41.9,
+    44.8
+   ],
+   "4x_rate_0.75": [
+    16.1,
+    20.4
+   ],
+   "4x_rate_1.0": [
+    -12.7,
+    -6.8
+   ],
+   "order": "before, after"
+  }
+ },
+ "other_scene_attempts": "Map name on the command line was ignored (title scene rendered). GameDefaultMap in the private Engine.ini produced no frames; the file was restored."
+}

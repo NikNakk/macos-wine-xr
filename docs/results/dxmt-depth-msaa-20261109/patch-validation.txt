@@ -1,0 +1,1 @@
+PASS: eight patches applied to pinned base; all 306 src files byte-identical.

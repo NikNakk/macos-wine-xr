@@ -1,0 +1,16 @@
+{
+  "no_maps_in_any_selected_frame": true,
+  "all_five_cases_repeated": true,
+  "no_gpu_errors": true,
+  "nominal_thermal": true,
+  "settings_restored": true,
+  "deployed_hashes_unchanged": true,
+  "no_map_fixture_masks": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "default_mapped_identity_and_negative_control": "PASS",
+  "nonzero_profile_diagnostic_guard": "PASS"
+}

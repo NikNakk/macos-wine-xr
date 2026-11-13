@@ -1,0 +1,162 @@
+[
+ {
+  "samples": 2,
+  "rate": 1.0,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.249375,
+  "stay_warped_gpu_ms": 1.388916,
+  "paired_reduction_percent": -11.46,
+  "final_bad": 0,
+  "mae": 0.0
+ },
+ {
+  "samples": 2,
+  "rate": 1.0,
+  "reverse": 1,
+  "baseline_gpu_ms": 1.249959,
+  "stay_warped_gpu_ms": 1.389625,
+  "paired_reduction_percent": -11.29,
+  "final_bad": 0,
+  "mae": 0.0
+ },
+ {
+  "samples": 2,
+  "rate": 0.5,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.2485,
+  "stay_warped_gpu_ms": 0.728542,
+  "paired_reduction_percent": 41.62,
+  "final_bad": 17983,
+  "mae": 0.005504
+ },
+ {
+  "samples": 2,
+  "rate": 0.5,
+  "reverse": 1,
+  "baseline_gpu_ms": 1.25025,
+  "stay_warped_gpu_ms": 0.73025,
+  "paired_reduction_percent": 41.62,
+  "final_bad": 17983,
+  "mae": 0.005504
+ },
+ {
+  "samples": 2,
+  "rate": 0.5,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.25,
+  "stay_warped_gpu_ms": 0.730125,
+  "paired_reduction_percent": 41.5,
+  "final_bad": 17983,
+  "mae": 0.005504
+ },
+ {
+  "samples": 2,
+  "rate": 0.75,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.249542,
+  "stay_warped_gpu_ms": 1.034125,
+  "paired_reduction_percent": 17.14,
+  "final_bad": 11973,
+  "mae": 0.003623
+ },
+ {
+  "samples": 2,
+  "rate": 0.75,
+  "reverse": 1,
+  "baseline_gpu_ms": 1.25025,
+  "stay_warped_gpu_ms": 1.03375,
+  "paired_reduction_percent": 17.09,
+  "final_bad": 11973,
+  "mae": 0.003623
+ },
+ {
+  "samples": 2,
+  "rate": 0.75,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.25,
+  "stay_warped_gpu_ms": 1.035209,
+  "paired_reduction_percent": 17.1,
+  "final_bad": 11973,
+  "mae": 0.003623
+ },
+ {
+  "samples": 4,
+  "rate": 1.0,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.440458,
+  "stay_warped_gpu_ms": 1.625834,
+  "paired_reduction_percent": -12.58,
+  "final_bad": 0,
+  "mae": 0.0
+ },
+ {
+  "samples": 4,
+  "rate": 1.0,
+  "reverse": 1,
+  "baseline_gpu_ms": 1.4395,
+  "stay_warped_gpu_ms": 1.628542,
+  "paired_reduction_percent": -12.81,
+  "final_bad": 0,
+  "mae": 0.0
+ },
+ {
+  "samples": 4,
+  "rate": 0.5,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.446583,
+  "stay_warped_gpu_ms": 0.839292,
+  "paired_reduction_percent": 41.73,
+  "final_bad": 17849,
+  "mae": 0.005912
+ },
+ {
+  "samples": 4,
+  "rate": 0.5,
+  "reverse": 1,
+  "baseline_gpu_ms": 1.447625,
+  "stay_warped_gpu_ms": 0.837916,
+  "paired_reduction_percent": 41.99,
+  "final_bad": 17849,
+  "mae": 0.005912
+ },
+ {
+  "samples": 4,
+  "rate": 0.5,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.44325,
+  "stay_warped_gpu_ms": 0.838791,
+  "paired_reduction_percent": 41.97,
+  "final_bad": 17849,
+  "mae": 0.005912
+ },
+ {
+  "samples": 4,
+  "rate": 0.75,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.446542,
+  "stay_warped_gpu_ms": 1.209166,
+  "paired_reduction_percent": 16.13,
+  "final_bad": 12061,
+  "mae": 0.002944
+ },
+ {
+  "samples": 4,
+  "rate": 0.75,
+  "reverse": 1,
+  "baseline_gpu_ms": 1.445458,
+  "stay_warped_gpu_ms": 1.208083,
+  "paired_reduction_percent": 16.52,
+  "final_bad": 12061,
+  "mae": 0.002944
+ },
+ {
+  "samples": 4,
+  "rate": 0.75,
+  "reverse": 0,
+  "baseline_gpu_ms": 1.441375,
+  "stay_warped_gpu_ms": 1.209042,
+  "paired_reduction_percent": 15.8,
+  "final_bad": 12061,
+  "mae": 0.002944
+ }
+]

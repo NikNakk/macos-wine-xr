@@ -1,0 +1,22 @@
+{
+  "patches/dxmt/0001-immediate-context-metal-rate-map.patch": "537088ba2c033e7b3988e984fa84c94d3704dfd8d6253929d42a35bfededac26",
+  "patches/dxmt/0002-target-specific-metal-rate-map.patch": "2ed697426e42f207832514b56485931ec15baefec54400b1cfab23951069f217",
+  "patches/dxmt/0003-ngx-feature-routing-and-trace.patch": "245fe8bff3d243677cf8ddaf33f7d52d55cb94b9c0a2f35bddcab93ce0af5dc5",
+  "patches/dxmt/0004-scene-resource-provenance-trace.patch": "19efc86009c806ee0d5be3da901d3ab6ffa617f62d59e82f926e328402ce56d9",
+  "patches/dxmt/0005-ngx-subrect-copy-and-validation.patch": "b3a92c2d3b9dc104b762a5419c42175596b967ee238d8966db9499c55b969c39",
+  "patches/dxmt/0006-rate-map-position-translation.patch": "95ee640adadb1017d3b31ef93dbda4411dd391882bbdddcd0ba5059472df488f",
+  "patches/dxmt/0007-bounded-automatic-base-foveation.patch": "61c64d0718a311c2ff094e6e419ccc2cc76f86fefbc306681453763c3bd8beee",
+  "patches/dxmt/0008-explicit-depth-msaa-diagnostic.patch": "3ac4e6da6d35572a245511a4c287178ba823b5e6ace60d9c61d9b32b58c089cd",
+  "patches/dxmt/0009-passive-tbdr-audit.patch": "c04e2ea4e6b5c09e06c70e1826b7b504ab4cd4d92703c13fc59ebe819acad7cf",
+  "patches/dxmt/0010-depth-resolve-shader-diagnostics.patch": "68cb0a23240c65e6d713c5841a7680654a0357042ff03de17519b5c89d5d898b",
+  "patches/dxmt/0011-explicit-depth-only-rate-map-diagnostic.patch": "0668ea1da3dfbce4df143287bbcfaf332bbfe40bbb396a7c687d5dd2f5d3d1fb",
+  "patches/dxmt/0012-per-draw-depth-stencil-audit.patch": "81a8af2fca188d1b1b6c2217ed59d379ec18a6c96b26778cc1866b22720412fa",
+  "patches/dxmt/0013-explicit-combined-stencil-diagnostic.patch": "ab01814551e2966025088f99b15131ba998ae9ac1a980ab2c543d3dbc362e5a5",
+  "patches/dxmt/0014-bounded-draw-replay-ownership.patch": "ab4b2faf141832d4973b6c6a2e3e7dd2b87204ed4e781340f5a6cae3bcbeed50",
+  "tests/windows/dxmt_replay_probe.cpp": "6d0615ba765b7f9f9a04e34080c689b7db57a908daad0d8432896adea4f82456",
+  "scripts/build-dxmt-replay-probe.zsh": "a33f2028d5d1020fb0b39a3e55731a0f4ca574afd183cd082f035938edc99d57",
+  "scripts/run-dxmt-replay-probe.zsh": "51345669fa3a6bec23c92fad9b93230b0a497e21bcc4c8863417938ff35fa07f",
+  "scripts/test-dxmt-replay.zsh": "b775e05a533afba52f9c868425c346b0893c10aa7f54807214bd6326967ea58c",
+  "build-in-process/replay-probe/dxmt_replay_probe.exe": "e38aa02344cd6736736942b3e937dbe24c19d962516d8926dc557ac3556053ac",
+  "build-in-process/dxmt-foveation-build/src/d3d11/d3d11.dll": "d2f8ac2a7152b6b43210f0fc9ed85f9b0ed5cb90f6205c3e55874a5d97863e50"
+}

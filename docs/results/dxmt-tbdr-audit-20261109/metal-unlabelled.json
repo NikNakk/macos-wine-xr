@@ -1,0 +1,929 @@
+{
+  "process": "EXD-Win64-Shipping.exe",
+  "gpu_intervals": 59840,
+  "intervals_with_label": 59600,
+  "trace_gpu_frame_ids": 567,
+  "encoder_event_types": {
+    "Encoding": 31257
+  },
+  "channel_totals": {
+    "Compute": {
+      "intervals": 3019,
+      "sum_ms": 211.69369300000008,
+      "median_ms": 0.007458
+    },
+    "Vertex": {
+      "intervals": 28381,
+      "sum_ms": 644.1931559999974,
+      "median_ms": 0.012958
+    },
+    "Fragment": {
+      "intervals": 28440,
+      "sum_ms": 3462.070479999995,
+      "median_ms": 0.01925
+    }
+  },
+  "pass_signatures": [
+    {
+      "channel": "Fragment",
+      "label": "Render Command 0",
+      "intervals": 2741,
+      "sum_ms": 847.0410779999995,
+      "median_ms": 0.106667,
+      "p90_ms": 0.751209
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 8",
+      "intervals": 879,
+      "sum_ms": 808.9058289999991,
+      "median_ms": 0.018166,
+      "p90_ms": 5.062542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 1",
+      "intervals": 1209,
+      "sum_ms": 389.218996,
+      "median_ms": 0.03125,
+      "p90_ms": 0.674
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 2",
+      "intervals": 1306,
+      "sum_ms": 163.66033299999967,
+      "median_ms": 0.020792,
+      "p90_ms": 0.260709
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 3",
+      "intervals": 1727,
+      "sum_ms": 145.92366,
+      "median_ms": 0.023333,
+      "p90_ms": 0.183208
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 12",
+      "intervals": 641,
+      "sum_ms": 133.19337900000005,
+      "median_ms": 0.015917,
+      "p90_ms": 0.166208
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 17",
+      "intervals": 574,
+      "sum_ms": 124.41957699999988,
+      "median_ms": 0.254208,
+      "p90_ms": 0.259917
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 9",
+      "intervals": 700,
+      "sum_ms": 114.22246299999999,
+      "median_ms": 0.019875,
+      "p90_ms": 0.123375
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 16",
+      "intervals": 645,
+      "sum_ms": 105.61229300000007,
+      "median_ms": 0.052125,
+      "p90_ms": 0.69975
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 35",
+      "intervals": 562,
+      "sum_ms": 86.60458099999997,
+      "median_ms": 0.198458,
+      "p90_ms": 0.200042
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 0",
+      "intervals": 2738,
+      "sum_ms": 78.47283000000012,
+      "median_ms": 0.014458,
+      "p90_ms": 0.070584
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 1",
+      "intervals": 118,
+      "sum_ms": 74.62400000000004,
+      "median_ms": 0.6776245,
+      "p90_ms": 0.775625
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 2",
+      "intervals": 446,
+      "sum_ms": 70.79871100000001,
+      "median_ms": 0.1190835,
+      "p90_ms": 0.245541
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 5",
+      "intervals": 1299,
+      "sum_ms": 67.72211999999993,
+      "median_ms": 0.053458,
+      "p90_ms": 0.091291
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 4",
+      "intervals": 1105,
+      "sum_ms": 67.47766600000004,
+      "median_ms": 0.017542,
+      "p90_ms": 0.117375
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 18",
+      "intervals": 568,
+      "sum_ms": 58.141420999999994,
+      "median_ms": 0.114375,
+      "p90_ms": 0.119416
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 8",
+      "intervals": 802,
+      "sum_ms": 50.44454300000003,
+      "median_ms": 0.015833,
+      "p90_ms": 0.314583
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 19",
+      "intervals": 570,
+      "sum_ms": 42.21720000000005,
+      "median_ms": 0.082708,
+      "p90_ms": 0.084709
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 11",
+      "intervals": 696,
+      "sum_ms": 41.883742,
+      "median_ms": 0.020167,
+      "p90_ms": 0.2325
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 3",
+      "intervals": 1727,
+      "sum_ms": 41.33184599999994,
+      "median_ms": 0.014584,
+      "p90_ms": 0.045
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 10",
+      "intervals": 693,
+      "sum_ms": 40.35884199999997,
+      "median_ms": 0.016375,
+      "p90_ms": 0.057667
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 16",
+      "intervals": 627,
+      "sum_ms": 38.57673199999996,
+      "median_ms": 0.067708,
+      "p90_ms": 0.073625
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 6",
+      "intervals": 692,
+      "sum_ms": 29.949510999999983,
+      "median_ms": 0.0172915,
+      "p90_ms": 0.172083
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 2",
+      "intervals": 1306,
+      "sum_ms": 29.470185999999956,
+      "median_ms": 0.012021,
+      "p90_ms": 0.029125
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 15",
+      "intervals": 632,
+      "sum_ms": 27.658035000000005,
+      "median_ms": 0.025583,
+      "p90_ms": 0.041917
+    },
+    {
+      "channel": "Fragment",
+      "label": "<unlabelled>",
+      "intervals": 114,
+      "sum_ms": 27.618209000000004,
+      "median_ms": 0.033271,
+      "p90_ms": 0.263167
+    },
+    {
+      "channel": "Vertex",
+      "label": "ClearPass",
+      "intervals": 433,
+      "sum_ms": 25.237386000000022,
+      "median_ms": 0.04825,
+      "p90_ms": 0.0915
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 1",
+      "intervals": 1207,
+      "sum_ms": 24.637069000000004,
+      "median_ms": 0.012292,
+      "p90_ms": 0.035958
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 5",
+      "intervals": 1300,
+      "sum_ms": 22.029041000000007,
+      "median_ms": 0.009292,
+      "p90_ms": 0.026208
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 13",
+      "intervals": 638,
+      "sum_ms": 20.930426000000008,
+      "median_ms": 0.017125,
+      "p90_ms": 0.023542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 14",
+      "intervals": 637,
+      "sum_ms": 19.849255000000024,
+      "median_ms": 0.019291,
+      "p90_ms": 0.068667
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 20",
+      "intervals": 562,
+      "sum_ms": 18.76163700000001,
+      "median_ms": 0.03275,
+      "p90_ms": 0.036375
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 11",
+      "intervals": 696,
+      "sum_ms": 18.124918000000005,
+      "median_ms": 0.015041,
+      "p90_ms": 0.067458
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 4",
+      "intervals": 1105,
+      "sum_ms": 17.601512000000007,
+      "median_ms": 0.011042,
+      "p90_ms": 0.026208
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 9",
+      "intervals": 700,
+      "sum_ms": 17.47775800000001,
+      "median_ms": 0.0165625,
+      "p90_ms": 0.019583
+    },
+    {
+      "channel": "Vertex",
+      "label": "<unlabelled>",
+      "intervals": 114,
+      "sum_ms": 14.941169000000002,
+      "median_ms": 0.0082705,
+      "p90_ms": 0.15975
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 12",
+      "intervals": 642,
+      "sum_ms": 14.339505000000008,
+      "median_ms": 0.012333,
+      "p90_ms": 0.048667
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 10",
+      "intervals": 695,
+      "sum_ms": 13.405622999999999,
+      "median_ms": 0.013958,
+      "p90_ms": 0.020958
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 34",
+      "intervals": 562,
+      "sum_ms": 13.375158999999984,
+      "median_ms": 0.0278335,
+      "p90_ms": 0.031209
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 36",
+      "intervals": 132,
+      "sum_ms": 13.234458999999994,
+      "median_ms": 0.1023955,
+      "p90_ms": 0.113042
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 0",
+      "intervals": 582,
+      "sum_ms": 12.310959000000006,
+      "median_ms": 0.005917,
+      "p90_ms": 0.006666
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 7",
+      "intervals": 703,
+      "sum_ms": 11.424909000000017,
+      "median_ms": 0.015833,
+      "p90_ms": 0.018917
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 6",
+      "intervals": 692,
+      "sum_ms": 10.67146200000003,
+      "median_ms": 0.0161665,
+      "p90_ms": 0.019625
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 7",
+      "intervals": 703,
+      "sum_ms": 9.898163000000013,
+      "median_ms": 0.013625,
+      "p90_ms": 0.015333
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 21",
+      "intervals": 562,
+      "sum_ms": 9.524508000000006,
+      "median_ms": 0.017667,
+      "p90_ms": 0.019209
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 30",
+      "intervals": 562,
+      "sum_ms": 9.450704000000023,
+      "median_ms": 0.018667,
+      "p90_ms": 0.023625
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 17",
+      "intervals": 574,
+      "sum_ms": 9.345414000000003,
+      "median_ms": 0.01825,
+      "p90_ms": 0.02025
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 33",
+      "intervals": 561,
+      "sum_ms": 9.290907000000002,
+      "median_ms": 0.018959,
+      "p90_ms": 0.020667
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 28",
+      "intervals": 562,
+      "sum_ms": 9.283396,
+      "median_ms": 0.018375,
+      "p90_ms": 0.023417
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 7",
+      "intervals": 125,
+      "sum_ms": 9.248291999999998,
+      "median_ms": 0.074625,
+      "p90_ms": 0.095
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 13",
+      "intervals": 638,
+      "sum_ms": 8.577385999999994,
+      "median_ms": 0.0135,
+      "p90_ms": 0.016625
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 35",
+      "intervals": 562,
+      "sum_ms": 8.562086000000011,
+      "median_ms": 0.017417,
+      "p90_ms": 0.019625
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 32",
+      "intervals": 561,
+      "sum_ms": 8.342456000000011,
+      "median_ms": 0.016959,
+      "p90_ms": 0.018542
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 28",
+      "intervals": 562,
+      "sum_ms": 8.335414000000004,
+      "median_ms": 0.016583,
+      "p90_ms": 0.018542
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 27",
+      "intervals": 561,
+      "sum_ms": 8.305540000000006,
+      "median_ms": 0.016083,
+      "p90_ms": 0.018541
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 15",
+      "intervals": 631,
+      "sum_ms": 8.255414999999987,
+      "median_ms": 0.013125,
+      "p90_ms": 0.015209
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 26",
+      "intervals": 562,
+      "sum_ms": 8.191578000000003,
+      "median_ms": 0.015834,
+      "p90_ms": 0.017542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 29",
+      "intervals": 561,
+      "sum_ms": 8.044713999999997,
+      "median_ms": 0.015875,
+      "p90_ms": 0.017625
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 14",
+      "intervals": 637,
+      "sum_ms": 8.038078999999996,
+      "median_ms": 0.012208,
+      "p90_ms": 0.013958
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 22",
+      "intervals": 562,
+      "sum_ms": 8.025745999999993,
+      "median_ms": 0.015875,
+      "p90_ms": 0.017792
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 4",
+      "intervals": 218,
+      "sum_ms": 7.950418000000005,
+      "median_ms": 0.0375625,
+      "p90_ms": 0.07675
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 6",
+      "intervals": 495,
+      "sum_ms": 7.941941999999999,
+      "median_ms": 0.009542,
+      "p90_ms": 0.026125
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 31",
+      "intervals": 562,
+      "sum_ms": 7.745510999999995,
+      "median_ms": 0.015167,
+      "p90_ms": 0.017167
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 27",
+      "intervals": 562,
+      "sum_ms": 7.646342999999999,
+      "median_ms": 0.015542,
+      "p90_ms": 0.017375
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 25",
+      "intervals": 561,
+      "sum_ms": 7.600124999999999,
+      "median_ms": 0.015792,
+      "p90_ms": 0.017291
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 6",
+      "intervals": 136,
+      "sum_ms": 7.475002999999998,
+      "median_ms": 0.047521,
+      "p90_ms": 0.074417
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 25",
+      "intervals": 562,
+      "sum_ms": 7.417136000000003,
+      "median_ms": 0.015291,
+      "p90_ms": 0.017041
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 30",
+      "intervals": 562,
+      "sum_ms": 7.360367999999998,
+      "median_ms": 0.014667,
+      "p90_ms": 0.016417
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 26",
+      "intervals": 562,
+      "sum_ms": 7.055670999999987,
+      "median_ms": 0.013833,
+      "p90_ms": 0.015292
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 29",
+      "intervals": 562,
+      "sum_ms": 7.042039999999989,
+      "median_ms": 0.013709,
+      "p90_ms": 0.01525
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 23",
+      "intervals": 562,
+      "sum_ms": 6.826252000000001,
+      "median_ms": 0.013417,
+      "p90_ms": 0.014959
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 34",
+      "intervals": 562,
+      "sum_ms": 6.642326999999995,
+      "median_ms": 0.013458,
+      "p90_ms": 0.014542
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 32",
+      "intervals": 562,
+      "sum_ms": 6.636527,
+      "median_ms": 0.01325,
+      "p90_ms": 0.015166
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 31",
+      "intervals": 562,
+      "sum_ms": 6.2166799999999975,
+      "median_ms": 0.012,
+      "p90_ms": 0.013334
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 33",
+      "intervals": 562,
+      "sum_ms": 6.201208,
+      "median_ms": 0.012125,
+      "p90_ms": 0.013458
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 24",
+      "intervals": 562,
+      "sum_ms": 5.839586999999999,
+      "median_ms": 0.011542,
+      "p90_ms": 0.012833
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 18",
+      "intervals": 570,
+      "sum_ms": 5.687453000000001,
+      "median_ms": 0.011,
+      "p90_ms": 0.011959
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 37",
+      "intervals": 134,
+      "sum_ms": 5.363127,
+      "median_ms": 0.038771,
+      "p90_ms": 0.047416
+    },
+    {
+      "channel": "Compute",
+      "label": "<unlabelled>",
+      "intervals": 12,
+      "sum_ms": 5.168208,
+      "median_ms": 0.0702915,
+      "p90_ms": 1.635209
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 19",
+      "intervals": 569,
+      "sum_ms": 4.725991999999997,
+      "median_ms": 0.008916,
+      "p90_ms": 0.009959
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 20",
+      "intervals": 561,
+      "sum_ms": 4.279443999999995,
+      "median_ms": 0.008458,
+      "p90_ms": 0.009291
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 24",
+      "intervals": 562,
+      "sum_ms": 4.2671240000000035,
+      "median_ms": 0.00825,
+      "p90_ms": 0.009583
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 21",
+      "intervals": 561,
+      "sum_ms": 4.192239000000004,
+      "median_ms": 0.008167,
+      "p90_ms": 0.009166
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 23",
+      "intervals": 562,
+      "sum_ms": 4.191122,
+      "median_ms": 0.00825,
+      "p90_ms": 0.009291
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 22",
+      "intervals": 562,
+      "sum_ms": 4.1767089999999945,
+      "median_ms": 0.008292,
+      "p90_ms": 0.009208
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 3",
+      "intervals": 25,
+      "sum_ms": 3.5060390000000003,
+      "median_ms": 0.004125,
+      "p90_ms": 0.679916
+    },
+    {
+      "channel": "Compute",
+      "label": "SampleTimestamp",
+      "intervals": 560,
+      "sum_ms": 3.039456000000005,
+      "median_ms": 0.005958,
+      "p90_ms": 0.007042
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 39",
+      "intervals": 1,
+      "sum_ms": 2.969792,
+      "median_ms": 2.969792,
+      "p90_ms": 2.969792
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 4",
+      "intervals": 1,
+      "sum_ms": 2.713375,
+      "median_ms": 2.713375,
+      "p90_ms": 2.713375
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 0",
+      "intervals": 130,
+      "sum_ms": 1.8689140000000015,
+      "median_ms": 0.0147085,
+      "p90_ms": 0.016333
+    },
+    {
+      "channel": "Fragment",
+      "label": "ClearPass",
+      "intervals": 433,
+      "sum_ms": 1.3704489999999991,
+      "median_ms": 0.002916,
+      "p90_ms": 0.004708
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 37",
+      "intervals": 134,
+      "sum_ms": 1.1557129999999995,
+      "median_ms": 0.0085415,
+      "p90_ms": 0.010333
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 36",
+      "intervals": 134,
+      "sum_ms": 0.9747899999999999,
+      "median_ms": 0.007375,
+      "p90_ms": 0.008625
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 5",
+      "intervals": 23,
+      "sum_ms": 0.758082,
+      "median_ms": 0.037625,
+      "p90_ms": 0.050042
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 8",
+      "intervals": 10,
+      "sum_ms": 0.6184599999999999,
+      "median_ms": 0.06125,
+      "p90_ms": 0.077834
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 12",
+      "intervals": 56,
+      "sum_ms": 0.28133,
+      "median_ms": 0.003208,
+      "p90_ms": 0.007041
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 17",
+      "intervals": 56,
+      "sum_ms": 0.23071199999999994,
+      "median_ms": 0.003417,
+      "p90_ms": 0.004083
+    },
+    {
+      "channel": "Compute",
+      "label": "Compute Command 16",
+      "intervals": 1,
+      "sum_ms": 0.08475,
+      "median_ms": 0.08475,
+      "p90_ms": 0.08475
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 14",
+      "intervals": 1,
+      "sum_ms": 0.031667,
+      "median_ms": 0.031667,
+      "p90_ms": 0.031667
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 20",
+      "intervals": 7,
+      "sum_ms": 0.018875999999999997,
+      "median_ms": 0.002917,
+      "p90_ms": 0.003042
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 15",
+      "intervals": 6,
+      "sum_ms": 0.017415,
+      "median_ms": 0.0028955,
+      "p90_ms": 0.003041
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 38",
+      "intervals": 1,
+      "sum_ms": 0.010333,
+      "median_ms": 0.010333,
+      "p90_ms": 0.010333
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 2",
+      "intervals": 1,
+      "sum_ms": 0.00925,
+      "median_ms": 0.00925,
+      "p90_ms": 0.00925
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 18",
+      "intervals": 3,
+      "sum_ms": 0.007999,
+      "median_ms": 0.002583,
+      "p90_ms": 0.002833
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 13",
+      "intervals": 2,
+      "sum_ms": 0.0057090000000000005,
+      "median_ms": 0.0028545000000000003,
+      "p90_ms": 0.0035
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 7",
+      "intervals": 1,
+      "sum_ms": 0.005125,
+      "median_ms": 0.005125,
+      "p90_ms": 0.005125
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 16",
+      "intervals": 1,
+      "sum_ms": 0.003583,
+      "median_ms": 0.003583,
+      "p90_ms": 0.003583
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 3",
+      "intervals": 1,
+      "sum_ms": 0.002959,
+      "median_ms": 0.002959,
+      "p90_ms": 0.002959
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 21",
+      "intervals": 1,
+      "sum_ms": 0.002667,
+      "median_ms": 0.002667,
+      "p90_ms": 0.002667
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 38",
+      "intervals": 1,
+      "sum_ms": 0.0015,
+      "median_ms": 0.0015,
+      "p90_ms": 0.0015
+    }
+  ],
+  "allocated_size_bytes": {
+    "min": 1133559808,
+    "median": 1681670144.0,
+    "max": 2025390080
+  },
+  "recorded_counter_metadata": [
+    {
+      "counter-id": 0,
+      "name": "RT Unit Active",
+      "description": "Percentage of GPU Cores where raytracing unit is active.",
+      "type": "Percentage"
+    }
+  ],
+  "limitations": [
+    "Tiler and renderer intervals overlap; do not add channel totals into frame time.",
+    "Pass labels group matching signatures, not unique shader/functional identity.",
+    "Trace frame IDs differ from DXMT Present IDs; do not join separate captures by frame number.",
+    "currentAllocatedSize is Metal device allocation size, not measured resident VRAM.",
+    "Only the recorded counter names are available; no DRAM bandwidth is inferred.",
+    "This is a profiler run, not an uninstrumented performance comparison."
+  ]
+}

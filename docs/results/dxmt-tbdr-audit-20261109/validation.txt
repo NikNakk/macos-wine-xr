@@ -1,0 +1,10 @@
+Patch series 0001-0009 applies to pinned base; all 307 source files byte-identical.
+Private DXMT build: ninja exit 0.
+Ordinary D3D11 audit-off/on: 8192 pixels each, zero errors, Metal validation enabled.
+Three render nodes merge into two; two clears merge; one MSAA resolve fuses.
+Audit-on adds zero timestamp queries or mapped passes.
+Six TBDR analyser tests pass.
+Existing automatic base-foveation suite: all ten cases pass, 4194304 pixels checked per case.
+All nine private audit run save snapshots match the restored private settings.
+Temporary EXD and simulated service processes stopped.
+EXD profiling itself had Metal validation disabled; no EXD image correctness or speedup claimed.

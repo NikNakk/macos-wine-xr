@@ -1,0 +1,341 @@
+{
+ "frame": 1200,
+ "scene_size": [
+  1792,
+  1008
+ ],
+ "render_passes": 63,
+ "pass_sizes": {
+  "1024x1024 s1 c2": 2,
+  "1024x1024 s1 c4": 1,
+  "1792x1008 s2 c0 d": 2,
+  "1792x1008 s1 c0 d": 1,
+  "512x512 s1 c0 d": 1,
+  "1792x1008 s2 c1 d": 7,
+  "1792x1008 s1 c3 d": 2,
+  "1792x1008 s1 c1": 12,
+  "896x504 s1 c1": 2,
+  "1x1 s1 c1": 1,
+  "448x252 s1 c1": 4,
+  "224x126 s1 c1": 4,
+  "112x63 s1 c1": 4,
+  "56x32 s1 c1": 4,
+  "28x16 s1 c1": 4,
+  "14x16 s1 c1": 2,
+  "28x32 s1 c1": 2,
+  "56x63 s1 c1": 2,
+  "112x126 s1 c1": 2,
+  "224x252 s1 c1": 2,
+  "32x32 s1 c1": 1,
+  "1280x720 s1 c1": 1
+ },
+ "family": [
+  {
+   "resource": "000000003da5dfe0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "Depth32Float_Stencil8",
+   "samples": 2,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 1,
+    "attachment in scene-sized pass": 9,
+    "pixel read in scene-sized pass": 2
+   }
+  },
+  {
+   "resource": "000000003da5e0a0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "Depth32Float_Stencil8",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "attachment in scene-sized pass": 1,
+    "pixel read in scene-sized pass": 49,
+    "ATTACHMENT in scene-sized MRT pass": 2,
+    "COMPUTE srv compute": 2
+   }
+  },
+  {
+   "resource": "00000000488aaf70",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "BGRA8Unorm",
+   "samples": 2,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 1,
+    "attachment in scene-sized pass": 2,
+    "resolve": 1
+   }
+  },
+  {
+   "resource": "00000000488ab030",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "BGRA8Unorm",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "resolve": 1,
+    "pixel read in scene-sized pass": 20
+   }
+  },
+  {
+   "resource": "00000000487cc5d0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "BGRA8Unorm",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 1,
+    "ATTACHMENT in scene-sized MRT pass": 2,
+    "pixel read in scene-sized pass": 20
+   }
+  },
+  {
+   "resource": "00000000488aa8b0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "BGRA8Unorm",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 1,
+    "ATTACHMENT in scene-sized MRT pass": 2,
+    "pixel read in scene-sized pass": 20
+   }
+  },
+  {
+   "resource": "00000000488aa970",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "BGRA8Unorm",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 1,
+    "ATTACHMENT in scene-sized MRT pass": 2,
+    "pixel read in scene-sized pass": 20
+   }
+  },
+  {
+   "resource": "00000000487cb010",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "R8Unorm",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 1,
+    "attachment in scene-sized pass": 2,
+    "pixel read in scene-sized pass": 20
+   }
+  },
+  {
+   "resource": "00000000488aaa30",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "RG11B10Float",
+   "samples": 2,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 1,
+    "attachment in scene-sized pass": 4,
+    "pixel read in scene-sized pass": 2
+   }
+  },
+  {
+   "resource": "00000000488aaaf0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "RG11B10Float",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "attachment in scene-sized pass": 2,
+    "pixel read in scene-sized pass": 2
+   }
+  },
+  {
+   "resource": "00000000488ab1b0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "23",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "attachment in scene-sized pass": 1
+   }
+  },
+  {
+   "resource": "00000000488ab270",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "RGBA16Float",
+   "samples": 2,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 1,
+    "attachment in scene-sized pass": 1,
+    "pixel read in scene-sized pass": 1
+   }
+  },
+  {
+   "resource": "00000000488ab330",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "RGBA16Float",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "attachment in scene-sized pass": 1,
+    "pixel read in scene-sized pass": 2
+   }
+  },
+  {
+   "resource": "00000000488ab3f0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "RG11B10Float",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "attachment in scene-sized pass": 2,
+    "pixel read in other-sized pass": 2,
+    "pixel read in scene-sized pass": 2
+   }
+  },
+  {
+   "resource": "0000000048884cc0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "BGRA8Unorm",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 2,
+    "attachment in scene-sized pass": 2,
+    "pixel read in scene-sized pass": 3
+   }
+  },
+  {
+   "resource": "0000000001155eb0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "RGBA8Unorm_sRGB",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "uses": {
+    "clear": 1,
+    "attachment in scene-sized pass": 2,
+    "pixel read in other-sized pass": 1
+   }
+  }
+ ],
+ "totals": {
+  "clear": 11,
+  "attachment in scene-sized pass": 29,
+  "pixel read in scene-sized pass": 163,
+  "ATTACHMENT in scene-sized MRT pass": 8,
+  "COMPUTE srv compute": 2,
+  "resolve": 2,
+  "pixel read in other-sized pass": 3
+ },
+ "outside_render": [
+  {
+   "resource": "000000003da5e0a0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "Depth32Float_Stencil8",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "encoder": 141261,
+   "encoder_type": "compute",
+   "how": "srv",
+   "with_resources": [
+    "1x1 BGRA8Unorm s1",
+    "16x16 73 s1",
+    "135x5 RG11B10Float s1",
+    "135x5 RGBA8Unorm s1",
+    "135x5 RGBA8Unorm s1",
+    "135x5 RGBA8Unorm s1"
+   ]
+  },
+  {
+   "resource": "000000003da5e0a0",
+   "size": [
+    1792,
+    1008
+   ],
+   "format": "Depth32Float_Stencil8",
+   "samples": 1,
+   "layers": 1,
+   "mips": 1,
+   "encoder": 141264,
+   "encoder_type": "compute",
+   "how": "srv",
+   "with_resources": [
+    "1x1 BGRA8Unorm s1",
+    "16x16 73 s1",
+    "135x5 RG11B10Float s1",
+    "135x5 RGBA8Unorm s1",
+    "135x5 RGBA8Unorm s1",
+    "135x5 RGBA8Unorm s1"
+   ]
+  }
+ ]
+}

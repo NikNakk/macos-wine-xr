@@ -1,0 +1,8 @@
+{
+  "tests/native/metal_depth_resolve_probe.m": "1bee29f6b8ca9fbdafc240b63f77c3793b07e666594b158cb2f41ef6b68b7fcb",
+  "build-in-process/metal-depth-resolve-validation/probe": "80fdbdb0d055b739c340b0f897cd67d0ab3a54b968f5d6e39f45bc8bdf40c39d",
+  "tests/windows/dxbc_disassemble.cpp": "787ff74eba1b1ca51ba5a1686d04f1aa441796c1cc9e0e8fbb463b7d5896a4cb",
+  "patches/dxmt/0010-depth-resolve-shader-diagnostics.patch": "68cb0a23240c65e6d713c5841a7680654a0357042ff03de17519b5c89d5d898b",
+  "build-in-process/exd-ngx/tbdr-depth-shaders/7950e3c282723300c7868b44f76ea750bacd1403.dxbc": "9d8185c265239ba55aa104ed749b15882da23e57fbc962d95c2d9d975b3b6a8b",
+  "build-in-process/exd-ngx/tbdr-depth-shaders/836dd050c282a6dafa85886f38e72b5bc759e8bb.dxbc": "6db68e48b0078bf8a39b36ee0b7ffa91096cd6a23fac4abdc14a0b5ae9ccbeb0"
+}

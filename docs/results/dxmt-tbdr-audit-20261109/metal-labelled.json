@@ -1,0 +1,2354 @@
+{
+  "process": "EXD-Win64-Shipping.exe",
+  "target_pid": 68235,
+  "gpu_intervals": 59094,
+  "intervals_with_label": 59093,
+  "trace_gpu_frame_ids": 564,
+  "encoder_event_types": {
+    "Encoding": 30965
+  },
+  "channel_totals": {
+    "Compute": {
+      "intervals": 2939,
+      "sum_ms": 194.71260299999994,
+      "median_ms": 0.007167
+    },
+    "Vertex": {
+      "intervals": 28035,
+      "sum_ms": 600.3170589999958,
+      "median_ms": 0.012917
+    },
+    "Fragment": {
+      "intervals": 28120,
+      "sum_ms": 3215.867086999998,
+      "median_ms": 0.019083
+    }
+  },
+  "pass_signatures": [
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=2 d0 i2 x0 g0 t0 m0 kv=7 inst<=2",
+      "intervals": 436,
+      "sum_ms": 340.9192119999999,
+      "median_ms": 0.760521,
+      "p90_ms": 0.882125
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=26 d0 i26 x0 g0 t0 m0 kv=309 inst<=10",
+      "intervals": 72,
+      "sum_ms": 297.41937699999994,
+      "median_ms": 4.0175415,
+      "p90_ms": 6.43375
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=26 d0 i26 x0 g0 t0 m0 kv=302 inst<=10",
+      "intervals": 60,
+      "sum_ms": 270.152832,
+      "median_ms": 4.8910625,
+      "p90_ms": 7.599208
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 d=260:L/S st=L/S draws=1 d1 i0 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 559,
+      "sum_ms": 239.48363899999998,
+      "median_ms": 0.459125,
+      "p90_ms": 0.592292
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=28 d0 i28 x0 g0 t0 m0 kv=571 inst<=10",
+      "intervals": 73,
+      "sum_ms": 229.088334,
+      "median_ms": 3.762834,
+      "p90_ms": 4.893208
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1x1x0 s1 c0=125:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 565,
+      "sum_ms": 218.918537,
+      "median_ms": 0.211917,
+      "p90_ms": 0.650083
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=4 d0 i4 x0 g0 t0 m0 kv=29 inst<=2",
+      "intervals": 100,
+      "sum_ms": 193.796378,
+      "median_ms": 2.2929370000000002,
+      "p90_ms": 2.318667
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 c0=115:L/S draws=1 d1 i0 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 559,
+      "sum_ms": 147.19961599999988,
+      "median_ms": 0.198,
+      "p90_ms": 0.563333
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=2 d0 i2 x0 g0 t0 m0 kv=7 inst<=2",
+      "intervals": 436,
+      "sum_ms": 134.25233100000003,
+      "median_ms": 0.240125,
+      "p90_ms": 0.48725
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x1 s1 c0=70:C/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 559,
+      "sum_ms": 118.54566000000007,
+      "median_ms": 0.253708,
+      "p90_ms": 0.258666
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1117,
+      "sum_ms": 111.85745799999998,
+      "median_ms": 0.114459,
+      "p90_ms": 0.119083
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 32x32x32 s1 c0=90:L/S draws=1 d0 i0 x0 g1 t0 m0 kv=0 inst<=0 emu-gs",
+      "intervals": 569,
+      "sum_ms": 96.31278399999998,
+      "median_ms": 0.05075,
+      "p90_ms": 0.647542
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x1 s1 c0=70:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 437,
+      "sum_ms": 86.93137700000011,
+      "median_ms": 0.198583,
+      "p90_ms": 0.201125
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 896x504x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 81.00718200000001,
+      "median_ms": 0.083084,
+      "p90_ms": 0.085917
+    },
+    {
+      "channel": "Compute",
+      "label": "C dispatches=6",
+      "intervals": 123,
+      "sum_ms": 74.837257,
+      "median_ms": 0.676292,
+      "p90_ms": 0.716375
+    },
+    {
+      "channel": "Compute",
+      "label": "C dispatches=10",
+      "intervals": 559,
+      "sum_ms": 71.72250999999993,
+      "median_ms": 0.1035,
+      "p90_ms": 0.224833
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 c0=92:L/S draws=2 d2 i0 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 436,
+      "sum_ms": 70.5238430000001,
+      "median_ms": 0.1579375,
+      "p90_ms": 0.172958
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 448x252x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2234,
+      "sum_ms": 56.908223000000014,
+      "median_ms": 0.028291,
+      "p90_ms": 0.032833
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 0",
+      "intervals": 559,
+      "sum_ms": 39.02715099999994,
+      "median_ms": 0.078625,
+      "p90_ms": 0.08225
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1280x720x0 s1 c0=90:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 557,
+      "sum_ms": 38.78974699999994,
+      "median_ms": 0.079125,
+      "p90_ms": 0.080791
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=2 d0 i2 x0 g0 t0 m0 kv=7 inst<=2",
+      "intervals": 436,
+      "sum_ms": 38.43221099999999,
+      "median_ms": 0.0759585,
+      "p90_ms": 0.143792
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 32x32x32 s1 c0=90:L/S draws=1 d0 i0 x0 g1 t0 m0 kv=0 inst<=0 emu-gs",
+      "intervals": 559,
+      "sum_ms": 37.10937100000004,
+      "median_ms": 0.068334,
+      "p90_ms": 0.074
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=6 d0 i6 x0 g0 t0 m0 kv=29 inst<=2",
+      "intervals": 16,
+      "sum_ms": 36.299668,
+      "median_ms": 2.4002084999999997,
+      "p90_ms": 2.522875
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 112x63x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2236,
+      "sum_ms": 35.48346499999987,
+      "median_ms": 0.017375,
+      "p90_ms": 0.020375
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 224x126x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2236,
+      "sum_ms": 34.78272299999988,
+      "median_ms": 0.017209,
+      "p90_ms": 0.019334
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 436,
+      "sum_ms": 32.726624000000015,
+      "median_ms": 0.024291,
+      "p90_ms": 0.18275
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 56x32x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2236,
+      "sum_ms": 32.40236199999993,
+      "median_ms": 0.014458,
+      "p90_ms": 0.020084
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 c0=80:C/S c1=80:C/S c2=80:C/S d=260:L/S st=L/S draws=12 d0 i12 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 123,
+      "sum_ms": 31.89483299999999,
+      "median_ms": 0.2705,
+      "p90_ms": 0.314208
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 56x32x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2235,
+      "sum_ms": 27.263936999999927,
+      "median_ms": 0.00925,
+      "p90_ms": 0.017917
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 28x16x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2235,
+      "sum_ms": 26.792543999999978,
+      "median_ms": 0.009458,
+      "p90_ms": 0.016958
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 c0=92:L/S draws=1 d1 i0 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 246,
+      "sum_ms": 26.205617000000007,
+      "median_ms": 0.097167,
+      "p90_ms": 0.161791
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 28x16x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2234,
+      "sum_ms": 25.460433000000002,
+      "median_ms": 0.012125,
+      "p90_ms": 0.015041
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 112x63x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2236,
+      "sum_ms": 25.337554999999895,
+      "median_ms": 0.0091455,
+      "p90_ms": 0.015708
+    },
+    {
+      "channel": "Vertex",
+      "label": "ClearPass color 1792x1008x0 fmt=115",
+      "intervals": 436,
+      "sum_ms": 24.90908499999999,
+      "median_ms": 0.046875,
+      "p90_ms": 0.094291
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 224x126x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2236,
+      "sum_ms": 24.676016999999998,
+      "median_ms": 0.009354,
+      "p90_ms": 0.014666
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 448x252x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 2235,
+      "sum_ms": 24.249452999999946,
+      "median_ms": 0.009458,
+      "p90_ms": 0.01425
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 c0=80:C/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 243,
+      "sum_ms": 22.98800099999999,
+      "median_ms": 0.101542,
+      "p90_ms": 0.115125
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 224x252x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1117,
+      "sum_ms": 19.11508800000004,
+      "median_ms": 0.018917,
+      "p90_ms": 0.021208
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=92:L/S d=260:L/S st=L/S draws=13 d0 i13 x0 g0 t0 m0 kv=0 inst<=2",
+      "intervals": 62,
+      "sum_ms": 17.857792999999997,
+      "median_ms": 0.3086455,
+      "p90_ms": 0.362833
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 14x16x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 17.164422000000048,
+      "median_ms": 0.016041,
+      "p90_ms": 0.018125
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 28x32x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 16.925839000000032,
+      "median_ms": 0.015875,
+      "p90_ms": 0.017959
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=80:C/SR d=260:L/S st=L/S draws=26 d0 i26 x0 g0 t0 m0 kv=19 inst<=2",
+      "intervals": 71,
+      "sum_ms": 16.475878000000005,
+      "median_ms": 0.222958,
+      "p90_ms": 0.266583
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 14x16x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 16.328538000000048,
+      "median_ms": 0.015625,
+      "p90_ms": 0.019208
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=28 d0 i28 x0 g0 t0 m0 kv=571 inst<=10",
+      "intervals": 50,
+      "sum_ms": 16.121706000000003,
+      "median_ms": 0.2875,
+      "p90_ms": 0.4145
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 28x32x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 16.107284000000046,
+      "median_ms": 0.015667,
+      "p90_ms": 0.018625
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 56x63x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 15.91314700000005,
+      "median_ms": 0.0156455,
+      "p90_ms": 0.018
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 112x126x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 15.485971000000028,
+      "median_ms": 0.015292,
+      "p90_ms": 0.017625
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 c0=92:L/S draws=2 d2 i0 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 436,
+      "sum_ms": 15.351346999999997,
+      "median_ms": 0.0329375,
+      "p90_ms": 0.05125
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 56x63x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 14.536545999999982,
+      "median_ms": 0.013875,
+      "p90_ms": 0.015458
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=80:C/SR d=260:L/S st=L/S draws=48 d0 i48 x0 g0 t0 m0 kv=2172 inst<=2",
+      "intervals": 49,
+      "sum_ms": 14.302917999999995,
+      "median_ms": 0.266792,
+      "p90_ms": 0.392125
+    },
+    {
+      "channel": "Compute",
+      "label": "C dispatches=3",
+      "intervals": 364,
+      "sum_ms": 13.963570000000002,
+      "median_ms": 0.0325,
+      "p90_ms": 0.072375
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 13.706860999999995,
+      "median_ms": 0.0115415,
+      "p90_ms": 0.019417
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=26 d0 i26 x0 g0 t0 m0 kv=309 inst<=10",
+      "intervals": 37,
+      "sum_ms": 13.212792000000002,
+      "median_ms": 0.341125,
+      "p90_ms": 0.390375
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=2 d0 i2 x0 g0 t0 m0 kv=7 inst<=2",
+      "intervals": 436,
+      "sum_ms": 12.945909999999992,
+      "median_ms": 0.029125,
+      "p90_ms": 0.031917
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 c0=115:L/S draws=1 d1 i0 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 559,
+      "sum_ms": 12.75971000000002,
+      "median_ms": 0.014167,
+      "p90_ms": 0.024833
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 224x252x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 12.689643999999998,
+      "median_ms": 0.01225,
+      "p90_ms": 0.013625
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 0",
+      "intervals": 580,
+      "sum_ms": 12.526299999999997,
+      "median_ms": 0.005917,
+      "p90_ms": 0.006583
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 112x126x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1118,
+      "sum_ms": 12.487012000000028,
+      "median_ms": 0.012083,
+      "p90_ms": 0.013542
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=92:L/S d=260:L/S st=L/S draws=12 d0 i12 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 61,
+      "sum_ms": 12.405121000000001,
+      "median_ms": 0.226167,
+      "p90_ms": 0.236916
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=26 d0 i26 x0 g0 t0 m0 kv=302 inst<=10",
+      "intervals": 38,
+      "sum_ms": 11.544035999999995,
+      "median_ms": 0.32102050000000004,
+      "p90_ms": 0.357417
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 d=260:L/S st=L/S draws=1 d1 i0 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 558,
+      "sum_ms": 11.041201000000028,
+      "median_ms": 0.0184375,
+      "p90_ms": 0.034125
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 896x504x0 s1 c0=92:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1117,
+      "sum_ms": 9.905770000000027,
+      "median_ms": 0.008958,
+      "p90_ms": 0.011167
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 436,
+      "sum_ms": 9.898946999999996,
+      "median_ms": 0.0206875,
+      "p90_ms": 0.038
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=80:C/SR d=260:L/S st=L/S draws=48 d0 i48 x0 g0 t0 m0 kv=2172 inst<=2",
+      "intervals": 49,
+      "sum_ms": 9.325958,
+      "median_ms": 0.181042,
+      "p90_ms": 0.212458
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=4 d0 i4 x0 g0 t0 m0 kv=29 inst<=2",
+      "intervals": 94,
+      "sum_ms": 9.310296000000005,
+      "median_ms": 0.0611875,
+      "p90_ms": 0.238417
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 6",
+      "intervals": 497,
+      "sum_ms": 9.078663000000002,
+      "median_ms": 0.008917,
+      "p90_ms": 0.034125
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x1 s1 c0=70:C/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 559,
+      "sum_ms": 8.88500300000002,
+      "median_ms": 0.018,
+      "p90_ms": 0.020041
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1x1x0 s1 c0=125:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 559,
+      "sum_ms": 8.039970000000002,
+      "median_ms": 0.011125,
+      "p90_ms": 0.020417
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x1 s1 c0=70:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 437,
+      "sum_ms": 8.016903999999995,
+      "median_ms": 0.018042,
+      "p90_ms": 0.020209
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=5 d0 i5 x0 g0 t0 m0 kv=29 inst<=10",
+      "intervals": 8,
+      "sum_ms": 7.552000000000001,
+      "median_ms": 1.0848125,
+      "p90_ms": 1.258416
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1280x720x0 s1 c0=90:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 557,
+      "sum_ms": 7.04771999999999,
+      "median_ms": 0.013916,
+      "p90_ms": 0.015709
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=92:L/S d=260:L/S st=L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=2",
+      "intervals": 61,
+      "sum_ms": 6.936834,
+      "median_ms": 0.129291,
+      "p90_ms": 0.140834
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 c0=23:L/S draws=2 d0 i2 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 122,
+      "sum_ms": 6.70913,
+      "median_ms": 0.0624585,
+      "p90_ms": 0.069
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 c0=10:C/S draws=1 d0 i1 x0 g0 t0 m0 kv=21 inst<=3528",
+      "intervals": 123,
+      "sum_ms": 6.229838999999999,
+      "median_ms": 0.053792,
+      "p90_ms": 0.060125
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 0",
+      "intervals": 559,
+      "sum_ms": 5.773227000000002,
+      "median_ms": 0.011333,
+      "p90_ms": 0.013125
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 39",
+      "intervals": 1,
+      "sum_ms": 5.433375,
+      "median_ms": 5.433375,
+      "p90_ms": 5.433375
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 512x512x0 s1 d=250:C/S draws=2 d0 i2 x0 g0 t0 m0 kv=134 inst<=1",
+      "intervals": 137,
+      "sum_ms": 5.391919,
+      "median_ms": 0.0285,
+      "p90_ms": 0.067792
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=92:L/S d=260:L/S st=L/S draws=12 d0 i12 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 61,
+      "sum_ms": 4.999912999999999,
+      "median_ms": 0.067292,
+      "p90_ms": 0.149084
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=27 d0 i27 x0 g0 t0 m0 kv=571 inst<=12",
+      "intervals": 50,
+      "sum_ms": 4.6439189999999995,
+      "median_ms": 0.08981249999999999,
+      "p90_ms": 0.103833
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x1 s1 c0=70:L/S draws=2 d0 i2 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 122,
+      "sum_ms": 4.508997,
+      "median_ms": 0.034833,
+      "p90_ms": 0.04725
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 512x512x0 s1 d=250:C/S draws=2 d0 i2 x0 g0 t0 m0 kv=134 inst<=1",
+      "intervals": 137,
+      "sum_ms": 4.430170999999999,
+      "median_ms": 0.029125,
+      "p90_ms": 0.038
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=28 d0 i28 x0 g0 t0 m0 kv=578 inst<=10",
+      "intervals": 1,
+      "sum_ms": 4.410292,
+      "median_ms": 4.410292,
+      "p90_ms": 4.410292
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=25 d0 i25 x0 g0 t0 m0 kv=309 inst<=12",
+      "intervals": 37,
+      "sum_ms": 4.282870999999999,
+      "median_ms": 0.104208,
+      "p90_ms": 0.140916
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=27 d0 i27 x0 g0 t0 m0 kv=571 inst<=12",
+      "intervals": 50,
+      "sum_ms": 4.0918779999999995,
+      "median_ms": 0.074542,
+      "p90_ms": 0.103
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=92:L/S d=260:L/S st=L/S draws=13 d0 i13 x0 g0 t0 m0 kv=0 inst<=2",
+      "intervals": 62,
+      "sum_ms": 3.9893419999999997,
+      "median_ms": 0.0558335,
+      "p90_ms": 0.128875
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=25 d0 i25 x0 g0 t0 m0 kv=302 inst<=12",
+      "intervals": 35,
+      "sum_ms": 3.7976290000000006,
+      "median_ms": 0.104292,
+      "p90_ms": 0.11425
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=5 d0 i5 x0 g0 t0 m0 kv=29 inst<=6",
+      "intervals": 5,
+      "sum_ms": 3.762707,
+      "median_ms": 0.931416,
+      "p90_ms": 1.260333
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=5 d0 i5 x0 g0 t0 m0 kv=29 inst<=4",
+      "intervals": 3,
+      "sum_ms": 3.736917,
+      "median_ms": 1.242625,
+      "p90_ms": 1.254792
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 4",
+      "intervals": 1,
+      "sum_ms": 3.140166,
+      "median_ms": 3.140166,
+      "p90_ms": 3.140166
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 c0=23:L/S draws=2 d0 i2 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 123,
+      "sum_ms": 3.064374999999998,
+      "median_ms": 0.009208,
+      "p90_ms": 0.070125
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:C/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=2",
+      "intervals": 1,
+      "sum_ms": 3.057834,
+      "median_ms": 3.057834,
+      "p90_ms": 3.057834
+    },
+    {
+      "channel": "Compute",
+      "label": "SampleTimestamp",
+      "intervals": 557,
+      "sum_ms": 2.9946300000000017,
+      "median_ms": 0.005916,
+      "p90_ms": 0.006917
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=25 d0 i25 x0 g0 t0 m0 kv=309 inst<=12",
+      "intervals": 37,
+      "sum_ms": 2.830085,
+      "median_ms": 0.071709,
+      "p90_ms": 0.0985
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=27 d0 i27 x0 g0 t0 m0 kv=578 inst<=12",
+      "intervals": 1,
+      "sum_ms": 2.529708,
+      "median_ms": 2.529708,
+      "p90_ms": 2.529708
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=25 d0 i25 x0 g0 t0 m0 kv=302 inst<=12",
+      "intervals": 35,
+      "sum_ms": 2.513878,
+      "median_ms": 0.070334,
+      "p90_ms": 0.078959
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 512x512x0 s1 d=250:C/S draws=4 d0 i4 x0 g0 t0 m0 kv=269 inst<=1",
+      "intervals": 18,
+      "sum_ms": 2.3596669999999995,
+      "median_ms": 0.134042,
+      "p90_ms": 0.173208
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=80:C/SR d=260:L/S st=L/S draws=26 d0 i26 x0 g0 t0 m0 kv=19 inst<=2",
+      "intervals": 71,
+      "sum_ms": 2.2545919999999997,
+      "median_ms": 0.028084,
+      "p90_ms": 0.042459
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 c0=10:C/S draws=1 d0 i1 x0 g0 t0 m0 kv=21 inst<=3528",
+      "intervals": 123,
+      "sum_ms": 1.9482010000000007,
+      "median_ms": 0.017166,
+      "p90_ms": 0.019083
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 c0=10:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=21 inst<=3528",
+      "intervals": 123,
+      "sum_ms": 1.8890859999999998,
+      "median_ms": 0.016834,
+      "p90_ms": 0.018708
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 c0=80:C/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 244,
+      "sum_ms": 1.854204000000001,
+      "median_ms": 0.007292,
+      "p90_ms": 0.009916
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=19 d0 i19 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 22,
+      "sum_ms": 1.7878319999999996,
+      "median_ms": 0.0794165,
+      "p90_ms": 0.105208
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 256x256x0 s1 d=250:L/S draws=134 d8 i126 x0 g0 t0 m0 kv=1629 inst<=1",
+      "intervals": 1,
+      "sum_ms": 1.507,
+      "median_ms": 1.507,
+      "p90_ms": 1.507
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=20 d0 i20 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 17,
+      "sum_ms": 1.453124,
+      "median_ms": 0.082916,
+      "p90_ms": 0.099875
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 c0=80:C/S c1=80:C/S c2=80:C/S d=260:L/S st=L/S draws=12 d0 i12 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 123,
+      "sum_ms": 1.4246230000000002,
+      "median_ms": 0.011125,
+      "p90_ms": 0.014917
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s1 c0=92:L/S draws=1 d1 i0 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 246,
+      "sum_ms": 1.4237109999999993,
+      "median_ms": 0.0053545,
+      "p90_ms": 0.00725
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=6 d0 i6 x0 g0 t0 m0 kv=29 inst<=2",
+      "intervals": 15,
+      "sum_ms": 1.3922900000000002,
+      "median_ms": 0.074042,
+      "p90_ms": 0.202916
+    },
+    {
+      "channel": "Fragment",
+      "label": "ClearPass color 1792x1008x0 fmt=115",
+      "intervals": 436,
+      "sum_ms": 1.3863419999999984,
+      "median_ms": 0.0028955,
+      "p90_ms": 0.004667
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=5 d0 i5 x0 g0 t0 m0 kv=29 inst<=8",
+      "intervals": 2,
+      "sum_ms": 1.2495829999999999,
+      "median_ms": 0.6247914999999999,
+      "p90_ms": 0.95875
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=2 d0 i2 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 122,
+      "sum_ms": 1.2238360000000008,
+      "median_ms": 0.010770499999999999,
+      "p90_ms": 0.01175
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=18 d0 i18 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 16,
+      "sum_ms": 1.222663,
+      "median_ms": 0.07956250000000001,
+      "p90_ms": 0.081666
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=92:L/S d=260:L/S st=L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=2",
+      "intervals": 61,
+      "sum_ms": 1.0843360000000004,
+      "median_ms": 0.012167,
+      "p90_ms": 0.035875
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 512x512x0 s1 d=250:C/S draws=4 d0 i4 x0 g0 t0 m0 kv=269 inst<=1",
+      "intervals": 18,
+      "sum_ms": 1.024748,
+      "median_ms": 0.054812,
+      "p90_ms": 0.07025
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 512x512x0 s1 d=250:C/S draws=8 d0 i8 x0 g0 t0 m0 kv=264 inst<=1",
+      "intervals": 2,
+      "sum_ms": 0.9888750000000001,
+      "median_ms": 0.49443750000000003,
+      "p90_ms": 0.910958
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=21 d0 i21 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 12,
+      "sum_ms": 0.967582,
+      "median_ms": 0.0778125,
+      "p90_ms": 0.098083
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:C/S st=C/S draws=27 d0 i27 x0 g0 t0 m0 kv=578 inst<=12",
+      "intervals": 1,
+      "sum_ms": 0.965792,
+      "median_ms": 0.965792,
+      "p90_ms": 0.965792
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x1 s1 c0=70:L/S draws=2 d0 i2 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 122,
+      "sum_ms": 0.9436249999999998,
+      "median_ms": 0.0079375,
+      "p90_ms": 0.009459
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:C/S c1=115:C/S draws=2 d0 i2 x0 g0 t0 m0 kv=1 inst<=13",
+      "intervals": 1,
+      "sum_ms": 0.812125,
+      "median_ms": 0.812125,
+      "p90_ms": 0.812125
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=80:C/SR d=260:L/S st=L/S draws=60 d0 i60 x0 g0 t0 m0 kv=2172 inst<=2",
+      "intervals": 2,
+      "sum_ms": 0.7984579999999999,
+      "median_ms": 0.39922899999999995,
+      "p90_ms": 0.530708
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=5 d0 i5 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 106,
+      "sum_ms": 0.7846220000000002,
+      "median_ms": 0.0075,
+      "p90_ms": 0.01075
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=2 d0 i2 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 122,
+      "sum_ms": 0.7297099999999999,
+      "median_ms": 0.0059375,
+      "p90_ms": 0.00725
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=16 d0 i16 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 17,
+      "sum_ms": 0.7235010000000001,
+      "median_ms": 0.039209,
+      "p90_ms": 0.050416
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=22 d0 i22 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 8,
+      "sum_ms": 0.681874,
+      "median_ms": 0.080333,
+      "p90_ms": 0.085458
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=92:C/S d=260:L/S st=L/S draws=28 d0 i28 x0 g0 t0 m0 kv=578 inst<=10",
+      "intervals": 1,
+      "sum_ms": 0.64275,
+      "median_ms": 0.64275,
+      "p90_ms": 0.64275
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=17 d0 i17 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 13,
+      "sum_ms": 0.552916,
+      "median_ms": 0.039667,
+      "p90_ms": 0.047584
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 96,
+      "sum_ms": 0.5355870000000001,
+      "median_ms": 0.005875,
+      "p90_ms": 0.0065
+    },
+    {
+      "channel": "Compute",
+      "label": "C dispatches=1",
+      "intervals": 124,
+      "sum_ms": 0.5103769999999997,
+      "median_ms": 0.0039585,
+      "p90_ms": 0.004625
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=80:C/SR d=260:L/S st=L/S draws=60 d0 i60 x0 g0 t0 m0 kv=2172 inst<=2",
+      "intervals": 2,
+      "sum_ms": 0.48883299999999996,
+      "median_ms": 0.24441649999999998,
+      "p90_ms": 0.315417
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=5 d0 i5 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 107,
+      "sum_ms": 0.4860440000000001,
+      "median_ms": 0.00425,
+      "p90_ms": 0.006291
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s1 c0=10:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=21 inst<=3528",
+      "intervals": 123,
+      "sum_ms": 0.4156689999999998,
+      "median_ms": 0.003709,
+      "p90_ms": 0.004166
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=15 d0 i15 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 10,
+      "sum_ms": 0.414,
+      "median_ms": 0.039667,
+      "p90_ms": 0.045208
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 96,
+      "sum_ms": 0.394504,
+      "median_ms": 0.004375,
+      "p90_ms": 0.004875
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 31,
+      "sum_ms": 0.254252,
+      "median_ms": 0.007916,
+      "p90_ms": 0.010875
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=80:C/SR d=260:L/S st=L/S draws=28 d0 i28 x0 g0 t0 m0 kv=19 inst<=2",
+      "intervals": 1,
+      "sum_ms": 0.240584,
+      "median_ms": 0.240584,
+      "p90_ms": 0.240584
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=14 d0 i14 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 6,
+      "sum_ms": 0.23933300000000002,
+      "median_ms": 0.038646,
+      "p90_ms": 0.04275
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 31,
+      "sum_ms": 0.22008299999999992,
+      "median_ms": 0.004417,
+      "p90_ms": 0.011042
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=19 d0 i19 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 22,
+      "sum_ms": 0.218582,
+      "median_ms": 0.009479,
+      "p90_ms": 0.0125
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 1,
+      "sum_ms": 0.218292,
+      "median_ms": 0.218292,
+      "p90_ms": 0.218292
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=5 d0 i5 x0 g0 t0 m0 kv=29 inst<=10",
+      "intervals": 6,
+      "sum_ms": 0.20245799999999997,
+      "median_ms": 0.0321245,
+      "p90_ms": 0.032542
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=54 d0 i54 x0 g0 t0 m0 kv=1 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.193542,
+      "median_ms": 0.193542,
+      "p90_ms": 0.193542
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=4 d0 i4 x0 g0 t0 m0 kv=17 inst<=2",
+      "intervals": 1,
+      "sum_ms": 0.178416,
+      "median_ms": 0.178416,
+      "p90_ms": 0.178416
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=20 d0 i20 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 17,
+      "sum_ms": 0.17829299999999998,
+      "median_ms": 0.010583,
+      "p90_ms": 0.011209
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 12",
+      "intervals": 45,
+      "sum_ms": 0.16516399999999998,
+      "median_ms": 0.002958,
+      "p90_ms": 0.006291
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=18 d0 i18 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 16,
+      "sum_ms": 0.15391899999999997,
+      "median_ms": 0.0095005,
+      "p90_ms": 0.010541
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 17",
+      "intervals": 44,
+      "sum_ms": 0.14541900000000002,
+      "median_ms": 0.0033545,
+      "p90_ms": 0.003875
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 256x256x0 s1 d=250:L/S draws=32 d2 i30 x0 g0 t0 m0 kv=387 inst<=1",
+      "intervals": 2,
+      "sum_ms": 0.12412499999999999,
+      "median_ms": 0.06206249999999999,
+      "p90_ms": 0.072167
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=21 d0 i21 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 12,
+      "sum_ms": 0.12266699999999998,
+      "median_ms": 0.009667,
+      "p90_ms": 0.012584
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=5 d0 i5 x0 g0 t0 m0 kv=29 inst<=6",
+      "intervals": 3,
+      "sum_ms": 0.111958,
+      "median_ms": 0.038292,
+      "p90_ms": 0.040958
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=16 d0 i16 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 17,
+      "sum_ms": 0.105208,
+      "median_ms": 0.005708,
+      "p90_ms": 0.007667
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=56 d0 i56 x0 g0 t0 m0 kv=2 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.100708,
+      "median_ms": 0.100708,
+      "p90_ms": 0.100708
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=5 d0 i5 x0 g0 t0 m0 kv=29 inst<=4",
+      "intervals": 3,
+      "sum_ms": 0.09787499999999999,
+      "median_ms": 0.034791,
+      "p90_ms": 0.034959
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=4 d0 i4 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 10,
+      "sum_ms": 0.09245900000000001,
+      "median_ms": 0.0092915,
+      "p90_ms": 0.010959
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 512x512x0 s1 d=250:C/S draws=8 d0 i8 x0 g0 t0 m0 kv=264 inst<=1",
+      "intervals": 2,
+      "sum_ms": 0.091125,
+      "median_ms": 0.0455625,
+      "p90_ms": 0.061291
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 256x256x0 s1 d=250:L/S draws=28 d2 i26 x0 g0 t0 m0 kv=399 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.089208,
+      "median_ms": 0.089208,
+      "p90_ms": 0.089208
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=22 d0 i22 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 8,
+      "sum_ms": 0.088499,
+      "median_ms": 0.0104375,
+      "p90_ms": 0.012042
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=17 d0 i17 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 13,
+      "sum_ms": 0.079958,
+      "median_ms": 0.005708,
+      "p90_ms": 0.00725
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=15 d0 i15 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 10,
+      "sum_ms": 0.057499999999999996,
+      "median_ms": 0.0057295,
+      "p90_ms": 0.006375
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 256x256x0 s1 d=250:L/S draws=34 d2 i32 x0 g0 t0 m0 kv=387 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.056417,
+      "median_ms": 0.056417,
+      "p90_ms": 0.056417
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=4 d0 i4 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 10,
+      "sum_ms": 0.05620899999999999,
+      "median_ms": 0.0055414999999999996,
+      "p90_ms": 0.006042
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=54 d0 i54 x0 g0 t0 m0 kv=1 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.05325,
+      "median_ms": 0.05325,
+      "p90_ms": 0.05325
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 256x256x0 s1 d=250:L/S draws=134 d8 i126 x0 g0 t0 m0 kv=1629 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.05125,
+      "median_ms": 0.05125,
+      "p90_ms": 0.05125
+    },
+    {
+      "channel": "Compute",
+      "label": "C dispatches=2",
+      "intervals": 5,
+      "sum_ms": 0.042501000000000004,
+      "median_ms": 0.004667,
+      "p90_ms": 0.019083
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 1",
+      "intervals": 2,
+      "sum_ms": 0.039833,
+      "median_ms": 0.0199165,
+      "p90_ms": 0.032417
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 256x256x0 s1 d=250:L/S draws=32 d2 i30 x0 g0 t0 m0 kv=387 inst<=1",
+      "intervals": 2,
+      "sum_ms": 0.039166,
+      "median_ms": 0.019583,
+      "p90_ms": 0.023833
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=5 d0 i5 x0 g0 t0 m0 kv=29 inst<=8",
+      "intervals": 1,
+      "sum_ms": 0.039125,
+      "median_ms": 0.039125,
+      "p90_ms": 0.039125
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 256x256x0 s1 d=250:L/S draws=34 d2 i32 x0 g0 t0 m0 kv=387 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.037625,
+      "median_ms": 0.037625,
+      "p90_ms": 0.037625
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=115:C/S d=260:L/S st=L/S draws=4 d0 i4 x0 g0 t0 m0 kv=17 inst<=2",
+      "intervals": 1,
+      "sum_ms": 0.037292,
+      "median_ms": 0.037292,
+      "p90_ms": 0.037292
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=3 d0 i3 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 4,
+      "sum_ms": 0.037,
+      "median_ms": 0.00925,
+      "p90_ms": 0.011
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 2",
+      "intervals": 2,
+      "sum_ms": 0.035667000000000004,
+      "median_ms": 0.017833500000000002,
+      "p90_ms": 0.01975
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=14 d0 i14 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 6,
+      "sum_ms": 0.032749,
+      "median_ms": 0.005228999999999999,
+      "p90_ms": 0.00575
+    },
+    {
+      "channel": "Vertex",
+      "label": "ClearPass color 1024x1024x0 fmt=125",
+      "intervals": 1,
+      "sum_ms": 0.032084,
+      "median_ms": 0.032084,
+      "p90_ms": 0.032084
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 c0=80:C/SR d=260:L/S st=L/S draws=28 d0 i28 x0 g0 t0 m0 kv=19 inst<=2",
+      "intervals": 1,
+      "sum_ms": 0.031708,
+      "median_ms": 0.031708,
+      "p90_ms": 0.031708
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 3",
+      "intervals": 1,
+      "sum_ms": 0.031625,
+      "median_ms": 0.031625,
+      "p90_ms": 0.031625
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 25",
+      "intervals": 1,
+      "sum_ms": 0.03025,
+      "median_ms": 0.03025,
+      "p90_ms": 0.03025
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 16",
+      "intervals": 1,
+      "sum_ms": 0.029334,
+      "median_ms": 0.029334,
+      "p90_ms": 0.029334
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 14",
+      "intervals": 1,
+      "sum_ms": 0.029042,
+      "median_ms": 0.029042,
+      "p90_ms": 0.029042
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 19",
+      "intervals": 1,
+      "sum_ms": 0.028959,
+      "median_ms": 0.028959,
+      "p90_ms": 0.028959
+    },
+    {
+      "channel": "Compute",
+      "label": "C dispatches=8",
+      "intervals": 1,
+      "sum_ms": 0.0285,
+      "median_ms": 0.0285,
+      "p90_ms": 0.0285
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 21",
+      "intervals": 1,
+      "sum_ms": 0.028417,
+      "median_ms": 0.028417,
+      "p90_ms": 0.028417
+    },
+    {
+      "channel": "Vertex",
+      "label": "ClearPass color 640x480x0 fmt=115",
+      "intervals": 2,
+      "sum_ms": 0.026791,
+      "median_ms": 0.0133955,
+      "p90_ms": 0.015125
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 17",
+      "intervals": 1,
+      "sum_ms": 0.026041,
+      "median_ms": 0.026041,
+      "p90_ms": 0.026041
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 1",
+      "intervals": 2,
+      "sum_ms": 0.025667000000000002,
+      "median_ms": 0.012833500000000001,
+      "p90_ms": 0.024167
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 19",
+      "intervals": 1,
+      "sum_ms": 0.024,
+      "median_ms": 0.024,
+      "p90_ms": 0.024
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 18",
+      "intervals": 1,
+      "sum_ms": 0.02375,
+      "median_ms": 0.02375,
+      "p90_ms": 0.02375
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 20",
+      "intervals": 1,
+      "sum_ms": 0.023583,
+      "median_ms": 0.023583,
+      "p90_ms": 0.023583
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=3 d0 i3 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 4,
+      "sum_ms": 0.02229,
+      "median_ms": 0.005520499999999999,
+      "p90_ms": 0.006083
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 18",
+      "intervals": 9,
+      "sum_ms": 0.021623999999999997,
+      "median_ms": 0.002459,
+      "p90_ms": 0.002708
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 26",
+      "intervals": 1,
+      "sum_ms": 0.02125,
+      "median_ms": 0.02125,
+      "p90_ms": 0.02125
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 27",
+      "intervals": 1,
+      "sum_ms": 0.01975,
+      "median_ms": 0.01975,
+      "p90_ms": 0.01975
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 22",
+      "intervals": 1,
+      "sum_ms": 0.019708,
+      "median_ms": 0.019708,
+      "p90_ms": 0.019708
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 13",
+      "intervals": 1,
+      "sum_ms": 0.019625,
+      "median_ms": 0.019625,
+      "p90_ms": 0.019625
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 15",
+      "intervals": 1,
+      "sum_ms": 0.019542,
+      "median_ms": 0.019542,
+      "p90_ms": 0.019542
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 11",
+      "intervals": 1,
+      "sum_ms": 0.019,
+      "median_ms": 0.019,
+      "p90_ms": 0.019
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 1,
+      "sum_ms": 0.018959,
+      "median_ms": 0.018959,
+      "p90_ms": 0.018959
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 12",
+      "intervals": 1,
+      "sum_ms": 0.018625,
+      "median_ms": 0.018625,
+      "p90_ms": 0.018625
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=2",
+      "intervals": 3,
+      "sum_ms": 0.0185,
+      "median_ms": 0.006667,
+      "p90_ms": 0.00825
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 7",
+      "intervals": 1,
+      "sum_ms": 0.018375,
+      "median_ms": 0.018375,
+      "p90_ms": 0.018375
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 24",
+      "intervals": 1,
+      "sum_ms": 0.018208,
+      "median_ms": 0.018208,
+      "p90_ms": 0.018208
+    },
+    {
+      "channel": "Vertex",
+      "label": "ClearPass color 1024x1024x0 fmt=80",
+      "intervals": 1,
+      "sum_ms": 0.017375,
+      "median_ms": 0.017375,
+      "p90_ms": 0.017375
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:C/S c1=115:C/S draws=2 d0 i2 x0 g0 t0 m0 kv=1 inst<=13",
+      "intervals": 1,
+      "sum_ms": 0.017209,
+      "median_ms": 0.017209,
+      "p90_ms": 0.017209
+    },
+    {
+      "channel": "Vertex",
+      "label": "ClearPass color 1024x1024x0 fmt=115",
+      "intervals": 1,
+      "sum_ms": 0.016833,
+      "median_ms": 0.016833,
+      "p90_ms": 0.016833
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 5",
+      "intervals": 1,
+      "sum_ms": 0.015959,
+      "median_ms": 0.015959,
+      "p90_ms": 0.015959
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 4",
+      "intervals": 1,
+      "sum_ms": 0.015958,
+      "median_ms": 0.015958,
+      "p90_ms": 0.015958
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 13",
+      "intervals": 7,
+      "sum_ms": 0.015543,
+      "median_ms": 0.002209,
+      "p90_ms": 0.002417
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 6",
+      "intervals": 1,
+      "sum_ms": 0.015334,
+      "median_ms": 0.015334,
+      "p90_ms": 0.015334
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 512x512x0 s1 c0=80:L/S draws=22 d0 i22 x0 g0 t0 m0 kv=7 inst<=128",
+      "intervals": 1,
+      "sum_ms": 0.015166,
+      "median_ms": 0.015166,
+      "p90_ms": 0.015166
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:C/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=2",
+      "intervals": 1,
+      "sum_ms": 0.014833,
+      "median_ms": 0.014833,
+      "p90_ms": 0.014833
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=2",
+      "intervals": 3,
+      "sum_ms": 0.014542999999999999,
+      "median_ms": 0.005084,
+      "p90_ms": 0.006375
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 15",
+      "intervals": 6,
+      "sum_ms": 0.013208,
+      "median_ms": 0.002104,
+      "p90_ms": 0.002541
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 20",
+      "intervals": 6,
+      "sum_ms": 0.012544,
+      "median_ms": 0.002084,
+      "p90_ms": 0.00225
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 23",
+      "intervals": 1,
+      "sum_ms": 0.012458,
+      "median_ms": 0.012458,
+      "p90_ms": 0.012458
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 28",
+      "intervals": 1,
+      "sum_ms": 0.012333,
+      "median_ms": 0.012333,
+      "p90_ms": 0.012333
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 10",
+      "intervals": 1,
+      "sum_ms": 0.012125,
+      "median_ms": 0.012125,
+      "p90_ms": 0.012125
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 9",
+      "intervals": 1,
+      "sum_ms": 0.011833,
+      "median_ms": 0.011833,
+      "p90_ms": 0.011833
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 8",
+      "intervals": 1,
+      "sum_ms": 0.011042,
+      "median_ms": 0.011042,
+      "p90_ms": 0.011042
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 29",
+      "intervals": 1,
+      "sum_ms": 0.010917,
+      "median_ms": 0.010917,
+      "p90_ms": 0.010917
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 31",
+      "intervals": 1,
+      "sum_ms": 0.010625,
+      "median_ms": 0.010625,
+      "p90_ms": 0.010625
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 30",
+      "intervals": 1,
+      "sum_ms": 0.010542,
+      "median_ms": 0.010542,
+      "p90_ms": 0.010542
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 38",
+      "intervals": 1,
+      "sum_ms": 0.010333,
+      "median_ms": 0.010333,
+      "p90_ms": 0.010333
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 37",
+      "intervals": 1,
+      "sum_ms": 0.010292,
+      "median_ms": 0.010292,
+      "p90_ms": 0.010292
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 35",
+      "intervals": 1,
+      "sum_ms": 0.01025,
+      "median_ms": 0.01025,
+      "p90_ms": 0.01025
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1792x1008x0 s2 d=260:L/S st=L/S draws=56 d0 i56 x0 g0 t0 m0 kv=2 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.010083,
+      "median_ms": 0.010083,
+      "p90_ms": 0.010083
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 36",
+      "intervals": 1,
+      "sum_ms": 0.010042,
+      "median_ms": 0.010042,
+      "p90_ms": 0.010042
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 32",
+      "intervals": 1,
+      "sum_ms": 0.01,
+      "median_ms": 0.01,
+      "p90_ms": 0.01
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 33",
+      "intervals": 1,
+      "sum_ms": 0.009125,
+      "median_ms": 0.009125,
+      "p90_ms": 0.009125
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 256x256x0 s1 d=250:L/S draws=28 d2 i26 x0 g0 t0 m0 kv=399 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.009,
+      "median_ms": 0.009,
+      "p90_ms": 0.009
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=3",
+      "intervals": 1,
+      "sum_ms": 0.00825,
+      "median_ms": 0.00825,
+      "p90_ms": 0.00825
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 17",
+      "intervals": 1,
+      "sum_ms": 0.008166,
+      "median_ms": 0.008166,
+      "p90_ms": 0.008166
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=2 d0 i2 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.008042,
+      "median_ms": 0.008042,
+      "p90_ms": 0.008042
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=6 d0 i6 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 1,
+      "sum_ms": 0.00775,
+      "median_ms": 0.00775,
+      "p90_ms": 0.00775
+    },
+    {
+      "channel": "Fragment",
+      "label": "Blit Command 0",
+      "intervals": 1,
+      "sum_ms": 0.00775,
+      "median_ms": 0.00775,
+      "p90_ms": 0.00775
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 16",
+      "intervals": 1,
+      "sum_ms": 0.007542,
+      "median_ms": 0.007542,
+      "p90_ms": 0.007542
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 20",
+      "intervals": 1,
+      "sum_ms": 0.007417,
+      "median_ms": 0.007417,
+      "p90_ms": 0.007417
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 19",
+      "intervals": 1,
+      "sum_ms": 0.007416,
+      "median_ms": 0.007416,
+      "p90_ms": 0.007416
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 18",
+      "intervals": 1,
+      "sum_ms": 0.007333,
+      "median_ms": 0.007333,
+      "p90_ms": 0.007333
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 2",
+      "intervals": 1,
+      "sum_ms": 0.006542,
+      "median_ms": 0.006542,
+      "p90_ms": 0.006542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 34",
+      "intervals": 1,
+      "sum_ms": 0.006459,
+      "median_ms": 0.006459,
+      "p90_ms": 0.006459
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 7",
+      "intervals": 1,
+      "sum_ms": 0.006333,
+      "median_ms": 0.006333,
+      "p90_ms": 0.006333
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=3",
+      "intervals": 1,
+      "sum_ms": 0.006167,
+      "median_ms": 0.006167,
+      "p90_ms": 0.006167
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 3",
+      "intervals": 1,
+      "sum_ms": 0.005459,
+      "median_ms": 0.005459,
+      "p90_ms": 0.005459
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 512x512x0 s1 c0=80:L/S draws=22 d0 i22 x0 g0 t0 m0 kv=7 inst<=128",
+      "intervals": 1,
+      "sum_ms": 0.005458,
+      "median_ms": 0.005458,
+      "p90_ms": 0.005458
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=62",
+      "intervals": 1,
+      "sum_ms": 0.004834,
+      "median_ms": 0.004834,
+      "p90_ms": 0.004834
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 16",
+      "intervals": 2,
+      "sum_ms": 0.0045000000000000005,
+      "median_ms": 0.0022500000000000003,
+      "p90_ms": 0.002291
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=68",
+      "intervals": 1,
+      "sum_ms": 0.0045,
+      "median_ms": 0.0045,
+      "p90_ms": 0.0045
+    },
+    {
+      "channel": "Vertex",
+      "label": "Render Command 34",
+      "intervals": 1,
+      "sum_ms": 0.004375,
+      "median_ms": 0.004375,
+      "p90_ms": 0.004375
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 21",
+      "intervals": 2,
+      "sum_ms": 0.004208999999999999,
+      "median_ms": 0.0021044999999999996,
+      "p90_ms": 0.00225
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=62",
+      "intervals": 1,
+      "sum_ms": 0.004125,
+      "median_ms": 0.004125,
+      "p90_ms": 0.004125
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=2 d0 i2 x0 g0 t0 m0 kv=0 inst<=1",
+      "intervals": 1,
+      "sum_ms": 0.004125,
+      "median_ms": 0.004125,
+      "p90_ms": 0.004125
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=68",
+      "intervals": 1,
+      "sum_ms": 0.004084,
+      "median_ms": 0.004084,
+      "p90_ms": 0.004084
+    },
+    {
+      "channel": "Fragment",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=20",
+      "intervals": 1,
+      "sum_ms": 0.004042,
+      "median_ms": 0.004042,
+      "p90_ms": 0.004042
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S draws=6 d0 i6 x0 g0 t0 m0 kv=0 inst<=13",
+      "intervals": 1,
+      "sum_ms": 0.003875,
+      "median_ms": 0.003875,
+      "p90_ms": 0.003875
+    },
+    {
+      "channel": "Vertex",
+      "label": "R 1024x1024x0 s1 c0=125:L/S c1=115:L/S c2=80:L/S c3=80:L/S draws=1 d0 i1 x0 g0 t0 m0 kv=0 inst<=20",
+      "intervals": 1,
+      "sum_ms": 0.003625,
+      "median_ms": 0.003625,
+      "p90_ms": 0.003625
+    },
+    {
+      "channel": "Fragment",
+      "label": "ClearPass color 640x480x0 fmt=115",
+      "intervals": 2,
+      "sum_ms": 0.0035830000000000002,
+      "median_ms": 0.0017915000000000001,
+      "p90_ms": 0.001958
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 2",
+      "intervals": 2,
+      "sum_ms": 0.003083,
+      "median_ms": 0.0015415,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Compute",
+      "label": "Blit Command 14",
+      "intervals": 1,
+      "sum_ms": 0.002667,
+      "median_ms": 0.002667,
+      "p90_ms": 0.002667
+    },
+    {
+      "channel": "Compute",
+      "label": "<unlabelled>",
+      "intervals": 1,
+      "sum_ms": 0.002583,
+      "median_ms": 0.002583,
+      "p90_ms": 0.002583
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 4",
+      "intervals": 1,
+      "sum_ms": 0.002084,
+      "median_ms": 0.002084,
+      "p90_ms": 0.002084
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 30",
+      "intervals": 1,
+      "sum_ms": 0.002,
+      "median_ms": 0.002,
+      "p90_ms": 0.002
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 9",
+      "intervals": 1,
+      "sum_ms": 0.001917,
+      "median_ms": 0.001917,
+      "p90_ms": 0.001917
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 29",
+      "intervals": 1,
+      "sum_ms": 0.001917,
+      "median_ms": 0.001917,
+      "p90_ms": 0.001917
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 36",
+      "intervals": 1,
+      "sum_ms": 0.001917,
+      "median_ms": 0.001917,
+      "p90_ms": 0.001917
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 31",
+      "intervals": 1,
+      "sum_ms": 0.001916,
+      "median_ms": 0.001916,
+      "p90_ms": 0.001916
+    },
+    {
+      "channel": "Fragment",
+      "label": "ClearPass color 1024x1024x0 fmt=125",
+      "intervals": 1,
+      "sum_ms": 0.001916,
+      "median_ms": 0.001916,
+      "p90_ms": 0.001916
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 24",
+      "intervals": 1,
+      "sum_ms": 0.001875,
+      "median_ms": 0.001875,
+      "p90_ms": 0.001875
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 35",
+      "intervals": 1,
+      "sum_ms": 0.001875,
+      "median_ms": 0.001875,
+      "p90_ms": 0.001875
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 14",
+      "intervals": 1,
+      "sum_ms": 0.001792,
+      "median_ms": 0.001792,
+      "p90_ms": 0.001792
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 25",
+      "intervals": 1,
+      "sum_ms": 0.00175,
+      "median_ms": 0.00175,
+      "p90_ms": 0.00175
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 23",
+      "intervals": 1,
+      "sum_ms": 0.001625,
+      "median_ms": 0.001625,
+      "p90_ms": 0.001625
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 11",
+      "intervals": 1,
+      "sum_ms": 0.001583,
+      "median_ms": 0.001583,
+      "p90_ms": 0.001583
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 3",
+      "intervals": 1,
+      "sum_ms": 0.001542,
+      "median_ms": 0.001542,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 6",
+      "intervals": 1,
+      "sum_ms": 0.001542,
+      "median_ms": 0.001542,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 8",
+      "intervals": 1,
+      "sum_ms": 0.001542,
+      "median_ms": 0.001542,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 12",
+      "intervals": 1,
+      "sum_ms": 0.001542,
+      "median_ms": 0.001542,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 15",
+      "intervals": 1,
+      "sum_ms": 0.001542,
+      "median_ms": 0.001542,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 28",
+      "intervals": 1,
+      "sum_ms": 0.001542,
+      "median_ms": 0.001542,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 37",
+      "intervals": 1,
+      "sum_ms": 0.001542,
+      "median_ms": 0.001542,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 38",
+      "intervals": 1,
+      "sum_ms": 0.001542,
+      "median_ms": 0.001542,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Fragment",
+      "label": "ClearPass color 1024x1024x0 fmt=80",
+      "intervals": 1,
+      "sum_ms": 0.001542,
+      "median_ms": 0.001542,
+      "p90_ms": 0.001542
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 7",
+      "intervals": 1,
+      "sum_ms": 0.001541,
+      "median_ms": 0.001541,
+      "p90_ms": 0.001541
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 10",
+      "intervals": 1,
+      "sum_ms": 0.0015,
+      "median_ms": 0.0015,
+      "p90_ms": 0.0015
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 13",
+      "intervals": 1,
+      "sum_ms": 0.0015,
+      "median_ms": 0.0015,
+      "p90_ms": 0.0015
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 21",
+      "intervals": 1,
+      "sum_ms": 0.0015,
+      "median_ms": 0.0015,
+      "p90_ms": 0.0015
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 22",
+      "intervals": 1,
+      "sum_ms": 0.0015,
+      "median_ms": 0.0015,
+      "p90_ms": 0.0015
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 26",
+      "intervals": 1,
+      "sum_ms": 0.0015,
+      "median_ms": 0.0015,
+      "p90_ms": 0.0015
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 27",
+      "intervals": 1,
+      "sum_ms": 0.0015,
+      "median_ms": 0.0015,
+      "p90_ms": 0.0015
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 33",
+      "intervals": 1,
+      "sum_ms": 0.0015,
+      "median_ms": 0.0015,
+      "p90_ms": 0.0015
+    },
+    {
+      "channel": "Fragment",
+      "label": "ClearPass color 1024x1024x0 fmt=115",
+      "intervals": 1,
+      "sum_ms": 0.0015,
+      "median_ms": 0.0015,
+      "p90_ms": 0.0015
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 5",
+      "intervals": 1,
+      "sum_ms": 0.001458,
+      "median_ms": 0.001458,
+      "p90_ms": 0.001458
+    },
+    {
+      "channel": "Fragment",
+      "label": "Render Command 32",
+      "intervals": 1,
+      "sum_ms": 0.001458,
+      "median_ms": 0.001458,
+      "p90_ms": 0.001458
+    }
+  ],
+  "allocated_size_bytes": {
+    "min": 1133559808,
+    "median": 1681735680.0,
+    "max": 2025242624
+  },
+  "recorded_counter_metadata": [
+    {
+      "counter-id": 0,
+      "name": "RT Unit Active",
+      "description": "Percentage of GPU Cores where raytracing unit is active.",
+      "type": "Percentage"
+    }
+  ],
+  "limitations": [
+    "Tiler and renderer intervals overlap; do not add channel totals into frame time.",
+    "Pass labels group matching signatures, not unique shader/functional identity.",
+    "Trace frame IDs differ from DXMT Present IDs; do not join separate captures by frame number.",
+    "currentAllocatedSize is Metal device allocation size, not measured resident VRAM.",
+    "Only the recorded counter names are available; no DRAM bandwidth is inferred.",
+    "This is a profiler run, not an uninstrumented performance comparison."
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "tests/in_process/depth_foveation_probe.h": "02be5ad1b5d447c78e698784f162a39a1c801e07d8e475d5a330db05a60fd0b0",
+  "tests/in_process/depth_foveation_probe_native.m": "83a05778e6ceff45d4fcc3dda4f5384f18b5440288b35b7e92b07a8f2f23548e",
+  "tests/windows/dxmt_depth_foveation_probe.cpp": "8a04d8c34fdcacc8add5d87636017b8979d21eb7bcebf44c46b89f7a19fa4e75",
+  "tests/windows/dxmt_joined_prepass_probe.h": "678db0f9d9e78e5f9ee8bb3bbd8056d0bd4f860287665520e09b2740f13b75b4",
+  "build-in-process/depth-foveation-probe/dxmt_depth_foveation_probe.exe": "a6b4123619885bebedc21ad817c3fada50d0c3be70ac1021814d5f49bfcd2fa9",
+  "build-in-process/depth-foveation-probe/x86_64-windows/wine_depth_foveation_probe.dll": "ad1fc3fc2f4f75a02eddc09f8360c462cf66164036c64884ff4b85ba335f4108",
+  "build-in-process/depth-foveation-probe/x86_64-unix/wine_depth_foveation_probe.so": "9b1b5413067bf989f01f83326b5aebdec1351eb02a0172f780fe858d28713511",
+  "build-in-process/exd-ngx/wine/lib/wine/x86_64-windows/d3d11.dll": "c3dfd4f463af7ff610dee04ce7dc8087141ac9a0ecce1642805d2fe9b2b85722",
+  "build-in-process/exd-ngx/wine/lib/wine/x86_64-windows/winemetal.dll": "4c2d930ada633d03ac534f0aa09d3a6a9751bfd9eaafbbddd5e3aa00c467ffee",
+  "build-in-process/exd-ngx/wine/lib/wine/x86_64-unix/winemetal.so": "ee208b9b4e48e2998ccb5e3695abd066442be6cc5911dc401b11949d5dca3521"
+}

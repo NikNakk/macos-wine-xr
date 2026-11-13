@@ -1,0 +1,361 @@
+# Implicit foveation in KosmicKrisp (prototype)
+
+2026-11-12. Goal: foveate Vulkan and OpenGL (Zink) applications that do not use
+fragment density maps, as DXMT's stay-warped path does for D3D11
+([gaze-directed stay-warped foveation](dxmt-gaze-foveation.md)).
+
+**State: Google Earth VR is foveated and its submitted image matches the
+unfoveated one, on the simulator at 896×1007 and at 2800×2856 per eye.** The
+game's GPU work per eye falls from 13.3 ms to 10.3 ms at the larger size. Fixed
+map only (no gaze), one application, one dark scene, not worn, nothing
+installed. The two faults of the first version are found and fixed.
+
+## What exists already
+
+The KosmicKrisp branch (`~/Code/alyx-native/workspace/kk-zink`) has experimental
+`VK_EXT_fragment_density_map` on Metal rate maps
+(`MESA_KK_EXPERIMENTAL=fdm_rate`, `kk_fdm.c`), written for native Alyx. Both
+shader translations are decided at run time, per image:
+
+- sampled and fetched reads translate their coordinates when the image's
+  descriptor carries rate parameters marked valid
+  (`kk_nir_lower_descriptors.c`);
+- the fragment position is converted when the pass publishes parameters in the
+  root table (`kk_shader.c`).
+
+So an application that does not opt in needs only a policy and the cases the
+extension lets a driver skip.
+
+## Google Earth VR's frame
+
+Through Zink, per frame (B is one 4× multisampled colour target holding both
+eyes side by side, D its depth, T the single-sample texture Earth VR submits,
+F another single-sample texture of the same size):
+
+1. render F; render B and D; render F
+2. render B and D with a resolve attachment into T
+3. render B and D again
+4. `vkCmdResolveImage` B into T
+5. render T
+
+The final image comes from step 4. xrizer imports T into DXMT and flips it into
+the swapchain ([zink-kosmickrisp.md](zink-kosmickrisp.md)).
+
+## The prototype
+
+Private copy `build-in-process/kk-fov-src`, build `kk-fov-x86_64`, Zink root
+`build-in-process/zink-fov`; change in
+`patches/kosmickrisp/0001-implicit-foveation-prototype.patch`. Run with
+`build-in-process/kk-fov-tools/earth.zsh TAG [SECONDS]`; `FOV=1792x1007` turns
+it on, `HIRES=1 FOV=5600x2856` uses the high-resolution simulator.
+
+`KK_IMPLICIT_FDM=WIDTHxHEIGHT[,OUTER[,CORE,EDGE]]` with
+`MESA_KK_EXPERIMENTAL=fdm_rate`:
+
+- multisampled attachment images of exactly that size are created as subsampled
+  images; nothing else is foveated, so the submitted texture stays ordinary and
+  xrizer, DXMT and the compositor are unchanged;
+- a pass over them with no application density map gets a driver-built one: two
+  full-rate cores side by side, OUTER the peripheral rate per axis (0.3), CORE
+  and EDGE the full-rate and outer radii as fractions of half an eye's width
+  (0.35, 0.75);
+- every pipeline gets the fragment-position conversion and every sampler the
+  coordinate translation;
+- `vkCmdResolveImage` from such an image into an ordinary one un-warps with no
+  new code: the common draw-based resolve fetches texels by position and the
+  existing fetch translation sends each fetch through the map (nearest physical
+  texel, all samples averaged);
+- a resolve *attachment* into an ordinary image is redirected to a hidden
+  single-sample image in the same foveated layout, so the pass stays foveated;
+  after the pass a sampled blit copies it, through the map and with linear
+  filtering, into the application's target.
+
+## Results
+
+| | Ordinary | Foveated |
+|---|---|---|
+| 896×1007 per eye: image, mean difference from ordinary (0–255) | – | 0.10 (two ordinary-path runs differ by 0.09) |
+| 2800×2856 per eye: image, compared at 1000 px | – | 0.01; centre 0.00 |
+| 2800×2856 per eye: xrizer's wait for the game's GL work, per eye | 13.3–13.4 ms | 10.2–10.4 ms (9.3–9.9 ms without the blit after the first resolve, which Earth VR does not need) |
+| 2800×2856 per eye: frames per second | 27.8–28.9 | 28.7–30.0 |
+| Physical size of the foveated target | 5600×2856 | 3968×2000 (49.6% of the pixels) |
+
+All passes over the multisampled target were rate-mapped (none at full rate).
+The frame rate hardly moves because the simulator paces at 60 Hz and both runs
+sit at half of that; the GL wait is the measure. The scene is the night side of
+the globe, dark and low in detail, so the image comparison is a weak test of
+the periphery.
+
+## Faults found on the way
+
+- **Push descriptors were not preserved across the driver's internal draws.**
+  `kk_meta_begin` saved the pointer to the application's pushed set 0 and
+  `kk_meta_end` restored the pointer, but the internal draw pushes into the same
+  object, so the application's descriptors were overwritten. Zink keeps using
+  its pushed set from one pass to the next, so any internal draw at the end of a
+  pass (the blit above, or the common resolve) left its later draws with the
+  wrong resources and the frame black, with or without foveation. The contents
+  are now saved and restored. This is a bug in the branch itself, not only in
+  this prototype; applications are not told about an internal draw at the end
+  of a pass and cannot be expected to push again.
+- **The fragment-position conversion was not applied.** The first version set
+  the shader key but not the condition that runs the lowering, so
+  `gl_FragCoord` stayed in physical pixels. One Zink shader (a multisample copy
+  that fetches at the fragment position) then had its fetch mapped twice, which
+  gave a mosaic; with the conversion applied, translating the application's
+  fetches is correct and is on.
+- A resolve at the end of a pass is not the last word: Earth VR resolves again
+  explicitly (step 4), which hid the blit's result. With that explicit resolve
+  skipped (`KK_IMPLICIT_SKIP_EXPLICIT=1`) the blit alone gives the same image
+  (mean difference 0.10).
+
+## Open
+
+- The map is fixed, sized by an environment variable, and assumes both eyes
+  side by side in one layer. The gaze hook exists (`kk_fdm_set_gaze`) but
+  nothing calls it here.
+- The explicit resolve un-warps by nearest texel, with no filtering.
+- Only Earth VR has been run, on one dark, low-detail scene. A Vulkan
+  application that renders straight into the runtime's swapchain images is not
+  covered by this route.
+- Single-sample eye-sized targets are left ordinary, so an application that
+  renders without multisampling is not foveated.
+
+Diagnostic switches kept in the prototype: `KK_IMPLICIT_TRACE=1` (each distinct
+image operation once), `KK_IMPLICIT_SEQ=N` (60 operations in order from the
+Nth), `KK_IMPLICIT_NOMAP=1`, `KK_IMPLICIT_NO_FRAGCOORD=1`,
+`KK_IMPLICIT_NO_SAMPLE=1`, `KK_IMPLICIT_NO_FETCH=1`,
+`KK_IMPLICIT_NO_FETCH_APP=1`, `KK_IMPLICIT_NATIVE_RESOLVE=1`,
+`KK_IMPLICIT_NOFLAG=1`, `KK_IMPLICIT_SKIP_BLIT=1`, `KK_IMPLICIT_SKIP_EXPLICIT=1`,
+`KK_IMPLICIT_FULL_AREA_ONLY=1`, `KK_IMPLICIT_CLEAR_TEST=1`.
+
+## Map and gaze from the OpenXR bridge (2026-11-13)
+
+`KK_IMPLICIT_FDM=auto` makes the driver wait for the bridge instead of reading a
+size from the environment:
+
+- every multisampled attachment image is a candidate (it gets the parameter
+  buffer at creation, because descriptors copy that address when written);
+- `kk_implicit_fdm_set_profile(view_width, view_height, count, horizontal0,
+  horizontal1, vertical)`, exported from the driver, gives one eye's size and
+  the rate at `count` positions across each eye. A candidate whose size is one
+  eye, or two eyes side by side, becomes foveated at its next pass;
+- a new profile is taken up when a pass does not load the target (the start of
+  that target's frame), so one frame's passes share a layout.
+
+`MWXR_KK_FOVEATION=1|flip` in the bridge (`graphics_native.m`, build
+`build-in-process/kk-gaze-gate`) finds the driver in the process and sends the
+same angular profile the D3D11 path uses, per eye, whenever the quantised gaze
+or the eye size changes. `flip` reverses the vertical profile for OpenGL's
+bottom-up images. `earth.zsh` selects this with `BRIDGE=fixed|gaze|test|hold`.
+
+The gaze path runs only for D3D11 OpenXR sessions (Earth VR through xrizer's
+OpenGL mode). The direct Vulkan sessions added on 2026-11-12
+([vulkan-bridge.md](vulkan-bridge.md)) return before it, so Talos and No Man's
+Sky would need the same call from that path.
+
+### Simulator runs (2026-11-13)
+
+Earth VR only streams detail while the view moves, so a still simulated head
+leaves it on a dark loading screen. `sim-game.zsh` now takes `SIM_MOVE=wobble`
+(or `rotate`), which drops `SIMULATED_DESKTOP` so the head sways by itself.
+Earth VR chose a different eye size from run to run (896×1007 or 2800×2856); in
+`auto` mode the bridge reported each one and the driver followed it.
+
+| Run (`earth.zsh`, `SIM_MOVE=wobble`) | Eye | Gaze | GL wait per eye | Frames/s |
+|---|---|---|---|---|
+| baseline (`earth-base5`) | 2800×2856 | – | 18.5 ms | 22 |
+| `BRIDGE=hold` (`earth-hold`) | 2800×2856 | held ahead, 1 map | 8.1 ms | 45 |
+| baseline (`earth-base6`) | 896×1007 | – | 4.8 ms | 58 (paced) |
+| `BRIDGE=hold` (`earth-hold2`) | 896×1007 | held ahead, 1 map | 3.3 ms | 59 (paced) |
+| `BRIDGE=fixed` | 896×1007 | none (`valid=0`), fixed profile | 4.5 ms | 47–50 |
+| `BRIDGE=test` | 896×1007 | swept to ±22°, 398 map changes | 3.6 ms | 58 |
+
+- In every run each FDM pass was rate mapped, none fell back to full rate, and
+  the log showed only the baseline's three benign lines.
+- Images: the loaded scene is correct with held and swept gaze: no mosaic,
+  tears or misplaced tiles, and stepped edges only away from the gaze. The
+  black octagon outside the lens area is Earth VR's hidden-area mask; the
+  unfoveated `earth-hi-base` capture has it too.
+- With a moving head, runs are captured at different poses, so pixel
+  differences against the baseline (5.7–7.7 mean, larger in the full-rate
+  centre than the periphery) measure the motion, not foveation. Use a still
+  head after the scene has loaded for pixel comparisons.
+- The fixed environment-variable mode after the rework (`FOV=1792x1007`,
+  `earth-fixed3`) still maps every pass.
+
+## Vulkan games (2026-11-13)
+
+The gaze profile now also reaches KosmicKrisp from wineopenxr's direct Vulkan sessions
+([vulkan-bridge.md](vulkan-bridge.md)): on Talos the bridge found the driver, sent
+896×1007 and the held profile, and the driver received them. Nothing was foveated,
+because neither game has a target this prototype selects:
+
+- **Talos** renders each eye single-sampled into a 16-bit HDR colour target and a depth
+  target sized to the larger of the window and the eye (1920×1080 on the simulator,
+  2800×2856 in the headset), then bloom, tone-mapping, and a copy into per-eye 8-bit
+  images that are copied into the swapchain. `+gfx_iAntiAliasingSamples 4` is accepted
+  but the targets stay single-sampled. It needs single-sample selection with a
+  stay-warped boundary: map the eye-sized HDR and depth targets, translate the
+  post-process reads (already done for sampled reads), and unwarp before the first
+  copy or blit. Copies and blits of a warped image are the missing piece.
+- **NMS** uses `VK_KHR_fragment_shading_rate` (a shading-rate image from its
+  `DrawFoveationMap` compute shader), not fragment density maps. KosmicKrisp does not
+  offer the extension and Metal has no variable-rate shading, so its own foveation
+  cannot be switched on. Emulating it would still need the same warping and
+  unwarping as implicit foveation; its rate image would only replace the bridge's
+  profile. Its scene targets have not been traced yet: the main menu is a flat panel.
+
+## Single-sample targets (2026-11-13, Talos)
+
+`KK_IMPLICIT_SINGLE=1` (set for Talos by `scripts/steam-play-game-settings.zsh`) makes
+eye-sized single-sample attachments candidates too: colour targets that can be sampled
+and depth targets, not storage images or arrays, with or without mip levels.
+`KK_IMPLICIT_HALF=1` adds targets of exactly half the eye size, each with its own map of
+the same profile. They stay warped from pass to pass:
+
+- **Reads** by shaders are translated, as before. For a foveated image the translation
+  works in level-0 pixels whatever the view's base level.
+- **A pass is foveated whole or not at all.** If any attachment cannot be (another size,
+  a mip level, not a candidate), its attachments are never foveated; one that already
+  was goes back to ordinary and its translation is switched off (`not foveating ...`).
+  Talos's first attempt failed exactly here: a mipped 16-bit depth-derived target was
+  left ordinary while the depth buffer it shares a pass with was foveated.
+- **Mip levels** are made by blits of the image into itself. Those blits run "raw",
+  neither translated nor rate mapped, so every level keeps level 0's normalised layout.
+- **Raw copies** (`vkCmdCopyImage`, `vkCmdCopyImageToBuffer`) from a foveated image first
+  blit it, translated, into a hidden ordinary image of the same format, then copy that.
+  This keeps a copy's bit-for-bit meaning across formats (Talos copies UNORM eye images
+  into an sRGB swapchain). Copies between foveated images of one size are copied as
+  stored; copies of depth or of lower mip levels are not unwarped (logged).
+
+Talos on the high-resolution simulator (eye 2800×2856), start screen, still head,
+gaze held ahead. Its HDR target is sized to the larger of the window and the eye, so on
+the 896×1007 simulator it is 1920×1080 and nothing matches; the high-resolution
+simulator and the headset match.
+
+| Run | Foveated | GPU ms per frame (median) | Eye image vs baseline |
+|---|---|---|---|
+| baseline | – | 20.4 | – |
+| single, no rate map (`KK_IMPLICIT_NOMAP=1`) | path only | 22.0 | – |
+| single, default profile (34% of pixels) | 8 eye-sized | 20.7 | centre 0.5, whole 4.4 (blockier periphery) |
+| single + half | + 1 half-size | 19.4 | centre 0.5, whole 4.4 |
+| single, profile 0.1,5,10 (6.5% of pixels) | 8 eye-sized | 18.7 | – |
+| baseline at half resolution | – | 9.1 | – |
+
+GPU time is from `KK_QUEUE_TIMING=1` between the game's desktop presents. The images are
+right: in the periphery the same stones and edges, at a lower rate. The saving on this
+screen is small. Even at 6.5% of the pixels the foveated passes save about 3 ms, against
+about 1.6 ms of unwarp and translation overhead, while halving the resolution saves
+11 ms, so most of the resolution-dependent cost is in passes that are not mapped. Which
+ones needs per-pass GPU timing; KosmicKrisp has none yet. The start screen also may not
+represent play.
+
+The frame period here is 34–37 ms with about 20 ms of GPU work: the CPU side sets the
+rate. The Vulkan bridge waits on the CPU for each frame's GPU work before release
+([vulkan-bridge.md](vulkan-bridge.md)), which runs the game's CPU and GPU work back to
+back; GPU-side ordering would likely matter more for Talos than foveation.
+
+## Per-pass GPU timing (2026-11-13)
+
+`KK_PASS_TIMING=1` (`patches/kosmickrisp/0004-pass-timing.patch`, diagnostic) writes a
+precise GPU timestamp at the start of each Metal command buffer and the end of every
+encoder, resolves them into a buffer at the end of the command buffer, and every five
+seconds logs the time between stamps summed by pass shape (target size, colour and
+depth formats, samples, colour count, rate mapped or not) per presented frame. A pass's
+time is from the previous stamp, so a stall is charged to the pass that ends next (the
+0.8 ms on a tiny target below appears in both runs).
+
+Talos, high-resolution simulator, start screen, GPU-ordered release (above), ms per
+frame:
+
+| Passes | Unfoveated | Foveated (single + half, held, 34% of pixels) |
+|---|---|---|
+| HDR scene, eye size, with depth (5 per frame) | 5.9 | 4.3 |
+| 8-bit post-processing, eye size (4) | 2.7 | 1.9 |
+| half-size HDR (2) | 2.5 | 1.1 |
+| depth pre-pass into the mipped 16-bit target (2) | 1.6 | 1.2 |
+| unwarp blits before copies (2, new) | – | 0.7 |
+| copies and other transfers | 0.2 | 0.4 |
+| everything else (bloom chain, mirror, small passes) | 2.6 | 3.0 |
+| **total between stamps** | **15.5** | **12.6** |
+
+The frame-level measure agrees: 17.5 → 14.1 ms of GPU work per frame. The scene passes
+fall by only 27% while drawing 34% of the pixels, so they carry fixed work that a rate
+map does not reduce (geometry, five passes per frame). The unwarp blits and extra copies
+cost about 0.9 ms; rendering the last post-processing target ordinary instead of
+unwarping it afterwards would trade that for one full-rate pass. A narrower profile
+(the headset's real gaze) and play rather than the start screen are the next
+measurements.
+
+## In play (2026-11-13)
+
+**Talos, Cloud_1_01** (started directly, still head, gaze held ahead, high-resolution
+simulator, GPU-ordered release):
+
+| | GPU ms per frame | Frames per second |
+|---|---|---|
+| unfoveated | 21.3 | 40 |
+| single + half, default profile | 15.8 | 51 |
+
+| Passes (ms per frame) | Unfoveated | Foveated |
+|---|---|---|
+| HDR scene, eye size (4) | 7.5 | 3.6 |
+| 8-bit post-processing, eye size (4) | 3.2 | 2.4 |
+| half-size HDR (2) | 2.4 | 1.0 |
+| depth pre-pass (2) | 2.1 | 1.8 |
+| 256×256 float target (2, not foveated) | 2.2 | 1.2 |
+| copies and transfers | 2.0 | 2.3 |
+| unwarp before copies (2) | – | 0.7 |
+
+In play the scene pass halves. The image is right; in the periphery a high-contrast
+mosaic floor loses its thin dark grout at the outer rate and reads lighter (bottom
+corners differ by 38–52 mean levels from the baseline, the centre by 12, partly
+animation).
+
+**No Man's Sky** (in play on a planet, qwerty headset at 2800×2856 per eye):
+44 ms of GPU per frame (about 22 fps). One G-buffer pass into a 5600×2856 target (both
+eyes side by side, three colour attachments and depth) takes 27 ms; 44 compute
+dispatches take 10.7 ms; 38 small passes into 1920×1080 RGBA8 targets 1.9 ms. Nothing
+is foveated: its eye-sized colour and depth targets have storage usage (its compute
+passes read and write them), and the prototype leaves storage images alone. NMS's own
+foveation uses `VK_KHR_fragment_shading_rate`, which KosmicKrisp lacks.
+
+### Storage images and scaled targets (2026-11-13)
+
+- **`KK_IMPLICIT_STORAGE=1`**: storage-usage targets can be candidates. The storage
+  descriptor grew from 8 to 32 bytes (resource ID, rate parameters, level-0 size, base
+  layer; zero for ordinary images and texel buffers). Integer coordinates of
+  `imageLoad`, `imageStore` and atomics on a foveated image go through its rate map,
+  screen to physical, behind the same run-time `valid` flag as sampled reads; several
+  screen texels may store to one physical texel. Compute work still runs per screen
+  texel, so compute passes do not get cheaper.
+- **`KK_IMPLICIT_SCALED=1`**: targets that are the eye layout scaled down uniformly
+  (40–100%, the two scales within 0.8%, not power-of-two sizes) are candidates too,
+  each with its own map of the profile. NMS renders its scene at 3296×1696 (about 59%
+  of 5600×2856) and upscales. A first, looser rule (30%, within 2%) also took
+  1024×1024, 2048×2048 and 2048×1024 textures, because the eye is nearly square.
+- **Cache identity**: the implicit-foveation switches and `MESA_KK_EXPERIMENTAL` now
+  feed `pipelineCacheUUID`, so a pipeline cache an application saved in one mode is
+  not reused in another (KosmicKrisp itself has no disk cache).
+- `scripts/steam-play-game-settings.zsh` sets single, scaled and storage for NMS;
+  they only act with `MWXR_FOVEATION`.
+
+NMS in play at 2800×2856 per eye (new game each run, so a different random planet;
+`NMS_FRESH=1` in `vk-game.zsh` moves the test prefix's save aside, kept under
+`game-checks/nms-saves/`): about 56–60 ms of GPU per frame unfoveated, 42–46 ms
+foveated with held gaze. Foveated: the G-buffer pass at 5600×2856 (three colour
+attachments) 12.4 → 4.8 ms, the scaled scene pass (seven colour attachments) about
+13.5 → 6.9 ms, both measured on different planets. The images are coherent in both
+eyes (scene, hands, HUD and VR panels in place); the periphery shows stepped edges at
+the outer rate. Compute and transfers (about 12–14 ms) are unchanged.
+
+A later Talos recheck ran while the Mac was busier (unfoveated 27 ms, not 21.3): the
+foveated run gave 18.6 ms there, the same proportion, and the same image.
+
+## Next
+
+1. Talos and NMS in the headset with real gaze.
+2. Avoid the unwarp blits where the last pass before a copy can render ordinary.
+3. Decide whether the push-descriptor and occlusion-query fixes go into the
+   `kk-zink` branch on their own.

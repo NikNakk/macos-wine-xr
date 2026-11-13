@@ -1,0 +1,63 @@
+{
+  "runs": [
+    {
+      "name": "early-baseline",
+      "private_run": "build-in-process/exd-ngx/tbdr-20261109-144850-summary",
+      "frames": [
+        120,
+        600
+      ],
+      "compressed_rows_sha256": "a19a13a276bde1e54df6d9097a717c9391e16a9b778a0d0fbaa849118362001d"
+    },
+    {
+      "name": "early-detail",
+      "private_run": "build-in-process/exd-ngx/tbdr-20261109-145232-detail",
+      "frames": [
+        180,
+        210
+      ],
+      "compressed_rows_sha256": "74f6448d48c86ff5d976f624ad72c606e4981ea94c85f2cc918c55cc007edc15"
+    },
+    {
+      "name": "early-eager-pfv",
+      "private_run": "build-in-process/exd-ngx/tbdr-20261109-150528-summary",
+      "frames": [
+        120,
+        600
+      ],
+      "compressed_rows_sha256": "3245a14eb419c18f1148ae59b40df4c9a48592bc8ef71ada4fa76035b87f5c76"
+    },
+    {
+      "name": "loaded-baseline",
+      "private_run": "build-in-process/exd-ngx/tbdr-20261109-151718-summary",
+      "frames": [
+        900,
+        1600
+      ],
+      "compressed_rows_sha256": "4822b995e70bfca894d1a70ebe45d6682819d259b9f4708347386254d4a7e350"
+    },
+    {
+      "name": "loaded-detail",
+      "private_run": "build-in-process/exd-ngx/tbdr-20261109-152529-detail",
+      "frames": [
+        1200,
+        1230
+      ],
+      "compressed_rows_sha256": "1cbf7a557e5d1236dbfdfd4a4badeb4dffea955bda6d48bba56f06724e701c36"
+    }
+  ],
+  "source_base": "4c3a2f5ea661bd258c14cf8ccb6924791cc75a77",
+  "patches": [
+    "0001-immediate-context-metal-rate-map.patch",
+    "0002-target-specific-metal-rate-map.patch",
+    "0003-ngx-feature-routing-and-trace.patch",
+    "0004-scene-resource-provenance-trace.patch",
+    "0005-ngx-subrect-copy-and-validation.patch",
+    "0006-rate-map-position-translation.patch",
+    "0007-bounded-automatic-base-foveation.patch",
+    "0008-explicit-depth-msaa-diagnostic.patch",
+    "0009-passive-tbdr-audit.patch"
+  ],
+  "private_gpu_capture": "build-in-process/exd-ngx/tbdr-20261109-145724-capture/native-capture.gputrace",
+  "private_labelled_system_trace": "build-in-process/exd-ngx/tbdr-20261109-150817-system-trace/metal.trace"
+}

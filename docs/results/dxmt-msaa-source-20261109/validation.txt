@@ -1,0 +1,9 @@
+Sixteen complete MSAA source cases pass: 2x/4x, rates 1/0.5/0.75, Metal validation on; two modes, 65 pairs, 24 warm-up + 41 measured.
+Exact full-rate source before load and final image, exact ordinary depth/stencil, per-sample mapped-colour CPU oracle, typed view identity/coherence, ordinary MSAA shader read and partial render-load controls pass.
+Untouched samples preserved bitwise; intended samples modified; resolve/broadcast negative controls and plane witnesses detected.
+Direct timed consumer sample activation remains exact.
+Supplementary audit: 135 actually mapped render passes.
+Four HDR/source timing analyser tests pass.
+Existing depth/MSAA four cases plus disabled-import negative control, resolve-first sixteen cases, and previous HDR/stencil sixteen cases pass after shared native-coordinate refactor.
+No private DXMT production-source changes; pinned base plus thirteen patches reproduces all 307 source files.
+No EXD launch, installed configuration changes, generic recorder/resource-version implementation, headset/gaze validation or game FPS claim.

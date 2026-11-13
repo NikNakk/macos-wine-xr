@@ -1,0 +1,10 @@
+Final EXD audit: frames 1200-1201, two complete prepass/main draw snapshots, DSV read-only-depth and writable stencil confirmed; private settings restored.
+Game audit used patches 0001-0012, foveation disabled, simulated headset; no EXD correctness/performance claim.
+Final HDR/stencil matrix uses patches 0001-0013 and read-only-depth DSVs: 2x/4x, rates 1/0.5/0.75, Metal validation enabled.
+All ordinary/mapped/full-rate controls pass; masked-PS removal and stale-stencil failures detected; exact stencil-only replay restores marker without colour/depth changes; HDR resolve retains peak 4.0.
+Three actually mapped render passes per fixture case.
+Five shader/stencil analyser tests pass.
+Audit-off/on ordinary D3D11 regression passes with per-draw diagnostics enabled.
+Existing 16 joined cases, four depth/MSAA cases plus disabled-import control, and ten automatic foveation cases pass.
+Private DXMT build succeeds; patches 0001-0013 reproduce all 307 source files from pinned base.
+Game DXBC/disassembly and saved settings remain private and excluded from curated evidence.

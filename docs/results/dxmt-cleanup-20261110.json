@@ -1,0 +1,45 @@
+{
+  "reason": "Retiring disposable foveation experiments after performance review.",
+  "preserved": [
+    "All source changes and DXMT source snapshots",
+    "Patches 0001\u20130014, tests, scripts, documentation and curated results",
+    "Both EXD installations and their Wine runtimes/prefixes",
+    "Newer quad-view and lens-mask work, including exd-depth builds and captures",
+    "Exported trace XML and run logs alongside the removed raw captures"
+  ],
+  "removed": [
+    {
+      "path": "build-in-process/wine-foveation",
+      "allocated_kib_before": 1229324
+    },
+    {
+      "path": "build-in-process/prefix-foveation",
+      "allocated_kib_before": 926244
+    },
+    {
+      "path": "build-in-process/foveation-monado-arm64",
+      "allocated_kib_before": 399260
+    },
+    {
+      "path": "build-in-process/foveation-monado-x64",
+      "allocated_kib_before": 179048
+    },
+    {
+      "path": "build-in-process/dxmt-foveation-build",
+      "allocated_kib_before": 209416
+    },
+    {
+      "path": "build-in-process/depth-foveation-probe",
+      "allocated_kib_before": 298116
+    },
+    {
+      "path": "build-in-process/exd-ngx/tbdr-20261109-145724-capture/native-capture.gputrace",
+      "allocated_kib_before": 942244
+    },
+    {
+      "path": "build-in-process/exd-ngx/tbdr-20261109-150817-system-trace/metal.trace",
+      "allocated_kib_before": 194452
+    }
+  ],
+  "space_accounting": "Removed paths total 4.18 GiB according to du. APFS clones share physical blocks, including the private EXD installations, so directory totals are not physical space recovered."
+}
