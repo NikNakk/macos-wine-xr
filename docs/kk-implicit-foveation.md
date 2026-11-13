@@ -504,13 +504,32 @@ The rate images only fill the render-scale area (412×212 tiles of 700×357; the
 full rate), and the game also binds the render-scale image to that full-size pass.
 Captures stay in `build-in-process/game-checks/vrs-cap1` (game output, not committed).
 
+### Half precision and the quarter-size edge (2026-11-13)
+
+Patch `0008-relaxed-count-and-size-skip.patch`.
+
+- **Half precision.** Mesa's SPIR-V reader can turn `RelaxedPrecision` into 16-bit
+  arithmetic (`mediump_16bit_alu`), which KosmicKrisp does not set. `KK_COUNT_RELAXED=1`
+  counts the decorations as modules are created: NMS has 17 in about 1.5 million
+  arithmetic and conversion instructions across 7,200 modules. It asks for full
+  precision throughout, so this would gain nothing there.
+- **The quarter-size edge comes from compaction.** With 25% scaled targets, two compute
+  shaders (16×16 workgroups) write the 1648×848 images compacted to 1055×512. The edge
+  sits at row 512 of 848: below it the image is not rewritten. With the images mapped
+  but those dispatches at full size (`map quarter`), the edge is gone and the image is
+  clean, so the quarter-size targets themselves are safe, as the game's own VRS
+  suggests. Why the remap misses rows past the physical height for those two shaders
+  is not yet known. `KK_IMPLICIT_SKIP=WxH,...` excludes sizes from foveation;
+  excluding the 824×848 image did not help.
+
 ## Next
 
 1. Talos and NMS in the headset with real gaze.
 2. NMS's own graphics settings against its read-write compute pass (clouds or
    volumetrics, from the look of it).
-3. Find what reads NMS's 25% targets in the wrong layout (the horizontal edge), then
-   reconsider them (about 0.5 ms): the game coarse-shades several of them itself.
+3. Find why compaction of NMS's two 16×16 compute shaders on its 25% targets leaves
+   rows past the physical height unwritten; then turn the 25% targets on (about
+   0.5 ms; clean without compaction).
 4. Optionally limit NMS to the passes the game coarse-shades, as a quality fallback if
    the extra passes look wrong in the headset.
 5. Avoid the unwarp blits where the last pass before a copy can render ordinary.
