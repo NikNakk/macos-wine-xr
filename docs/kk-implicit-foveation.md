@@ -460,13 +460,59 @@ alternating within one session.
   safe for it. The levers left there are the game's own cloud, volumetric and
   render-scale settings.
 
+### What NMS's own VRS marks (2026-11-13)
+
+NMS has its own foveation through `VK_KHR_fragment_shading_rate`. Its binary names
+per-target shading-rate images at full, render-scale and half render-scale sizes
+(`HmdVRSTexture*`, `HmdDRSVRSTexture*`, `HmdHalfDRSVRSTexture*`), compute shaders that
+generate fixed and eye-tracked rate images, and AMD FidelityFX Variable Shading.
+KosmicKrisp does not offer the extension, so this path never ran.
+
+`KK_FAKE_VRS=1` (patch `0007-fake-vrs-pass-logging.patch`) advertises attachment and
+pipeline shading rates, rates 1×1 to 4×4 with 8×8–32×32 tiles, and ignores the rates:
+every fragment is still shaded. Every 10 s it logs each pass shape per frame with what
+it asked for. `KK_VRS_CAPTURE_DIR` saves the rate images it binds, as PGM plus raw
+bytes. NMS then used it at once (its `VRFoveatedRendering` setting is on); the run used
+none of our foveation, so this is the game's own choice.
+
+| Target | Passes the game shades coarsely | Passes it leaves at full rate |
+|---|---|---|
+| 5600×2856 (eyes) | one colour + depth pass | the three-attachment pass (c122 ×3, 12.4 ms unfoveated), the other colour passes |
+| 3296×1696 (59% render scale) | the seven-attachment G-buffer, a three-attachment pass, one single-colour pass without depth | eleven other pass shapes (single colour with depth, two and six attachments) |
+| 1648×848 (half render scale) | five pass shapes (c97 ×2 three times a frame, c97 ×1, c122 and c97 with depth) | ten others |
+| shadows, UI, small effects | none | all |
+
+What this says about our choices:
+
+- **Same core pass.** The G-buffer is the game's main coarse-shaded pass, and ours.
+- **We go further.** We also foveate the full-size three-attachment pass and every other
+  pass at the eye and render-scale sizes. Those images are coherent, but the game's
+  developers chose full rate there. The full-size three-attachment pass is our largest
+  single saving, so if anything looks wrong in the headset, look there first.
+- **Quarter size is meant to work.** The game coarse-shades several 1648×848 passes, so
+  the lighting edge seen with 25% scaled targets is our bug, not an unsafe pass.
+- **Similar strength, different shape.** Inside its render area the game's rate image
+  has a full-rate circle per eye, about 62% of the eye's width across, then a 2×2 ring
+  and 4×4 corners: 29% full rate, 36% 2×2, 35% 4×4, about 40% of full shading work.
+  Ours leaves 2008×1000 of 3296×1696 physical texels, 36%. Its half-size image is 65%
+  full rate and 35% 2×2, about 74% of the work.
+- **Not covered.** VRS only coarsens shading inside render passes and keeps every texel
+  stored, so it says nothing about compute (the 13–15 ms read-write pass) or about
+  readers of a changed layout.
+
+The rate images only fill the render-scale area (412×212 tiles of 700×357; the rest is
+full rate), and the game also binds the render-scale image to that full-size pass.
+Captures stay in `build-in-process/game-checks/vrs-cap1` (game output, not committed).
+
 ## Next
 
 1. Talos and NMS in the headset with real gaze.
 2. NMS's own graphics settings against its read-write compute pass (clouds or
    volumetrics, from the look of it).
 3. Find what reads NMS's 25% targets in the wrong layout (the horizontal edge), then
-   reconsider them (about 0.5 ms).
-4. Avoid the unwarp blits where the last pass before a copy can render ordinary.
-5. Decide whether the push-descriptor and occlusion-query fixes go into the
+   reconsider them (about 0.5 ms): the game coarse-shades several of them itself.
+4. Optionally limit NMS to the passes the game coarse-shades, as a quality fallback if
+   the extra passes look wrong in the headset.
+5. Avoid the unwarp blits where the last pass before a copy can render ordinary.
+6. Decide whether the push-descriptor and occlusion-query fixes go into the
    `kk-zink` branch on their own.
