@@ -19,6 +19,18 @@ export WINESERVER=${wine_root}/bin/wineserver
 export DYLD_FALLBACK_LIBRARY_PATH=${wine_root}/lib/wine/x86_64-unix:${wine_root}/lib
 export MWXR_NATIVE_RUNTIME_JSON
 unset XR_RUNTIME_JSON WINEDLLOVERRIDES
+# Select KK for native Vulkan applications without installing Zink's GL DLLs.
+if [[ ${MWXR_VULKAN:-} == kosmickrisp ]]; then
+ kk_root=${MWXR_KK_ROOT:-$HOME/Code/alyx-native/build/zink-wine}
+ [[ -f ${kk_root}/lib/libvulkan.1.dylib && -f ${kk_root}/icd/kosmickrisp_x86_64.json ]] || {
+  print -u2 "MWXR_VULKAN=kosmickrisp: missing loader or ICD in ${kk_root}"; exit 1
+ }
+ export DYLD_FALLBACK_LIBRARY_PATH=${kk_root}/lib:${DYLD_FALLBACK_LIBRARY_PATH}
+ export VK_DRIVER_FILES=${kk_root}/icd/kosmickrisp_x86_64.json
+ print -u2 "Vulkan: KosmicKrisp from ${kk_root}"
+elif [[ -n ${MWXR_VULKAN:-} ]]; then
+ print -u2 'MWXR_VULKAN must be kosmickrisp (or unset)'; exit 2
+fi
 # MWXR_OPENGL=zink: the application's OpenGL through Mesa's Zink over KosmicKrisp
 # instead of winemac's CGL (docs/zink-kosmickrisp.md). MWXR_ZINK_ROOT holds bin/
 # (opengl32.dll, libgallium_wgl.dll, libwinpthread-1.dll), lib/libvulkan.1.dylib (an

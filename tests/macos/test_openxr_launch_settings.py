@@ -1,11 +1,17 @@
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts/openxr-launch-settings.zsh'
 KEYS = ('MWXR_CLIENT_COMPOSITOR', 'MWXR_VIEWPORT_SCALE_PERCENTAGE',
-        'XRT_MACOS_CLIENT_COMPOSITOR', 'OXR_VIEWPORT_SCALE_PERCENTAGE')
+        'XRT_MACOS_CLIENT_COMPOSITOR', 'OXR_VIEWPORT_SCALE_PERCENTAGE',
+        'MWXR_FOVEATION', 'MWXR_GAZE_FOVEATION', 'MWXR_GAZE_FOVEATION_FIXED', 'DXMT_STAY_WARPED',
+        'MWXR_IN_PROCESS_WINE', 'MWXR_IN_PROCESS_BUILD', 'MWXR_FOVEATION_BUILD',
+        'MWXR_VULKAN', 'MWXR_KK_ROOT', 'KK_IMPLICIT_FDM', 'MWXR_KK_FOVEATION', 'MESA_KK_EXPERIMENTAL',
+        'MWXR_XRIZER_ROOT', 'MWXR_WOW64', 'GAME_EXE', 'STEAM_COMPAT_INSTALL_PATH', 'MWXR_OPENGL')
+GAME_SETTINGS = SCRIPT.parent / 'steam-play-game-settings.zsh'
 
 
 class OpenXRLaunchSettingsTests(unittest.TestCase):
@@ -38,6 +44,72 @@ class OpenXRLaunchSettingsTests(unittest.TestCase):
         for value in ('', 'yes', '2'):
             with self.subTest(compositor=value):
                 self.assertEqual(self.settings(MWXR_CLIENT_COMPOSITOR=value).returncode, 2)
+
+    def foveation(self, value, marker=True, **extra):
+        with tempfile.TemporaryDirectory() as wine:
+            if marker:
+                (Path(wine) / 'share').mkdir()
+                (Path(wine) / 'share/mwxr-foveation-dxmt').write_text('test')
+            env = {k: v for k, v in os.environ.items() if k not in KEYS}
+            env.update(MWXR_IN_PROCESS_WINE=wine, MWXR_IN_PROCESS_BUILD='/ordinary/gate', **extra)
+            if value is not None:
+                env['MWXR_FOVEATION'] = value
+            return subprocess.run(['zsh', '-ec',
+                'source "$1"; print -r -- "${MWXR_GAZE_FOVEATION-unset}" '
+                '"${MWXR_GAZE_FOVEATION_FIXED-unset}" "${DXMT_STAY_WARPED-unset}" '
+                '"${MWXR_IN_PROCESS_BUILD:t}" "${KK_IMPLICIT_FDM-unset}" '
+                '"${MWXR_KK_FOVEATION-unset}" "${MESA_KK_EXPERIMENTAL-unset}"', 'test', str(SCRIPT)],
+                env=env, capture_output=True, text=True)
+
+    def test_foveation_is_off_unless_asked_for(self):
+        for value in (None, 'off'):
+            with self.subTest(value=value):
+                self.assertEqual(self.foveation(value).stdout.strip(), 'unset unset unset gate unset unset unset')
+
+    def test_foveation_modes_and_numbers(self):
+        self.assertEqual(self.foveation('gaze').stdout.strip(), '0.3 unset external gaze-gate unset unset unset')
+        self.assertEqual(self.foveation('fixed').stdout.strip(), '0.3 1 external gaze-gate unset unset unset')
+        self.assertEqual(self.foveation('gaze:0.25,10,22').stdout.strip(),
+                         '0.25,10,22 unset external gaze-gate unset unset unset')
+        self.assertEqual(self.foveation('gaze:0.25,10,22,1.5').stdout.strip(),
+                         '0.25,10,22,1.5 unset external gaze-gate unset unset unset')
+
+    def test_invalid_foveation_stops_launch(self):
+        for value in ('', 'on', 'gaze:', 'gaze:2', 'gaze:0.05', 'gaze:0.3,10', 'gaze:0.3,30,20',
+                      'gaze:0.3,10,95', 'gaze:0.3;10', 'fixed:abc'):
+            with self.subTest(value=value):
+                self.assertEqual(self.foveation(value).returncode, 2)
+        self.assertEqual(self.foveation('gaze', marker=False).returncode, 2)
+
+    def test_vulkan_foveation_uses_kosmickrisp_not_dxmt(self):
+        # No foveation DXMT needed; KosmicKrisp takes the bridge's profile.
+        result = self.foveation('gaze', marker=False, MWXR_VULKAN='kosmickrisp',
+                                MESA_KK_EXPERIMENTAL='custom_border')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(),
+                         '0.3 unset unset vk-fov-gate auto 1 custom_border,fdm_rate')
+        result = self.foveation('fixed:0.4', marker=False, MWXR_VULKAN='kosmickrisp',
+                                MESA_KK_EXPERIMENTAL='fdm_rate')
+        self.assertEqual(result.stdout.strip(), '0.4 1 unset vk-fov-gate auto 1 fdm_rate')
+
+    def game(self, appid, **values):
+        env = {k: v for k, v in os.environ.items() if k not in KEYS}
+        env.update(values)
+        return subprocess.run(['zsh', '-ec',
+            'source "$1" "$2"; print -r -- "${MWXR_VULKAN-unset}" "${MWXR_IN_PROCESS_WINE:t}" '
+            '"${MWXR_XRIZER_ROOT:t}" "${MWXR_KK_ROOT:t}"', 'test', str(GAME_SETTINGS), appid],
+            env=env, capture_output=True, text=True)
+
+    def test_vulkan_games_select_kosmickrisp(self):
+        for appid in ('552440', '275850'):
+            with self.subTest(appid=appid):
+                self.assertEqual(self.game(appid).stdout.strip(),
+                                 'kosmickrisp vulkan-wine vulkan-xrizer zink-fov')
+        # Foveation keeps the Vulkan runtime rather than the DXMT foveation one.
+        self.assertEqual(self.game('552440', MWXR_FOVEATION='gaze').stdout.strip(),
+                         'kosmickrisp vulkan-wine vulkan-xrizer zink-fov')
+        self.assertEqual(self.game('552440', MWXR_VULKAN='off').stdout.split(), ['unset'])
+        self.assertEqual(self.game('546560').stdout.split(), ['unset'])
 
 
 if __name__ == '__main__':

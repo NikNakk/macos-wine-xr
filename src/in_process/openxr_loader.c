@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // PE manual entry points, following Proton's loader/unixlib structure.
 #include "openxr_loader.h"
+extern XrResult WINAPI xrApplyFoveationD3D11MWXR(XrSwapchain, uint32_t, XrFoveationD3D11StateMWXR *);
 
 BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, void *reserved)
 {
@@ -70,6 +71,21 @@ XrResult WINAPI xrGetInstanceProcAddr(XrInstance instance, const char *name, PFN
 {
     if (!name || !fn) return XR_ERROR_VALIDATION_FAILURE;
     *fn = NULL;
+    if (!strcmp(name, "xrApplyFoveationD3D11MWXR")) {
+        if (!instance || !wine_instance_from_handle(instance)->foveation_d3d11_enabled)
+            return XR_ERROR_FUNCTION_UNSUPPORTED;
+        *fn = (PFN_xrVoidFunction)xrApplyFoveationD3D11MWXR;
+        return XR_SUCCESS;
+    }
+    if (strstr(name, "Vulkan")) {
+        if (!instance) return XR_ERROR_FUNCTION_UNSUPPORTED;
+        wine_XrInstance *wrapper = wine_instance_from_handle(instance);
+        int v2 = !strcmp(name, "xrCreateVulkanInstanceKHR") || !strcmp(name, "xrCreateVulkanDeviceKHR") ||
+                 !strcmp(name, "xrGetVulkanGraphicsDevice2KHR") || !strcmp(name, "xrGetVulkanGraphicsRequirements2KHR");
+        if (!(v2 ? wrapper->vulkan2_enabled : wrapper->vulkan_enabled)) return XR_ERROR_FUNCTION_UNSUPPORTED;
+        *fn = wine_xr_get_instance_proc_addr(name);
+        return *fn ? XR_SUCCESS : XR_ERROR_FUNCTION_UNSUPPORTED;
+    }
     if (!strcmp(name, "xrGetMetalGraphicsRequirementsKHR")) return XR_ERROR_FUNCTION_UNSUPPORTED;
     if (!strcmp(name, "xrGetD3D11GraphicsRequirementsKHR")) {
         if (!instance || !wine_instance_from_handle(instance)->d3d11_enabled) return XR_ERROR_FUNCTION_UNSUPPORTED;
