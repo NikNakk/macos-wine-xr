@@ -1,0 +1,91 @@
+diff --git a/src/kosmickrisp/vulkan/kk_fdm.c b/src/kosmickrisp/vulkan/kk_fdm.c
+index c2f9220..df11e63 100644
+--- a/src/kosmickrisp/vulkan/kk_fdm.c
++++ b/src/kosmickrisp/vulkan/kk_fdm.c
+@@ -395,6 +395,15 @@ kk_implicit_eyes(const struct kk_image *image)
+ {
+    if (!kk_implicit.view_width)
+       return 0;
++   /* KK_IMPLICIT_SKIP=WxH[,WxH...] (diagnostic): sizes never foveated. */
++   const char *skip = getenv("KK_IMPLICIT_SKIP");
++   if (skip) {
++      char want[32];
++      snprintf(want, sizeof(want), "%ux%u", image->vk.extent.width, image->vk.extent.height);
++      for (const char *p = skip; (p = strstr(p, want)); p++)
++         if ((p == skip || p[-1] == ',') && (p[strlen(want)] == 0 || p[strlen(want)] == ','))
++            return 0;
++   }
+    /* KK_IMPLICIT_HALF=1 (single-sample route): half-size targets too, each with its own
+     * map of the same profile (half-resolution effects; The Talos Principle VR). */
+    static int half = -1;
+diff --git a/src/vulkan/runtime/vk_shader_module.c b/src/vulkan/runtime/vk_shader_module.c
+index 7e73d28..e4a512c 100644
+--- a/src/vulkan/runtime/vk_shader_module.c
++++ b/src/vulkan/runtime/vk_shader_module.c
+@@ -22,6 +22,8 @@
+  */
+ 
+ #include "vk_shader_module.h"
++#include <stdio.h>
++#include <stdlib.h>
+ 
+ #include "vk_alloc.h"
+ #include "vk_common_entrypoints.h"
+@@ -45,9 +47,57 @@ void vk_shader_module_init(struct vk_device *device,
+    vk_shader_module_hash(create_info, module->hash);
+ }
+ 
++/* KK_COUNT_RELAXED=1 (diagnostic): how much of the application's SPIR-V is decorated
++ * RelaxedPrecision (16-bit is enough), per shader stage, logged every 100 modules. */
++static void
++vk_shader_module_count_relaxed(const uint32_t *code, size_t size)
++{
++   static int on = -1;
++   if (on < 0)
++      on = getenv("KK_COUNT_RELAXED") != NULL;
++   if (!on || size < 20 || code[0] != 0x07230203)
++      return;
++   static struct { uint64_t modules, results, float_ops, relaxed; } st[8];
++   static uint64_t total;
++   static const char *const names[8] = {"vertex", "tess-ctrl", "tess-eval", "geometry",
++                                        "fragment", "compute", "kernel", "other"};
++   const size_t words = size / 4;
++   uint32_t stage = 7;
++   uint64_t results = 0, float_ops = 0, relaxed = 0;
++   for (size_t i = 5; i < words;) {
++      const uint32_t op = code[i] & 0xffff, n = code[i] >> 16;
++      if (!n || i + n > words)
++         break;
++      if (op == 15 /* OpEntryPoint */ && stage == 7)
++         stage = MIN2(code[i + 1], 6u);
++      else if (op == 71 /* OpDecorate */ && n >= 3 && code[i + 2] == 0 /* RelaxedPrecision */)
++         relaxed++;
++      else if ((op >= 109 && op <= 127) || (op >= 129 && op <= 151) || op == 12 /* ExtInst */)
++         float_ops++;
++      if (op >= 59 /* OpVariable and later */ && n >= 3)
++         results++;
++      i += n;
++   }
++   st[stage].modules++;
++   st[stage].results += results;
++   st[stage].float_ops += float_ops;
++   st[stage].relaxed += relaxed;
++   if (++total % 100 == 0) {
++      for (unsigned s = 0; s < 8; s++)
++         if (st[s].modules)
++            fprintf(stderr, "kk-relaxed: %s: %llu modules, %llu arithmetic/conversion "
++                            "instructions, %llu RelaxedPrecision decorations (%.0f%% of "
++                            "those instructions)\n",
++                    names[s], (unsigned long long)st[s].modules,
++                    (unsigned long long)st[s].float_ops, (unsigned long long)st[s].relaxed,
++                    st[s].float_ops ? 100.0 * st[s].relaxed / st[s].float_ops : 0.0);
++   }
++}
++
+ void vk_shader_module_hash(const VkShaderModuleCreateInfo *create_info,
+                            blake3_hash hash)
+ {
++   vk_shader_module_count_relaxed(create_info->pCode, create_info->codeSize);
+    _mesa_blake3_compute(create_info->pCode, create_info->codeSize, hash);
+ }
+ 
