@@ -1,0 +1,45 @@
+--- a/dlls/kernelbase/thread.c
++++ b/dlls/kernelbase/thread.c
+@@ -882,7 +882,22 @@
+     LPFIBER_START_ROUTINE start;             /*       start routine */
+     void                 *fls_slots;         /*       fiber storage slots */
+     struct fiber_actctx   actctx;            /*       activation context state */
++    struct fiber_data    *switched_from;     /*       the fiber that last switched to this one */
+ };
++
++#if defined(__x86_64__) && !defined(__arm64ec__)
++/* macOS owns the thread-specific-data slot at %gs:0x20 (the thread's QoS class), so
++ * Windows code that reads the current fiber inline (GetCurrentFiber(), NT_TIB.FiberData)
++ * gets that value instead of Wine's TEB field. No Man's Sky's job threads record it
++ * just before switching to a job fiber, and the job fiber switches back to it when it
++ * finishes; that value means "the fiber that switched to me". */
++static inline void *raw_gs_fiber_slot(void)
++{
++    void *value;
++    __asm__ __volatile__( "movq %%gs:0x20,%0" : "=r" (value) );
++    return value;
++}
++#endif
+ 
+ #ifdef __i386__
+ extern void WINAPI switch_fiber( CONTEXT *old, CONTEXT *new );
+@@ -1260,6 +1275,19 @@
+     struct fiber_data *new_fiber = fiber;
+     struct fiber_data *current_fiber = NtCurrentTeb()->Tib.FiberData;
+ 
++#if defined(__x86_64__) && !defined(__arm64ec__)
++    if (fiber && fiber == raw_gs_fiber_slot() && (ULONG_PTR)fiber < 0x10000 &&
++        current_fiber && current_fiber->switched_from)
++    {
++        static LONG warned;
++        if (!InterlockedExchange( &warned, 1 ))
++            WARN( "fiber %p is the macOS %%gs:0x20 value; switching back to %p\n",
++                  fiber, current_fiber->switched_from );
++        new_fiber = current_fiber->switched_from;
++    }
++#endif
++    new_fiber->switched_from = current_fiber;
++
+     current_fiber->except      = NtCurrentTeb()->Tib.ExceptionList;
+     current_fiber->stack_limit = NtCurrentTeb()->Tib.StackLimit;
+     current_fiber->fls_slots   = NtCurrentTeb()->FlsSlots;

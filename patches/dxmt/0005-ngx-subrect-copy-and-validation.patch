@@ -1,0 +1,247 @@
+--- a/src/nvngx/nvngx.cpp
++++ b/src/nvngx/nvngx.cpp
+@@ -80,7 +80,7 @@
+   }
+   ngx_trace(str::format("CreateFeature feature=", feature, " context=", context));
+   if (!context || !params || !out_handle) return NVNGX_RESULT_INVALID_PARAMETER;
+-  auto parameters = static_cast<ParametersImpl *>(params);
++  auto parameters = params;
+   Com<IMTLD3D11ContextExt1> pCtxExt = nullptr;
+   if (FAILED(context->QueryInterface(IID_PPV_ARGS(&pCtxExt))))
+     return NVNGX_RESULT_INVALID_PARAMETER;
+@@ -119,6 +119,40 @@
+   return NVNGX_RESULT_FAIL;
+ }
+ 
++struct NGXRegion {
++  ID3D11Texture2D *source;
++  UINT x=0, y=0, width=0, height=0, storage_width=0, storage_height=0;
++  D3D11_TEXTURE2D_DESC desc={};
++  bool copy=false;
++};
++static unsigned ngx_origin(NVNGXParameter *parameters, const char *name) {
++  unsigned value=0; parameters->Get(name,&value); return value;
++}
++static bool ngx_validate_region(NGXRegion &r) {
++  if (!r.source || !r.width || !r.height || !r.storage_width || !r.storage_height) return false;
++  r.source->GetDesc(&r.desc);
++  if (r.desc.SampleDesc.Count!=1 || r.desc.ArraySize!=1 || r.desc.MipLevels!=1 ||
++      r.desc.Usage!=D3D11_USAGE_DEFAULT || r.width>r.desc.Width || r.height>r.desc.Height ||
++      r.x>r.desc.Width-r.width || r.y>r.desc.Height-r.height ||
++      r.width>r.storage_width || r.height>r.storage_height) return false;
++  r.copy=r.x || r.y || r.desc.Width!=r.storage_width || r.desc.Height!=r.storage_height;
++  return true;
++}
++static HRESULT ngx_prepare_region(ID3D11Device *device, NGXRegion &r, Com<ID3D11Texture2D> &cache) {
++  if (!r.copy) return S_OK;
++  auto desc=r.desc; desc.Width=r.storage_width; desc.Height=r.storage_height;
++  desc.MiscFlags=0; desc.CPUAccessFlags=0;
++  if (cache) {
++    D3D11_TEXTURE2D_DESC old={}; cache->GetDesc(&old);
++    if (old.Width==desc.Width && old.Height==desc.Height && old.Format==desc.Format &&
++        old.BindFlags==desc.BindFlags) return S_OK;
++  }
++  Com<ID3D11Texture2D> replacement;
++  auto hr=device->CreateTexture2D(&desc,nullptr,&replacement);
++  if (SUCCEEDED(hr)) cache=std::move(replacement);
++  return hr;
++}
++
+ NVNGX_API NVNGX_RESULT
+ NVSDK_NGX_D3D11_EvaluateFeature(
+     ID3D11DeviceContext *context, const unsigned int *handle, NVNGXParameter *params, void *callback
+@@ -130,26 +164,27 @@
+   if (!context || !handle || !params) return NVNGX_RESULT_INVALID_PARAMETER;
+   static std::atomic<uint64_t> evaluations{0};
+   uint64_t sequence = ++evaluations;
+-  auto parameters = static_cast<ParametersImpl *>(params);
++  auto parameters = params;
+   switch (static_cast<CommonFeature *>((void *)handle)->feature) {
+   case NVNGX_FEATURE_SUPERSAMPLING: {
+     auto dlss = static_cast<DLSSFeature *>((void *)handle);
+ 
+-    IMTLD3D11ContextExt *pCtxExt = nullptr;
++    Com<IMTLD3D11ContextExt> pCtxExt;
+     if (FAILED(context->QueryInterface(IID_PPV_ARGS(&pCtxExt))))
+       return NVNGX_RESULT_INVALID_PARAMETER;
+ 
+-    ID3D11Texture2D *input, *output, *depth, *mv, *exposure = nullptr;
+-
+-    if (NVNGX_FAILED(parameters->Get(NVNGX_Parameter_Color, (ID3D11Resource **)&input)))
+-      return NVNGX_RESULT_INVALID_PARAMETER;
+-    if (NVNGX_FAILED(parameters->Get(NVNGX_Parameter_Output, (ID3D11Resource **)&output)))
+-      return NVNGX_RESULT_INVALID_PARAMETER;
+-    if (NVNGX_FAILED(parameters->Get(NVNGX_Parameter_Depth, (ID3D11Resource **)&depth)))
+-      return NVNGX_RESULT_INVALID_PARAMETER;
+-    if (NVNGX_FAILED(parameters->Get(NVNGX_Parameter_MotionVectors, (ID3D11Resource **)&mv)))
+-      return NVNGX_RESULT_INVALID_PARAMETER;
+-    parameters->Get(NVNGX_Parameter_ExposureTexture, (ID3D11Resource **)&exposure);
++    ID3D11Resource *resources[5]={};
++    const char *resource_keys[]={NVNGX_Parameter_Color,NVNGX_Parameter_Output,NVNGX_Parameter_Depth,
++        NVNGX_Parameter_MotionVectors,NVNGX_Parameter_ExposureTexture};
++    Com<ID3D11Texture2D> textures[5];
++    for(unsigned i=0;i<5;++i) {
++      auto result=parameters->Get(resource_keys[i],&resources[i]);
++      if(i==4 && (NVNGX_FAILED(result) || !resources[i])) continue;
++      if(NVNGX_FAILED(result) || !resources[i] || FAILED(resources[i]->QueryInterface(IID_PPV_ARGS(&textures[i]))))
++        return NVNGX_RESULT_INVALID_PARAMETER;
++    }
++    auto input=textures[0].ptr(), output=textures[1].ptr(), depth=textures[2].ptr(),
++         mv=textures[3].ptr(), exposure=textures[4].ptr();
+ 
+     uint32_t width = 0, height = 0;
+     if (NVNGX_FAILED(parameters->Get(NVNGX_Parameter_DLSS_Render_Subrect_Dimensions_Width, &width)))
+@@ -203,9 +238,53 @@
+         ngx_trace(str::format("  ", key, "=", value, " result=", (unsigned)result));
+       }
+     }
++    static const bool subrects_enabled=env::getEnvVar("DXMT_NGX_SUBRECTS")=="1";
++    if (!subrects_enabled) { pCtxExt->TemporalUpscale(&desc); return NVNGX_RESULT_OK; }
++    if (!width) width=dlss->width;
++    if (!height) height=dlss->height;
++    desc.InputContentWidth=width; desc.InputContentHeight=height;
++    NGXRegion regions[4]={
++      {input,ngx_origin(parameters,"DLSS.Input.Color.Subrect.Base.X"),ngx_origin(parameters,"DLSS.Input.Color.Subrect.Base.Y"),width,height,dlss->width,dlss->height},
++      {depth,ngx_origin(parameters,"DLSS.Input.Depth.Subrect.Base.X"),ngx_origin(parameters,"DLSS.Input.Depth.Subrect.Base.Y"),width,height,dlss->width,dlss->height},
++      {mv,ngx_origin(parameters,"DLSS.Input.MV.Subrect.Base.X"),ngx_origin(parameters,"DLSS.Input.MV.Subrect.Base.Y"),
++          desc.MotionVectorInDisplayRes ? dlss->target_width : width,
++          desc.MotionVectorInDisplayRes ? dlss->target_height : height,
++          desc.MotionVectorInDisplayRes ? dlss->target_width : dlss->width,
++          desc.MotionVectorInDisplayRes ? dlss->target_height : dlss->height},
++      {output,ngx_origin(parameters,"DLSS.Output.Subrect.Base.X"),ngx_origin(parameters,"DLSS.Output.Subrect.Base.Y"),
++          dlss->target_width,dlss->target_height,dlss->target_width,dlss->target_height}
++    };
++    bool copies=false;
++    for (auto &r:regions) { if (!ngx_validate_region(r)) return NVNGX_RESULT_INVALID_PARAMETER; copies|=r.copy; }
++    if ((regions[3].x || regions[3].y) && !dlss->enable_output_subrects) return NVNGX_RESULT_INVALID_PARAMETER;
++    Com<IMTLD3D11ContextExt2> roi;
++    if (copies && FAILED(context->QueryInterface(IID_PPV_ARGS(&roi)))) return NVNGX_RESULT_FEATURE_NOT_SUPPORTED;
++    Com<ID3D11Device> device; context->GetDevice(&device);
++    for (auto &r:regions) {
++      Com<ID3D11Device> owner; r.source->GetDevice(&owner);
++      if (owner.ptr()!=device.ptr()) return NVNGX_RESULT_INVALID_PARAMETER;
++    }
++    // Allocate every required scratch texture before queuing any copies.
++    for (unsigned i=0;i<4;++i)
++      if (FAILED(ngx_prepare_region(device.ptr(),regions[i],dlss->roi_textures[i]))) return NVNGX_RESULT_FAIL;
++    ID3D11Resource **bindings[]={&desc.Color,&desc.Depth,&desc.MotionVector,&desc.Output};
++    for (unsigned i=0;i<4;++i) if (regions[i].copy) *bindings[i]=dlss->roi_textures[i].ptr();
++    for (unsigned i=0;i<3;++i) if (regions[i].copy) {
++      auto &r=regions[i];
++      if (FAILED(roi->CopyTemporalRegion(r.source,r.x,r.y,dlss->roi_textures[i].ptr(),0,0,r.width,r.height)))
++        return NVNGX_RESULT_FEATURE_NOT_SUPPORTED;
++    }
++    if (ngx_trace_enabled() && (sequence<=32 || sequence%512==0))
++      ngx_trace(str::format("ROI input=",width,"x",height," output=",dlss->target_width,"x",dlss->target_height,
++          " color_origin=",regions[0].x,",",regions[0].y," depth_origin=",regions[1].x,",",regions[1].y,
++          " motion_origin=",regions[2].x,",",regions[2].y," output_origin=",regions[3].x,",",regions[3].y,
++          " motion_source=",regions[2].desc.Width,"x",regions[2].desc.Height," copies=",copies));
+     pCtxExt->TemporalUpscale(&desc);
+-
+-    pCtxExt->Release();
++    if (regions[3].copy) {
++      auto &r=regions[3];
++      if (FAILED(roi->CopyTemporalRegion(dlss->roi_textures[3].ptr(),0,0,output,r.x,r.y,r.width,r.height)))
++        return NVNGX_RESULT_FEATURE_NOT_SUPPORTED;
++    }
+ 
+     return NVNGX_RESULT_OK;
+     break;
+--- a/src/nvngx/nvngx_feature.hpp
++++ b/src/nvngx/nvngx_feature.hpp
+@@ -1,6 +1,8 @@
+ #pragma once
+ #include "nvngx.hpp"
+ #include <cstdint>
++#include "com/com_pointer.hpp"
++#include <array>
+ 
+ namespace dxmt {
+ 
+@@ -17,6 +19,7 @@
+   int quality;
+   int flag;
+   int enable_output_subrects;
++  std::array<Com<ID3D11Texture2D>, 4> roi_textures;
+ };
+ 
+ }--- a/src/d3d11/d3d11_interfaces.hpp
++++ b/src/d3d11/d3d11_interfaces.hpp
+@@ -43,3 +43,10 @@
+     : public IUnknown {
+   virtual void STDMETHODCALLTYPE SetShaderExtensionSlot(UINT Slot) = 0;
+ };
++
++// Private Metal copy for temporal-scaler ROIs, including resolved depth.
++// Not an extension to D3D11 CopySubresourceRegion's application contract.
++DEFINE_COM_INTERFACE("86b756f4-786a-48d1-918d-a7512540658a", IMTLD3D11ContextExt2) : public IMTLD3D11ContextExt1 {
++  virtual HRESULT STDMETHODCALLTYPE CopyTemporalRegion(ID3D11Texture2D *source, UINT x, UINT y,
++      ID3D11Texture2D *destination, UINT dx, UINT dy, UINT width, UINT height) = 0;
++};
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -636,7 +636,7 @@
+       return S_OK;
+     }
+ 
+-    if (riid == __uuidof(IMTLD3D11ContextExt) || riid == __uuidof(IMTLD3D11ContextExt1)) {
++    if (riid == __uuidof(IMTLD3D11ContextExt) || riid == __uuidof(IMTLD3D11ContextExt1) || riid == __uuidof(IMTLD3D11ContextExt2)) {
+       *ppvObject = ref(&ext_);
+       return S_OK;
+     }
+@@ -5198,7 +5198,7 @@
+ };
+ 
+ template <typename ContextInternalState>
+-class MTLD3D11ContextExt : public IMTLD3D11ContextExt1 {
++class MTLD3D11ContextExt : public IMTLD3D11ContextExt2 {
+   class CachedTemporalScaler {
+   public:
+     WMTPixelFormat color_pixel_format;
+@@ -5224,6 +5224,46 @@
+   ULONG STDMETHODCALLTYPE AddRef() final { return ctx_->AddRef(); }
+ 
+   ULONG STDMETHODCALLTYPE Release() final { return ctx_->Release(); }
++
++  HRESULT STDMETHODCALLTYPE CopyTemporalRegion(ID3D11Texture2D *source, UINT x, UINT y,
++      ID3D11Texture2D *destination, UINT dx, UINT dy, UINT width, UINT height) final {
++    if (!source || !destination || source == destination || !width || !height) return E_INVALIDARG;
++    Com<ID3D11Device> owner, source_device, destination_device;
++    ctx_->GetDevice(&owner); source->GetDevice(&source_device); destination->GetDevice(&destination_device);
++    if (owner.ptr() != source_device.ptr() || owner.ptr() != destination_device.ptr()) return E_INVALIDARG;
++    D3D11_TEXTURE2D_DESC a={}, b={}; source->GetDesc(&a); destination->GetDesc(&b);
++    if (a.Format != b.Format || a.SampleDesc.Count != 1 || b.SampleDesc.Count != 1 ||
++        a.ArraySize != 1 || b.ArraySize != 1 || a.MipLevels != 1 || b.MipLevels != 1 ||
++        a.Usage != D3D11_USAGE_DEFAULT || b.Usage != D3D11_USAGE_DEFAULT ||
++        width > a.Width || height > a.Height || x > a.Width-width || y > a.Height-height ||
++        width > b.Width || height > b.Height || dx > b.Width-width || dy > b.Height-height) return E_INVALIDARG;
++    switch (a.Format) {
++      case DXGI_FORMAT_R11G11B10_FLOAT: case DXGI_FORMAT_R16G16B16A16_FLOAT:
++      case DXGI_FORMAT_R32G32B32A32_FLOAT: case DXGI_FORMAT_R8G8B8A8_UNORM:
++      case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: case DXGI_FORMAT_R16G16_FLOAT:
++      case DXGI_FORMAT_R16G16_SINT: case DXGI_FORMAT_R16G16_UINT:
++      case DXGI_FORMAT_R16G16_UNORM: case DXGI_FORMAT_R16G16_SNORM:
++      case DXGI_FORMAT_R32G32_FLOAT: case DXGI_FORMAT_R32G32_SINT: case DXGI_FORMAT_R32G32_UINT:
++      case DXGI_FORMAT_R32_FLOAT: case DXGI_FORMAT_R32_TYPELESS:
++      case DXGI_FORMAT_R32G8X24_TYPELESS: case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
++      case DXGI_FORMAT_D32_FLOAT: break;
++      default: return E_NOTIMPL;
++    }
++    std::lock_guard lock(ctx_->mutex);
++    auto src=static_cast<D3D11ResourceCommon *>(static_cast<ID3D11Resource *>(source))->texture();
++    auto dst=static_cast<D3D11ResourceCommon *>(static_cast<ID3D11Resource *>(destination))->texture();
++    if (!src || !dst) return E_INVALIDARG;
++    ctx_->SwitchToBlitEncoder(MTLD3D11DeviceContextImplBase<ContextInternalState>::CommandBufferState::BlitEncoderActive);
++    ctx_->EmitOP([src=std::move(src),dst=std::move(dst),x,y,dx,dy,width,height](ArgumentEncodingContext &enc) mutable {
++      auto a=enc.access(src,0,0,ResourceAccess::Read);
++      auto b=enc.access(dst,0,0,ResourceAccess::Write);
++      auto &copy=enc.encodeBlitCommand<wmtcmd_blit_copy_from_texture_to_texture>();
++      copy.type=WMTBlitCommandCopyFromTextureToTexture;
++      copy.src=a; copy.src_level=copy.src_slice=0; copy.src_origin={x,y,0}; copy.src_size={width,height,1};
++      copy.dst=b; copy.dst_level=copy.dst_slice=0; copy.dst_origin={dx,dy,0};
++    });
++    return S_OK;
++  }
+ 
+   WMTPixelFormat GetCorrectMotionVectorFormat(WMTPixelFormat format) {
+     switch (format) {

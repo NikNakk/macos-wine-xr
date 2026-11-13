@@ -1,0 +1,338 @@
+Subject: [experimental] Resample stay-warped copies into swapchain images
+
+A texture left in a rate map's physical layout that is copied into an imported
+(swapchain) image is drawn through the map's forward tables instead of copied
+texel for texel, because the compositor reads that image outside DXMT. This is
+how xrizer hands an OpenVR game's eye textures to OpenXR. Other whole-image
+copies pass the layout on to their destination. Colour, single-sample sources
+only; anything else is copied as before and warned about once.
+
+Each copy into a swapchain image also leaves its source size and box on the
+image as private data, so the OpenXR layer can fit the rate map to the texture
+the application renders (both eyes in one texture, a render scale, part of a
+larger texture) instead of to the swapchain. The copy shader is compiled from
+source by winemetal when the prebuilt internal library does not have it.
+
+--- a/src/dxmt/dxmt_command.hpp
++++ b/src/dxmt/dxmt_command.hpp
+@@ -225,6 +225,27 @@
+   WMT::Reference<WMT::ComputePipelineState> pso_copy_to_buffer_d32s8_;
+ };
+ 
++// Copies a colour texture left in a rate map's physical layout into an ordinary
++// destination, resampling through the map's forward tables (stay-warped foveation).
++class RateMapUnwarpContext {
++public:
++  RateMapUnwarpContext(WMT::Device device, InternalCommandLibrary &lib, ArgumentEncodingContext &ctx);
++
++  static bool supports(WMTPixelFormat format);
++
++  // The current pass must have ended. src/dst formats may differ only in sRGB-ness.
++  bool copy(
++      const Rc<Texture> &src, uint32_t src_level, uint32_t src_slice, WMTOrigin src_origin, WMTSize size,
++      const Rc<Texture> &dst, uint32_t dst_level, uint32_t dst_slice, WMTOrigin dst_origin
++  );
++
++private:
++  ArgumentEncodingContext &ctx_;
++  WMT::Device device_;
++  WMT::Reference<WMT::Function> vs_, fs_;
++  std::unordered_map<uint32_t, WMT::Reference<WMT::RenderPipelineState>> pso_cache_;
++};
++
+ class MTLFXMVScaleContext {
+ public:
+   MTLFXMVScaleContext(WMT::Device device, InternalCommandLibrary &lib, ArgumentEncodingContext &ctx);
+--- a/src/dxmt/dxmt_command.cpp
++++ b/src/dxmt/dxmt_command.cpp
+@@ -157,6 +157,143 @@
+   pso_copy_to_buffer_d32s8_ = device_.newComputePipelineState(cs_copy_d32s8, err);
+ }
+ 
++RateMapUnwarpContext::RateMapUnwarpContext(WMT::Device device, InternalCommandLibrary &lib, ArgumentEncodingContext &ctx) :
++    ctx_(ctx),
++    device_(device) {
++  auto library = lib.getLibrary();
++  vs_ = library.newFunction("vs_present_quad");
++  fs_ = library.newFunction("fs_rate_map_unwarp");
++}
++
++bool
++RateMapUnwarpContext::supports(WMTPixelFormat format) {
++  switch (Forget_sRGB(format)) {
++  case WMTPixelFormatRGBA8Unorm:
++  case WMTPixelFormatBGRA8Unorm:
++  case WMTPixelFormatRGB10A2Unorm:
++  case WMTPixelFormatRGBA16Float:
++  case WMTPixelFormatRG11B10Float:
++    return true;
++  default:
++    return false;
++  }
++}
++
++struct rate_map_unwarp_desc {
++  float src_origin[2];
++  float dst_origin[2];
++};
++
++bool
++RateMapUnwarpContext::copy(
++    const Rc<Texture> &src, uint32_t src_level, uint32_t src_slice, WMTOrigin src_origin, WMTSize size,
++    const Rc<Texture> &dst, uint32_t dst_level, uint32_t dst_slice, WMTOrigin dst_origin
++) {
++  auto format = dst->pixelFormat();
++  if (!fs_ || !src->rate_map_layout || src->sampleCount() != 1 || dst->sampleCount() != 1 || src_level || !supports(format) ||
++      Forget_sRGB(src->pixelFormat()) != Forget_sRGB(format)) {
++    static bool logged;
++    if (!std::exchange(logged, true))
++      WARN("Rate-map copy refused: function=", unsigned(bool(fs_)), " samples=", src->sampleCount(), "/", dst->sampleCount(),
++           " level=", src_level, " formats=", unsigned(src->pixelFormat()), "/", unsigned(format));
++    return false;
++  }
++  if (!pso_cache_.contains(format)) {
++    WMT::Reference<WMT::Error> err;
++    WMTRenderPipelineInfo pipeline_info;
++    WMT::InitializeRenderPipelineInfo(pipeline_info);
++    pipeline_info.vertex_function = vs_;
++    pipeline_info.fragment_function = fs_;
++    pipeline_info.colors[0].pixel_format = format;
++    pipeline_info.rasterization_enabled = true;
++    pipeline_info.input_primitive_topology = WMTPrimitiveTopologyClassTriangle;
++    pso_cache_.emplace(format, device_.newRenderPipelineState(pipeline_info, err));
++  }
++  WMT::RenderPipelineState pso = pso_cache_.at(format);
++  if (!pso) {
++    static bool logged;
++    if (!std::exchange(logged, true))
++      WARN("Rate-map copy refused: no pipeline for format ", unsigned(format));
++    return false;
++  }
++
++  // Both views use the destination's format, so bytes are preserved across an sRGB pair.
++  TextureViewDescriptor view_desc;
++  view_desc.type = WMTTextureType2D;
++  view_desc.format = format;
++  view_desc.firstMiplevel = 0;
++  view_desc.miplevelCount = 1;
++  view_desc.firstArraySlice = src_slice;
++  view_desc.arraySize = 1;
++  auto src_view = src->createView(view_desc);
++  view_desc.firstMiplevel = dst_level;
++  view_desc.firstArraySlice = dst_slice;
++  auto dst_view = dst->createView(view_desc);
++
++  auto &pass_info = *ctx_.startRenderPass(0, 0, 1, 0);
++  // Never a mapped pass; the reference keeps the layout tables alive until it is encoded.
++  pass_info.rasterization_rate_map = {};
++  pass_info.rate_map_excluded = true;
++  pass_info.rate_map_positions = src->rate_map_layout;
++  auto &color = pass_info.colors[0];
++  color.attachment = ctx_.access<PipelineStage::Pixel>(dst, dst_view, ResourceAccess::Write);
++  color.depth_plane = 0;
++  color.load_action = WMTLoadActionLoad;
++  color.store_action = WMTStoreActionStore;
++  pass_info.tile_barrier_pso_key.color_formats[0] = format;
++  auto width = dst->width(dst_view), height = dst->height(dst_view);
++  pass_info.render_target_width = width;
++  pass_info.render_target_height = height;
++  pass_info.render_target_array_length = 0;
++  pass_info.default_raster_sample_count = 1;
++  auto source = ctx_.access<PipelineStage::Pixel>(src, src_view, ResourceAccess::Read).texture;
++
++  auto &setpso = ctx_.encodeRenderCommand<wmtcmd_render_setpso>();
++  setpso.type = WMTRenderCommandSetPSO;
++  setpso.pso = pso;
++
++  auto &setvp = ctx_.encodeRenderCommand<wmtcmd_render_setviewport>();
++  setvp.type = WMTRenderCommandSetViewport;
++  setvp.viewport = {0.0, 0.0, (double)width, (double)height, 0.0, 1.0};
++
++  auto &setscissor = ctx_.encodeRenderCommand<wmtcmd_render_setscissorrect>();
++  setscissor.type = WMTRenderCommandSetScissorRect;
++  setscissor.scissor_rect = {dst_origin.x, dst_origin.y, std::min<uint64_t>(size.width, width - dst_origin.x),
++                             std::min<uint64_t>(size.height, height - dst_origin.y)};
++
++  auto &settex = ctx_.encodeRenderCommand<wmtcmd_render_settexture>();
++  settex.type = WMTRenderCommandSetFragmentTexture;
++  settex.texture = source;
++  settex.index = 0;
++
++  auto &setbuf = ctx_.encodeRenderCommand<wmtcmd_render_setbuffer>();
++  setbuf.type = WMTRenderCommandSetFragmentBuffer;
++  setbuf.buffer = src->rate_map_layout.handle;
++  setbuf.index = kCustomBufferArgumentIndex0;
++  setbuf.offset = 0;
++
++  rate_map_unwarp_desc desc{{float(src_origin.x), float(src_origin.y)}, {float(dst_origin.x), float(dst_origin.y)}};
++  auto &setdesc = ctx_.encodeRenderCommand<wmtcmd_render_setbytes>();
++  setdesc.type = WMTRenderCommandSetFragmentBytes;
++  void *temp = ctx_.allocate_cpu_heap(sizeof(desc), 16);
++  memcpy(temp, &desc, sizeof(desc));
++  setdesc.bytes.set(temp);
++  setdesc.length = sizeof(desc);
++  setdesc.index = kCustomBufferArgumentIndex1;
++
++  auto &draw = ctx_.encodeRenderCommand<wmtcmd_render_draw>();
++  draw.type = WMTRenderCommandDraw;
++  draw.primitive_type = WMTPrimitiveTypeTriangle;
++  draw.vertex_start = 0;
++  draw.vertex_count = 3;
++  draw.base_instance = 0;
++  draw.instance_count = 1;
++
++  ctx_.endPass();
++  dst->rate_map_layout = {};
++  return true;
++}
++
+ struct linear_texture_desc {
+   uint32_t bytes_per_row;
+   uint32_t bytes_per_image;
+--- a/src/dxmt/dxmt_command.metal
++++ b/src/dxmt/dxmt_command.metal
+@@ -464,7 +464,33 @@
+ struct linear_texture_desc {
+   uint bytes_per_row;
+   uint bytes_per_image;
++};
++
++struct rate_map_unwarp_desc {
++  float2 src_origin;
++  float2 dst_origin;
+ };
++
++// tables: physical size, logical size, inverse x/y, then the forward x and y tables
++// (physical coordinate of each logical pixel boundary), as winemetal's rate-map buffer.
++[[fragment]] float4 fs_rate_map_unwarp(
++  present_data input [[stage_in]],
++  texture2d<float, access::sample> source [[texture(0)]],
++  device float* tables [[buffer(kCustomBufferArgumentIndex0)]],
++  constant rate_map_unwarp_desc& desc [[buffer(kCustomBufferArgumentIndex1)]]
++) {
++  constexpr sampler linear_pixel(coord::pixel, filter::linear, address::clamp_to_edge);
++  float2 physical = float2(tables[0], tables[1]);
++  float2 logical = float2(tables[2], tables[3]);
++  device float* forward_x = tables + 4 + uint(physical.x) + uint(physical.y);
++  device float* forward_y = forward_x + uint(logical.x) + 1;
++  float2 p = clamp(input.position.xy - desc.dst_origin + desc.src_origin, float2(0), logical);
++  float2 cell = min(floor(p), logical - 1);
++  float2 f = p - cell;
++  float2 q = float2(mix(forward_x[uint(cell.x)], forward_x[uint(cell.x) + 1], f.x),
++                    mix(forward_y[uint(cell.y)], forward_y[uint(cell.y) + 1], f.y));
++  return source.sample(linear_pixel, clamp(q, float2(0.5), physical - 0.5));
++}
+ 
+ [[fragment]] depth_stencil_out fs_copy_from_buffer_d32s8(
+   present_data input [[stage_in]],
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -929,6 +929,7 @@
+   EmulatedCommandContext emulated_cmd;
+   ClearRTV<ArgumentEncodingContext> clear_rt_cmd;
+   DepthStencilBlitContext blit_depth_stencil_cmd;
++  RateMapUnwarpContext rate_map_unwarp_cmd;
+   ClearUAV<ArgumentEncodingContext> clear_uav_cmd;
+   MTLFXMVScaleContext mv_scale_cmd;
+   TileBarrierContext tile_barrier_cmd;
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -39,6 +39,7 @@
+     emulated_cmd(device, lib, *this),
+     clear_rt_cmd(device, *this),
+     blit_depth_stencil_cmd(device, lib, *this),
++    rate_map_unwarp_cmd(device, lib, *this),
+     clear_uav_cmd(device, *this),
+     mv_scale_cmd(device, lib, *this),
+     tile_barrier_cmd(device, lib, *this),
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -4064,10 +4064,49 @@
+         });
+       } else if (auto src = GetTexture(cmd.pSrc)) {
+         // on-device copy
++        static const bool debug_dump_copy = !env::getEnvVar("DXMT_DEBUG_DUMP_PATH").empty();
++        if (debug_dump_copy && dst->external_storage && !cmd.Dst.ArraySlice) debug_dump_target_ = cmd.pDst;
++        // Stay-warped foveation: tell the OpenXR layer what the application hands to a
++        // swapchain image, so that it can fit the rate map to that texture rather than to
++        // the swapchain. Private data on the image, one entry per array slice (0, 1):
++        // {sequence, source width, height, box left, top, right, bottom, source samples}.
++        static const bool stay_warped_copy = !env::getEnvVar("DXMT_STAY_WARPED").empty();
++        if (stay_warped_copy && dst->external_storage && cmd.Dst.ArraySlice < 2 && !cmd.Src.MipLevel) {
++          static std::atomic<uint32_t> copy_sequence;
++          const uint32_t source[8] = {++copy_sequence, uint32_t(src->width()), uint32_t(src->height()),
++                                      uint32_t(cmd.SrcOrigin.x), uint32_t(cmd.SrcOrigin.y),
++                                      uint32_t(cmd.SrcOrigin.x + cmd.SrcSize.width), uint32_t(cmd.SrcOrigin.y + cmd.SrcSize.height),
++                                      uint32_t(src->sampleCount())};
++          GUID guid = {0x6d777872, 0x6373, 0x4f56, {0x90, 0x01, 'c', 'o', 'p', 'y', 0, uint8_t(cmd.Dst.ArraySlice)}};
++          cmd.pDst->SetPrivateData(guid, sizeof(source), source);
++        }
+         SwitchToBlitEncoder(CommandBufferState::BlitEncoderActive);
+         EmitOP([dst_ = std::move(dst), src_ = std::move(src), cmd = std::move(cmd)](ArgumentEncodingContext &enc) {
+           auto src_format = src_->pixelFormat();
+           auto dst_format = dst_->pixelFormat();
++          if (src_->rate_map_layout && dst_.ptr() != src_.ptr()) {
++            // Stay-warped source. The compositor reads swapchain images outside DXMT, so a
++            // copy into one resamples to the ordinary layout; any other whole-image copy is
++            // texel-for-texel and its destination inherits the layout.
++            if (dst_->external_storage) {
++              enc.endPass();
++              bool done = enc.rate_map_unwarp_cmd.copy(src_, cmd.Src.MipLevel, cmd.Src.ArraySlice, cmd.SrcOrigin, cmd.SrcSize,
++                                                       dst_, cmd.Dst.MipLevel, cmd.Dst.ArraySlice, cmd.DstOrigin);
++              enc.startBlitPass();
++              if (done)
++                return;
++              static bool warned;
++              if (!std::exchange(warned, true))
++                WARN("Rate-map copy: warped source copied to a swapchain image without resampling");
++            } else if (!cmd.Src.MipLevel && !cmd.Dst.MipLevel && !cmd.SrcOrigin.x && !cmd.SrcOrigin.y && !cmd.DstOrigin.x &&
++                       !cmd.DstOrigin.y && cmd.SrcSize.width == src_->width() && cmd.SrcSize.height == src_->height() &&
++                       dst_->width() == src_->width() && dst_->height() == src_->height()) {
++              dst_->rate_map_layout = src_->rate_map_layout;
++            }
++          } else if (dst_->rate_map_layout && !cmd.Dst.MipLevel && !cmd.DstOrigin.x && !cmd.DstOrigin.y &&
++                     cmd.SrcSize.width == dst_->width() && cmd.SrcSize.height == dst_->height()) {
++            dst_->rate_map_layout = {};
++          }
+           auto src = enc.access(src_, cmd.Src.MipLevel, cmd.Src.ArraySlice, ResourceAccess::Read);
+           auto dst = enc.access(dst_, cmd.Dst.MipLevel, cmd.Dst.ArraySlice, ResourceAccess::Write);
+           if (Forget_sRGB(dst_format) != Forget_sRGB(src_format)) {
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -511,7 +511,35 @@
+   struct unixcall_generic_obj_uint64_obj_ret *params = obj;
+   id<MTLLibrary> library = (id<MTLLibrary>)params->handle;
+   NSString *name = [[NSString alloc] initWithCString:(char *)params->arg encoding:NSUTF8StringEncoding];
+-  params->ret = (obj_handle_t)[library newFunctionWithName:name];
++  id<MTLFunction> function = [library newFunctionWithName:name];
++  // dxmt_command.metal's stay-warped copy shader, compiled here when the prebuilt internal
++  // library predates it (a build without the Metal toolchain copies that library).
++  if (!function && [name isEqualToString:@"fs_rate_map_unwarp"]) {
++    static NSString *const source =
++        @"#include <metal_stdlib>\nusing namespace metal;\n"
++         "struct unwarp_desc { float2 src_origin; float2 dst_origin; };\n"
++         "struct unwarp_in { float4 position [[position]]; };\n"
++         "fragment float4 fs_rate_map_unwarp(unwarp_in input [[stage_in]], texture2d<float> source [[texture(0)]],\n"
++         "    const device float *tables [[buffer(30)]], constant unwarp_desc &desc [[buffer(29)]]) {\n"
++         "  constexpr sampler linear_pixel(coord::pixel, filter::linear, address::clamp_to_edge);\n"
++         "  float2 physical = float2(tables[0], tables[1]);\n"
++         "  float2 logical = float2(tables[2], tables[3]);\n"
++         "  const device float *forward_x = tables + 4 + uint(physical.x) + uint(physical.y);\n"
++         "  const device float *forward_y = forward_x + uint(logical.x) + 1;\n"
++         "  float2 p = clamp(input.position.xy - desc.dst_origin + desc.src_origin, float2(0), logical);\n"
++         "  float2 cell = min(floor(p), logical - 1);\n"
++         "  float2 f = p - cell;\n"
++         "  float2 q = float2(mix(forward_x[uint(cell.x)], forward_x[uint(cell.x) + 1], f.x),\n"
++         "                    mix(forward_y[uint(cell.y)], forward_y[uint(cell.y) + 1], f.y));\n"
++         "  return source.sample(linear_pixel, clamp(q, float2(0.5), physical - 0.5));\n"
++         "}\n";
++    NSError *error = nil;
++    id<MTLLibrary> fallback = [library.device newLibraryWithSource:source options:nil error:&error];
++    if (!fallback) NSLog(@"winemetal: fs_rate_map_unwarp: %@", error);
++    function = [fallback newFunctionWithName:name];
++    [fallback release];
++  }
++  params->ret = (obj_handle_t)function;
+   [name release];
+   return STATUS_SUCCESS;
+ }

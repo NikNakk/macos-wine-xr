@@ -1,0 +1,313 @@
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -4520,12 +4520,42 @@
+         uav_only = true;
+       }
+ 
++      // Explicitly selected experimental profile; no global target-size heuristic.
++      static const auto base_vs=env::getEnvVar("DXMT_BASE_FOVEATION_VS");
++      static const auto base_ps=env::getEnvVar("DXMT_BASE_FOVEATION_PS");
++      static const auto base_size=env::getEnvVar("DXMT_BASE_FOVEATION_SIZE");
++      static const bool base_enabled=env::getEnvVar("DXMT_BASE_FOVEATION")=="1" &&
++          env::getEnvVar("DXMT_RATE_MAP_POSITION")=="1" && base_vs.size()==40 && base_ps.size()==40;
++      bool base_candidate=false;
++      if(base_enabled && GetType()==D3D11_DEVICE_CONTEXT_IMMEDIATE && effective_render_target==1 && rtvs.size()==1 && !dsv_info.Texture &&
++          sample_count==1 && render_target_array<=1 && rtvs[0].PixelFormat==WMTPixelFormatRGBA8Unorm &&
++          rtvs[0].Texture->miplevelCount()==1 && rtvs[0].Texture->arrayLength()==1 &&
++          rtvs[0].Texture->textureType()==WMTTextureType2D &&
++          (rtvs[0].Texture->usage()&WMTTextureUsageShaderWrite) &&
++          !state_.OutputMerger.UAVs.any_bound() && !state_.StreamOutput.Targets.any_bound() &&
++          !GetManagedShader<PipelineStage::Geometry>() && !GetManagedShader<PipelineStage::Hull>() &&
++          !GetManagedShader<PipelineStage::Domain>() && state_.Rasterizer.NumViewports==1 &&
++          base_size==str::format(render_target_width,"x",render_target_height)) {
++        auto vs=GetManagedShader<PipelineStage::Vertex>();auto ps=GetManagedShader<PipelineStage::Pixel>();
++        auto viewport=state_.Rasterizer.viewports[0];
++        auto rs=state_.Rasterizer.RasterizerState ? state_.Rasterizer.RasterizerState : default_rasterizer_state;
++        auto bs=state_.OutputMerger.BlendState ? state_.OutputMerger.BlendState : default_blend_state;
++        D3D11_BLEND_DESC1 blend={};bs->GetDesc1(&blend);
++        base_candidate=vs && ps && vs->sha1().string()==base_vs && ps->sha1().string()==base_ps &&
++            !vs->reflection().UAVSlotMask && !ps->reflection().UAVSlotMask &&
++            !rs->IsScissorEnabled() && !blend.AlphaToCoverageEnable &&
++            !blend.RenderTarget[0].BlendEnable && !blend.RenderTarget[0].LogicOpEnable &&
++            blend.RenderTarget[0].RenderTargetWriteMask==D3D11_COLOR_WRITE_ENABLE_ALL &&
++            viewport.TopLeftX==0 && viewport.TopLeftY==0 && viewport.Width==render_target_width &&
++            viewport.Height==render_target_height && viewport.MinDepth==0 && viewport.MaxDepth==1;
++      }
++
+       auto allocated_encoder_argbuf_size = std::make_unique<uint64_t>(0);
+       allocated_encoder_argbuf_size_ = allocated_encoder_argbuf_size.get();
+ 
+       EmitST([rtvs = std::move(rtvs), dsv = std::move(dsv_info), effective_render_target, uav_only,
+             render_target_height, render_target_width, sample_count,
+-            render_target_array, encoder_argbuf_size = std::move(allocated_encoder_argbuf_size)](ArgumentEncodingContext &ctx) {
++            render_target_array, base_candidate, encoder_argbuf_size = std::move(allocated_encoder_argbuf_size)](ArgumentEncodingContext &ctx) {
+         auto pool = WMT::MakeAutoreleasePool();
+         uint32_t dsv_planar_flags = DepthStencilPlanarFlags(dsv.PixelFormat);
+         auto& info = *ctx.startRenderPass(dsv_planar_flags, dsv.ReadOnlyFlags, rtvs.size(), *encoder_argbuf_size.get());
+@@ -4540,6 +4570,7 @@
+           // the map. Shadow/UI/unrelated targets remain ordinary render passes.
+           if (rtvs.size() == 1 && !dsv.Texture && rtv.Texture->rasterization_rate_map)
+             info.rasterization_rate_map = rtv.Texture->rasterization_rate_map;
++          if(base_candidate) { info.base_foveation_target=rtv.Texture;info.base_foveation_view=rtv.viewId; }
+           color.depth_plane = rtv.DepthPlane;
+           color.load_action = WMTLoadActionLoad;
+           color.store_action = WMTStoreActionStore;
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -710,9 +710,64 @@
+   return encoder_info;
+ }
+ 
++bool
++ArgumentEncodingContext::prepareBaseFoveation(unsigned width, unsigned height) {
++  if(base_foveation_hidden && width==base_foveation_size.width && height==base_foveation_size.height) return true;
++  WMTBaseFoveation bundle={};
++  MTLDevice_newBaseFoveation(device_.handle,width,height,base_foveation_pipeline.handle,&bundle);
++  WMT::Reference<WMT::Object> map(bundle.map);
++  WMT::Reference<WMT::Buffer> forward(bundle.forward);
++  WMT::Reference<WMT::ComputePipelineState> pipeline(bundle.pipeline);
++  WMTSize logical={};
++  WMT::Reference<WMT::Buffer> inverse(map ? MTLDevice_rateMapInversePositions(device_.handle,map.handle,&logical) : 0);
++  if(!map || !forward || !pipeline || !inverse) return false;
++  // Full logical allocation in this first prototype; only the mapped physical region is shaded.
++  WMTTextureInfo desc={};desc.width=width;desc.height=height;desc.depth=1;desc.array_length=1;
++  desc.type=WMTTextureType2D;desc.pixel_format=WMTPixelFormatRGBA8Unorm;desc.mipmap_level_count=1;desc.sample_count=1;
++  desc.usage=WMTTextureUsage(WMTTextureUsageRenderTarget|WMTTextureUsageShaderRead);
++  desc.options=WMTResourceStorageModePrivate;
++  Rc<Texture> hidden=new Texture(desc,device_);
++  auto allocation=hidden->allocate(TextureAllocationFlag::GpuPrivate);
++  if(!allocation || !allocation->texture()) return false;
++  hidden->rename(std::move(allocation));
++  base_foveation_map=std::move(map);base_foveation_forward=std::move(forward);
++  base_foveation_inverse=std::move(inverse);base_foveation_pipeline=std::move(pipeline);
++  base_foveation_hidden=std::move(hidden);base_foveation_size=logical;
++  Logger::info(str::format("DXMT base foveation prepared logical=",width,"x",height,
++      " physical=",bundle.physical_size.width,"x",bundle.physical_size.height));
++  return true;
++}
++
+ void
+ ArgumentEncodingContext::endPass() {
+   assert(encoder_current);
++  Rc<Texture> base_target;
++  uint64_t base_view=0;
++  if(encoder_current->type==EncoderType::Render && encoder_last->type==EncoderType::Clear) {
++    auto render=static_cast<RenderEncoderData *>(encoder_current);
++    auto clear=static_cast<ClearEncoderData *>(encoder_last);
++    unsigned draws=0;bool supported=true;
++    if(render->base_foveation_target && !render->rasterization_rate_map && !render->use_visibility_result &&
++        !render->use_geometry && !render->use_tessellation && !render->use_emulated_so &&
++        !clear->clear_dsv && clear->attachment==render->colors[0].attachment &&
++        clear->width==render->render_target_width && clear->height==render->render_target_height && clear->array_length<=1) {
++      for(auto cmd=reinterpret_cast<const wmtcmd_base *>(&render->cmd_head);cmd;
++          cmd=reinterpret_cast<const wmtcmd_base *>(const_cast<WMTMemoryPointer &>(cmd->next).get())) {
++        if(cmd->type==WMTRenderCommandDraw || cmd->type==WMTRenderCommandDrawIndexed) ++draws;
++        else if(cmd->type==WMTRenderCommandDrawIndirect || cmd->type==WMTRenderCommandDrawIndexedIndirect ||
++            cmd->type==WMTRenderCommandDrawMeshThreadgroups || cmd->type==WMTRenderCommandDrawMeshThreadgroupsIndirect ||
++            cmd->type==WMTRenderCommandExecuteCommandsInBuffer || cmd->type==WMTRenderCommandDispatchThreadsPerTile)
++          supported=false;
++      }
++      if(draws==1 && supported && prepareBaseFoveation(render->render_target_width,render->render_target_height)) {
++        base_target=render->base_foveation_target;base_view=render->base_foveation_view;
++        render->colors[0].attachment=access<PipelineStage::Pixel>(base_foveation_hidden,base_foveation_hidden->fullView,ResourceAccess::Write);
++        render->colors[0].load_action=WMTLoadActionClear;render->colors[0].clear_color=clear->color;
++        render->rasterization_rate_map=base_foveation_map;render->rate_map_positions=base_foveation_inverse;
++        render->rate_map_logical_size=base_foveation_size;
++      }
++    }
++  }
+   encoder_last->next = encoder_current;
+   encoder_last = encoder_current;
+ 
+@@ -744,6 +799,24 @@
+ 
+   encoder_current = nullptr;
+   encoder_count_++;
++  if(base_target) {
++    auto compute=static_cast<ComputeEncoderData *>(startComputePass(0));
++    compute->base_foveation_forward=base_foveation_forward;
++    compute->base_foveation_pipeline=base_foveation_pipeline;
++    auto &pso=encodeComputeCommand<wmtcmd_compute_setpso>();
++    pso.type=WMTComputeCommandSetPSO;pso.pso=base_foveation_pipeline;pso.threadgroup_size={8,8,1};
++    auto &src=access(base_foveation_hidden,base_foveation_hidden->fullView,ResourceAccess::Read);
++    auto &dst=access(base_target,base_view,ResourceAccess::Write);
++    auto &src_cmd=encodeComputeCommand<wmtcmd_compute_settexture>();
++    src_cmd.type=WMTComputeCommandSetTexture;src_cmd.index=0;src_cmd.texture=src.texture;
++    auto &dst_cmd=encodeComputeCommand<wmtcmd_compute_settexture>();
++    dst_cmd.type=WMTComputeCommandSetTexture;dst_cmd.index=1;dst_cmd.texture=dst.texture;
++    auto &buffer=encodeComputeCommand<wmtcmd_compute_setbuffer>();
++    buffer.type=WMTComputeCommandSetBuffer;buffer.index=0;buffer.offset=0;buffer.buffer=base_foveation_forward;
++    auto &dispatch=encodeComputeCommand<wmtcmd_compute_dispatch>();
++    dispatch.type=WMTComputeCommandDispatchThreads;dispatch.size={base_foveation_size.width,base_foveation_size.height,1};
++    endPass();
++  }
+ }
+ 
+ std::pair<WMT::Buffer, size_t>
+@@ -1236,7 +1309,10 @@
+     case EncoderType::Compute: {
+       auto data = static_cast<ComputeEncoderData *>(current);
+       auto encoder = cmdbuf.computeCommandEncoder(true);
+-      if (encoderLabelsEnabled())
++      if(data->base_foveation_forward) {
++        encoder.setLabel(WMT::String::string("BaseFoveationUnwarp",WMTUTF8StringEncoding));
++        if(sceneTraceEnabled()) sceneTrace("base_foveation_unwarp encoder=%llu",(unsigned long long)data->id);
++      } else if (encoderLabelsEnabled())
+         encoder.setLabel(WMT::String::string(computeLabel(data).c_str(), WMTUTF8StringEncoding));
+       data->fence_wait.forEach([&](auto id) { encoder.waitForFence(fence_pool_[id]); });
+       struct wmtcmd_compute_setbuffer setcmd;
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -185,6 +185,9 @@
+ };
+ 
+ struct RenderEncoderData : EncoderData {
++  Rc<Texture> base_foveation_target;
++  uint64_t base_foveation_view=0;
++
+   WMT::Reference<WMT::Object> rasterization_rate_map;
+   WMT::Reference<WMT::Buffer> rate_map_positions;
+   WMTSize rate_map_logical_size={};
+@@ -217,6 +220,9 @@
+ };
+ 
+ struct ComputeEncoderData : EncoderData {
++  WMT::Reference<WMT::Buffer> base_foveation_forward;
++  WMT::Reference<WMT::ComputePipelineState> base_foveation_pipeline;
++
+   wmtcmd_compute_nop cmd_head;
+   wmtcmd_base *cmd_tail;
+   WMT::Buffer allocated_argbuf;
+@@ -706,6 +712,13 @@
+   WMT::Reference<WMT::Buffer> rate_map_positions;
+   WMTSize rate_map_logical_size={};
+ 
++  WMT::Reference<WMT::Object> base_foveation_map;
++  WMT::Reference<WMT::Buffer> base_foveation_forward, base_foveation_inverse;
++  WMT::Reference<WMT::ComputePipelineState> base_foveation_pipeline;
++  Rc<Texture> base_foveation_hidden;
++  WMTSize base_foveation_size={};
++  bool prepareBaseFoveation(unsigned width, unsigned height);
++
+   RenderEncoderData *startRenderPass(
+       uint8_t dsv_planar_flags, uint8_t dsv_readonly_flags, uint8_t render_target_count, uint64_t argument_buffer_size
+   );
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -77,6 +77,61 @@
+       [buffer release];
+     }
+     p->ret=(obj_handle_t)[buffer retain];
++  }
++  return STATUS_SUCCESS;
++}
++
++// Bounded fixed-centre prototype; reuse the existing map/position transport.
++static NTSTATUS
++_MTLDevice_newBaseFoveation(void *args) {
++  struct unixcall_base_foveation *p=args;
++  p->result=(struct WMTBaseFoveation){0};
++  @autoreleasepool {
++    id<MTLDevice> device=(id<MTLDevice>)p->device;
++    if(!p->width || !p->height || p->width>8192 || p->height>8192 ||
++        ![device supportsRasterizationRateMapWithLayerCount:1]) return STATUS_SUCCESS;
++    MTLRasterizationRateLayerDescriptor *layer=[[MTLRasterizationRateLayerDescriptor alloc]
++        initWithSampleCount:MTLSizeMake(8,8,1)];
++    for(unsigned i=0;i<8;++i) {
++      layer.horizontal[i]=@((i==3 || i==4)?1.f:.25f);
++      layer.vertical[i]=@((i==3 || i==4)?1.f:.25f);
++    }
++    MTLRasterizationRateMapDescriptor *desc=[MTLRasterizationRateMapDescriptor
++        rasterizationRateMapDescriptorWithScreenSize:MTLSizeMake(p->width,p->height,1) layer:layer];
++    id<MTLRasterizationRateMap> map=[device newRasterizationRateMapWithDescriptor:desc];
++    [layer release];
++    if(!map) return STATUS_SUCCESS;
++    MTLSize physical=[map physicalSizeForLayer:0];
++    if(!physical.width || !physical.height || physical.width>p->width || physical.height>p->height) {
++      [map release];return STATUS_SUCCESS;
++    }
++    id<MTLBuffer> xy=[device newBufferWithLength:(p->width+p->height)*sizeof(float) options:MTLResourceStorageModeShared];
++    id<MTLComputePipelineState> pipeline=[(id)p->pipeline retain];
++    if(!pipeline) {
++      NSString *source=@"#include <metal_stdlib>\nusing namespace metal;\n"
++        "kernel void unwarp(texture2d<float,access::sample> src [[texture(0)]],"
++        "texture2d<float,access::write> dst [[texture(1)]],constant float *xy [[buffer(0)]],"
++        "uint2 i [[thread_position_in_grid]]) { if(any(i>=uint2(dst.get_width(),dst.get_height()))) return;"
++        "constexpr sampler s(coord::pixel,filter::linear,address::clamp_to_edge);"
++        "dst.write(src.sample(s,float2(xy[i.x],xy[dst.get_width()+i.y])),i); }";
++      NSError *error=nil;
++      id<MTLLibrary> library=[device newLibraryWithSource:source options:nil error:&error];
++      id<MTLFunction> function=[library newFunctionWithName:@"unwarp"];
++      if(function) pipeline=[device newComputePipelineStateWithFunction:function error:&error];
++      [function release];[library release];
++    }
++    if(!xy || !pipeline) { [xy release];[pipeline release];[map release];return STATUS_SUCCESS; }
++    float *values=xy.contents;
++    for(unsigned i=0;i<p->width;++i) {
++      float x=[map mapScreenToPhysicalCoordinates:MTLCoordinate2DMake(i+.5f,.5f) forLayer:0].x;
++      values[i]=fminf(fmaxf(x,.5f),physical.width-.5f);
++    }
++    for(unsigned i=0;i<p->height;++i) {
++      float y=[map mapScreenToPhysicalCoordinates:MTLCoordinate2DMake(.5f,i+.5f) forLayer:0].y;
++      values[p->width+i]=fminf(fmaxf(y,.5f),physical.height-.5f);
++    }
++    p->result.map=(obj_handle_t)map;p->result.forward=(obj_handle_t)xy;p->result.pipeline=(obj_handle_t)pipeline;
++    p->result.physical_size=(struct WMTSize){physical.width,physical.height,1};
+   }
+   return STATUS_SUCCESS;
+ }
+@@ -3807,6 +3862,7 @@
+     &_WMTSetRemoteLayerFrame,
+     &_MTLDevice_retainRasterizationRateMap,
+     &_MTLDevice_rateMapInversePositions,
++    &_MTLDevice_newBaseFoveation,
+ };
+ 
+ #ifndef DXMT_NATIVE
+@@ -3968,5 +4024,6 @@
+     &_WMTSetRemoteLayerFrame,
+     &_MTLDevice_retainRasterizationRateMap,
+     &_MTLDevice_rateMapInversePositions,
++    &_MTLDevice_newBaseFoveation,
+ };
+ #endif
+--- a/src/winemetal/winemetal.h
++++ b/src/winemetal/winemetal.h
+@@ -2183,4 +2183,9 @@
+ 
+ WINEMETAL_API obj_handle_t MTLDevice_rateMapInversePositions(obj_handle_t device, obj_handle_t map, struct WMTSize *logical_size);
+ 
++// Private fixed-map experiment. All returned objects carry +1 ownership.
++struct WMTBaseFoveation { obj_handle_t map, forward, pipeline; struct WMTSize physical_size; };
++WINEMETAL_API void MTLDevice_newBaseFoveation(obj_handle_t device, uint32_t width, uint32_t height,
++    obj_handle_t pipeline, struct WMTBaseFoveation *result);
++
+ #endif
+--- a/src/winemetal/winemetal_thunks.c
++++ b/src/winemetal/winemetal_thunks.c
+@@ -1449,3 +1449,11 @@
+   if(logical_size) *logical_size=params.logical_size;
+   return params.ret;
+ }
++
++WINEMETAL_API void
++MTLDevice_newBaseFoveation(obj_handle_t device, uint32_t width, uint32_t height,
++    obj_handle_t pipeline, struct WMTBaseFoveation *result) {
++  struct unixcall_base_foveation params={0};
++  params.device=device;params.width=width;params.height=height;params.pipeline=pipeline;
++  UNIX_CALL(157,&params); *result=params.result;
++}
+--- a/src/winemetal/winemetal_thunks.h
++++ b/src/winemetal/winemetal_thunks.h
+@@ -468,6 +468,11 @@
+   struct WMTSize logical_size;
+ };
+ 
++struct unixcall_base_foveation {
++  obj_handle_t device, pipeline;
++  uint32_t width, height;
++  struct WMTBaseFoveation result;
++};
+ #pragma pack(pop)
+ 
+ #endif

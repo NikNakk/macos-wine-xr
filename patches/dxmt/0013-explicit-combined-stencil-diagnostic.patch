@@ -1,0 +1,14 @@
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -1261,8 +1261,9 @@
+       static const bool attachment_probe=env::getEnvVar("DXMT_RATE_MAP_ATTACHMENT_PROBE")=="1";
+       const bool attachment_supported=(!data->depth.attachment && !data->stencil.attachment &&
+           data->tile_barrier_pso_key.raster_sample_count==1) ||
+-          (attachment_probe && data->depth.attachment && !data->stencil.attachment &&
+-           data->depth.attachment->allocation->descriptor->pixelFormat()==WMTPixelFormatDepth32Float &&
++          (attachment_probe && data->depth.attachment &&
++           ((!data->stencil.attachment && data->depth.attachment->allocation->descriptor->pixelFormat()==WMTPixelFormatDepth32Float) ||
++            (data->depth.attachment==data->stencil.attachment && data->depth.attachment->allocation->descriptor->pixelFormat()==WMTPixelFormatDepth32Float_Stencil8)) &&
+            (data->tile_barrier_pso_key.raster_sample_count==2 || data->tile_barrier_pso_key.raster_sample_count==4));
+       const bool mapped_position=position_mode && data->rate_map_positions &&
+           (data->render_target_count==1 || (attachment_probe && data->render_target_count==0 && data->depth.attachment)) &&
