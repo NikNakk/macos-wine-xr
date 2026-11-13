@@ -421,12 +421,52 @@ Diagnostics:
 
 `scripts/steam-play-game-settings.zsh` turns compaction on for NMS.
 
+### Light barriers, quarter-size targets and the read-write pass (2026-11-13)
+
+Patch `0006-light-barrier-fixes-and-runtime-switches.patch`. Comparisons across runs of
+NMS are unreliable: each new game lands on a random planet, and the day passes during
+a run. `KK_IMPLICIT_COMPACT_FILE` now also switches light barriers (`lb`/`nolb`) and
+25% scaled targets (`quarter`) at run time, polled at presents, so these were measured
+alternating within one session.
+
+- **Light barriers** (`MESA_KK_EXPERIMENTAL=…,light_barriers`): KosmicKrisp then orders
+  encoders by the application's barriers rather than waiting for all earlier work at
+  every encoder end. As shipped it broke NMS: banded clouds, a hard-edged gap in the sky,
+  see-through plants and HUD. Two gaps:
+  - a barrier recorded while a compute encoder was open only ordered work inside that
+    encoder, and render encoders start with no wait of their own, so a later pass could
+    read compute results early. Fixed: such barriers also carry to the next encoder.
+  - the driver's own writes of rate parameters in a compute encoder (published maps,
+    cleared maps, the maps compaction gives compute-only targets) had the same gap.
+    Fixed the same way.
+  
+  With both fixes the images are clean. Alternating every 15–20 s in one session:
+  - Talos: 16.15 → 15.54 ms of GPU per frame, about 4%, consistent in every pair.
+  - NMS: 51.9 → 51.9 ms; 46.4 → 47.4 frames per 5 s, within noise. Its GPU is
+    saturated, so overlapping passes buys nothing.
+  
+  It stays off by default: it's experimental, and the gain is small.
+- **Quarter-size targets** (scaled targets from 25%, which takes in NMS's 1648×848
+  effects): those passes went 1.94 → 1.41 ms per frame, but two runs showed a hard
+  horizontal lighting edge across the eye, sunlit above and dark below. It also matched
+  an 824×848 image as one eye, which is suspect. The default stays at 40%; `quarter` in
+  the control file brings 25% back for debugging. Images already judged not eye-sized
+  stay ordinary, so it must be set from the start.
+- **NMS's read-write compute pass** (about 13–15 ms per dispatch). The compile-time
+  pass now records the access pattern: it writes four eye images and reads other
+  texels of them as well as its own, with seven texture samples. It filters or
+  accumulates in place across neighbours. One invocation per foveated texel changes
+  what its neighbours see, which is what produced the ghosting, so compaction is not
+  safe for it. The levers left there are the game's own cloud, volumetric and
+  render-scale settings.
+
 ## Next
 
 1. Talos and NMS in the headset with real gaze.
-2. NMS's read-write compute pass: find out what it accumulates (probably temporal, from
-   the ghosting) before trying to compact it, for example with a per-frame jitter of
-   the representative screen texel.
-3. Avoid the unwarp blits where the last pass before a copy can render ordinary.
-4. Decide whether the push-descriptor and occlusion-query fixes go into the
+2. NMS's own graphics settings against its read-write compute pass (clouds or
+   volumetrics, from the look of it).
+3. Find what reads NMS's 25% targets in the wrong layout (the horizontal edge), then
+   reconsider them (about 0.5 ms).
+4. Avoid the unwarp blits where the last pass before a copy can render ordinary.
+5. Decide whether the push-descriptor and occlusion-query fixes go into the
    `kk-zink` branch on their own.

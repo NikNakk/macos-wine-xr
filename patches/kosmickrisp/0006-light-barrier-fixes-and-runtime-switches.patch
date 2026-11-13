@@ -1,0 +1,297 @@
+diff --git a/src/kosmickrisp/vulkan/kk_cmd_buffer.c b/src/kosmickrisp/vulkan/kk_cmd_buffer.c
+index 47ce33a..7f5e67c 100644
+--- a/src/kosmickrisp/vulkan/kk_cmd_buffer.c
++++ b/src/kosmickrisp/vulkan/kk_cmd_buffer.c
+@@ -1205,6 +1205,11 @@ kk_cmd_barrier(struct kk_cmd_buffer *cmd, const VkDependencyInfo *dep)
+       mtl_barrier_after_encoder_stages(cmd->metal.compute,
+                                        MTL_STAGE_DISPATCH | MTL_STAGE_BLIT,
+                                        MTL_STAGE_DISPATCH | MTL_STAGE_BLIT);
++      /* With light barriers a render encoder starts with only the accumulated
++       * barrier: carry this one over too, or a pass after the compute encoder can
++       * read its results before they are written (NMS's sky and clouds). */
++      if (KK_EXPERIMENTAL(LIGHT_BARRIERS))
++         kk_accumulate_barrier(cmd, dep);
+    } else {
+       kk_encoder_stat("barrier with no encoder open", false);
+       kk_barrier_histogram(dep);
+diff --git a/src/kosmickrisp/vulkan/kk_fdm.c b/src/kosmickrisp/vulkan/kk_fdm.c
+index b0bd664..db9791d 100644
+--- a/src/kosmickrisp/vulkan/kk_fdm.c
++++ b/src/kosmickrisp/vulkan/kk_fdm.c
+@@ -80,6 +80,7 @@ kk_fdm_scan_offsets(struct kk_cmd_buffer *cmd)
+ }
+ 
+ static simple_mtx_t kk_fdm_lock = SIMPLE_MTX_INITIALIZER;
++static float kk_scaled_min = 0.4f;
+ 
+ 
+ /* Images with rate parameters, by the parameters' GPU address, so a dispatch can tell
+@@ -405,8 +406,9 @@ kk_implicit_eyes(const struct kk_image *image)
+        image->vk.extent.height == DIV_ROUND_UP(kk_implicit.view_height, 2))
+       return 1;
+    /* KK_IMPLICIT_SCALED=1 (single-sample route): the eye layout scaled down uniformly,
+-    * 40-100%, within 0.8%, not powers of two, as a render scale or dynamic resolution makes it (No Man's Sky renders
+-    * its scene at about 59% and upscales). Each size gets its own map of the profile. */
++    * 40-100% (kk_scaled_min), within 0.8%, not powers of two, as a render scale or dynamic
++    * resolution makes it (No Man's Sky renders its scene at about 59% and upscales). Each
++    * size gets its own map of the profile. */
+    static int scaled = -1;
+    if (scaled < 0)
+       scaled = debug_get_bool_option("KK_IMPLICIT_SCALED", false) &&
+@@ -419,7 +421,7 @@ kk_implicit_eyes(const struct kk_image *image)
+       for (uint32_t eyes = 1; eyes <= 2; eyes++) {
+          const float sx = (float)image->vk.extent.width / (eyes * kk_implicit.view_width);
+          const float sy = (float)image->vk.extent.height / kk_implicit.view_height;
+-         if (sx >= 0.4f && sx < 1.0f && fabsf(sx - sy) <= 0.008f)
++         if (sx >= kk_scaled_min && sx < 1.0f && fabsf(sx - sy) <= 0.008f)
+             return eyes;
+       }
+    }
+@@ -1044,6 +1046,20 @@ kk_fdm_log_pass(const struct kk_rendering_state *render, const char *why)
+       kk_fdm_log_view("stencil", 0, render->stencil_att.iview);
+ }
+ 
++
++/* The driver's own compute-encoder writes of rate parameters (copies, clears) are read
++ * by the next passes. With light barriers a render encoder starts with only the
++ * accumulated barrier, so add one for them. */
++static void
++kk_fdm_order_for_next_encoder(struct kk_cmd_buffer *cmd)
++{
++   if (KK_EXPERIMENTAL(LIGHT_BARRIERS)) {
++      cmd->state.gfx.pending_barrier_src |= MTL_STAGE_DISPATCH | MTL_STAGE_BLIT;
++      cmd->state.gfx.pending_barrier_dst |=
++         MTL_STAGE_VERTEX | MTL_STAGE_FRAGMENT | MTL_STAGE_DISPATCH | MTL_STAGE_BLIT;
++   }
++}
++
+ static void
+ kk_fdm_publish(struct kk_cmd_buffer *cmd, struct kk_image *density,
+                struct kk_image_view *iview)
+@@ -1056,9 +1072,11 @@ kk_fdm_publish(struct kk_cmd_buffer *cmd, struct kk_image *density,
+    /* Copied in every pass that renders the image rather than once: the
+     * command buffer holding an earlier copy may be re-recorded or dropped. */
+    uint32_t bytes = MIN2(density->fdm.params_bytes, KK_RATE_PARAMS_SIZE_B);
+-   if (cmd->metal.render == NULL)
++   if (cmd->metal.render == NULL) {
+       mtl_copy_from_buffer_to_buffer(cs_get_compute(cmd), density->fdm.params->bo->map,
+                                      0, image->rate_params->map, 0, bytes);
++      kk_fdm_order_for_next_encoder(cmd);
++   }
+    else
+       memcpy(image->rate_params->cpu, density->fdm.params->bo->cpu, bytes);
+    image->rate_params_owner = density;
+@@ -1286,6 +1304,7 @@ kk_fdm_clear_image_mapping(struct kk_cmd_buffer *cmd, struct kk_image *image)
+    kk_cmd_write(cmd, (struct libkk_imm_write){image->rate_params->gpu, 0});
+    mtl_barrier_after_encoder_stages(cs_get_compute(cmd), MTL_STAGE_DISPATCH,
+                                     MTL_STAGE_DISPATCH);
++   kk_fdm_order_for_next_encoder(cmd);
+    image->rate_params_owner = NULL;
+    image->rate_params_serial = 0;
+ }
+@@ -1537,37 +1556,58 @@ kk_compact_log(const struct kk_shader *cs, const char *fmt, ...)
+              (unsigned)cs->info.cs.local_size.x, (unsigned)cs->info.cs.local_size.y, buf);
+ }
+ 
+-/* KK_IMPLICIT_COMPACT_FILE=path (diagnostic): the file's first word, read at most once
+- * a second, picks the mode while the application runs: "off", "map" (map the images
+- * but dispatch at full size) or anything else, or no file, for compaction. */
+-static int
+-kk_compact_mode(void)
++/* KK_IMPLICIT_COMPACT_FILE=path (diagnostic): read at a present at most once a second,
++ * the file's words switch behaviour while the application runs, for A/B comparisons in
++ * one scene: "off", "map" (map compute-only targets, dispatch at full size) or
++ * "compact" (the default) for compaction; "lb"/"nolb" turn light barriers on or off;
++ * "quarter" lets scaled targets from 25% match (default 40%; images already judged
++ * not eye-sized stay ordinary). At 25% NMS showed a hard horizontal lighting edge. */
++static int kk_compact_runtime = 2;
++
++void
++kk_fdm_runtime_poll(void)
+ {
+    static const char *path;
+-   static int init, mode = 2;
++   static int init;
+    static uint64_t last_ns;
+    if (!init) {
+       path = getenv("KK_IMPLICIT_COMPACT_FILE");
+       init = 1;
+    }
+    if (!path)
+-      return 2;
++      return;
+    uint64_t now = os_time_get_nano();
+-   if (now - last_ns > 1000000000ull) {
+-      last_ns = now;
+-      char word[16] = {0};
+-      FILE *f = fopen(path, "r");
+-      int m = 2;
+-      if (f) {
+-         if (fscanf(f, "%15s", word) == 1)
+-            m = !strcmp(word, "off") ? 0 : !strcmp(word, "map") ? 1 : 2;
+-         fclose(f);
+-      }
+-      if (m != mode)
+-         mesa_logi("kk: compact mode %s", m == 0 ? "off" : m == 1 ? "map" : "compact");
+-      mode = m;
+-   }
+-   return mode;
++   if (now - last_ns < 1000000000ull)
++      return;
++   last_ns = now;
++   char text[256] = {0};
++   FILE *f = fopen(path, "r");
++   if (!f)
++      return;
++   size_t n = fread(text, 1, sizeof(text) - 1, f);
++   fclose(f);
++   text[n] = 0;
++   const int mode = strstr(text, "off") ? 0 : strstr(text, "map") ? 1 : 2;
++   const bool lb = strstr(text, "nolb") ? false : strstr(text, "lb") ? true
++                 : KK_EXPERIMENTAL(LIGHT_BARRIERS);
++   const float min = strstr(text, "quarter") && !strstr(text, "noquarter") ? 0.25f : 0.4f;
++   if (mode != kk_compact_runtime || lb != !!KK_EXPERIMENTAL(LIGHT_BARRIERS) ||
++       min != kk_scaled_min)
++      mesa_logi("kk: runtime mode: compaction %s, light barriers %s, scaled from %.0f%%",
++                mode == 0 ? "off" : mode == 1 ? "map" : "compact", lb ? "on" : "off",
++                min * 100.0f);
++   kk_compact_runtime = mode;
++   kk_scaled_min = min;
++   if (lb)
++      kk_mesa_experimental_flags |= KK_EXPERIMENTAL_LIGHT_BARRIERS;
++   else
++      kk_mesa_experimental_flags &= ~KK_EXPERIMENTAL_LIGHT_BARRIERS;
++}
++
++static int
++kk_compact_mode(void)
++{
++   return kk_compact_runtime;
+ }
+ 
+ uint64_t
+@@ -1648,6 +1688,7 @@ kk_implicit_compact_dispatch(struct kk_cmd_buffer *cmd, const struct kk_shader *
+             mtl_copy_from_buffer_to_buffer(encoder, d->fdm.params->bo->map, 0,
+                                            img->rate_params->map, 0, bytes);
+             mtl_barrier_after_encoder_stages(encoder, MTL_STAGE_BLIT, MTL_STAGE_DISPATCH);
++            kk_fdm_order_for_next_encoder(cmd);
+             img->rate_params_owner = d;
+             img->rate_params_serial = d->fdm.serial;
+             density = d;
+@@ -1698,7 +1739,9 @@ kk_implicit_compact_dispatch(struct kk_cmd_buffer *cmd, const struct kk_shader *
+    for (uint32_t i = 0; i < count; i++)
+       any_reads |= reads[i];
+    if (any_reads && !debug_get_bool_option("KK_IMPLICIT_COMPACT_READS", false)) {
+-      kk_compact_log(cs, "reads an image it writes");
++      kk_compact_log(cs, "reads an image it writes (%s, %u texture samples, %u images)",
++                     cs->info.cs.compact_own_texel ? "own texel only" : "other texels too",
++                     cs->info.cs.compact_samples, count);
+       return 0;
+    }
+ 
+diff --git a/src/kosmickrisp/vulkan/kk_fdm.h b/src/kosmickrisp/vulkan/kk_fdm.h
+index a0c58b9..bf19e2f 100644
+--- a/src/kosmickrisp/vulkan/kk_fdm.h
++++ b/src/kosmickrisp/vulkan/kk_fdm.h
+@@ -64,6 +64,8 @@ bool kk_implicit_storage_enabled(void);
+  * foveated image and only writes foveated storage images runs one invocation per
+  * physical texel; each finds the screen texel it stands for (kk_shader.c). */
+ bool kk_implicit_compact_enabled(void);
++/* KK_IMPLICIT_COMPACT_FILE: re-read the run-time switches (called at presents). */
++void kk_fdm_runtime_poll(void);
+ struct kk_shader;
+ /* Rate parameters to remap the dispatch with, shrinking the group counts to the
+  * physical size, or 0 to run it as recorded. */
+diff --git a/src/kosmickrisp/vulkan/kk_queue.c b/src/kosmickrisp/vulkan/kk_queue.c
+index 6413f0b..671d9bb 100644
+--- a/src/kosmickrisp/vulkan/kk_queue.c
++++ b/src/kosmickrisp/vulkan/kk_queue.c
+@@ -82,8 +82,10 @@ static void
+ kk_queue_add_timing_handler(mtl_commit_options *options, uint32_t count,
+                             bool wsi_present)
+ {
+-   if (wsi_present)
++   if (wsi_present) {
+       kk_pass_timing_frame();
++      kk_fdm_runtime_poll();
++   }
+    if (!debug_get_bool_option("KK_QUEUE_TIMING", false))
+       return;
+ 
+diff --git a/src/kosmickrisp/vulkan/kk_shader.c b/src/kosmickrisp/vulkan/kk_shader.c
+index 2180e1e..4f421be 100644
+--- a/src/kosmickrisp/vulkan/kk_shader.c
++++ b/src/kosmickrisp/vulkan/kk_shader.c
+@@ -924,6 +924,8 @@ static _Thread_local struct {
+    char reason[24];
+    uint8_t count;
+    struct { uint8_t set; uint8_t reads; uint16_t index; uint32_t binding; } image[4];
++   bool own_texel;
++   uint16_t samples;
+ } kk_cs_compact_pending;
+ 
+ static const char *
+@@ -958,6 +960,9 @@ kk_cs_compact_gather(nir_shader *nir)
+       KK_CS_REJECT("shared");
+    nir_variable *loaded[32];
+    unsigned loaded_count = 0;
++   nir_def *coord = NULL;
++   kk_cs_compact_pending.own_texel = true;
++   kk_cs_compact_pending.samples = 0;
+ 
+    nir_foreach_function_impl(impl, nir) {
+       nir_foreach_block(block, impl) {
+@@ -970,6 +975,7 @@ kk_cs_compact_gather(nir_shader *nir)
+             }
+             if (instr->type == nir_instr_type_tex) {
+                nir_tex_instr *tex = nir_instr_as_tex(instr);
++               kk_cs_compact_pending.samples++;
+                if (nir_tex_instr_has_implicit_derivative(tex))
+                   KK_CS_REJECT("implicit lod");
+                continue;
+@@ -989,6 +995,10 @@ kk_cs_compact_gather(nir_shader *nir)
+                   loaded[loaded_count++] = var;
+                else if (var)
+                   KK_CS_REJECT("many loads");
++               if (!coord)
++                  coord = intr->src[1].ssa;
++               else if (coord != intr->src[1].ssa)
++                  kk_cs_compact_pending.own_texel = false;
+                continue;
+             }
+             /* Image atomics on a written 2D image count as stores that also read: on a
+@@ -997,6 +1007,10 @@ kk_cs_compact_gather(nir_shader *nir)
+             const bool image_atomic = intr->intrinsic == nir_intrinsic_image_deref_atomic ||
+                                       intr->intrinsic == nir_intrinsic_image_deref_atomic_swap;
+             if (intr->intrinsic == nir_intrinsic_image_deref_store || image_atomic) {
++               if (!coord)
++                  coord = intr->src[1].ssa;
++               else if (coord != intr->src[1].ssa)
++                  kk_cs_compact_pending.own_texel = false;
+                if (image_atomic) {
+                   nir_variable *v = nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
+                   if (v && loaded_count < ARRAY_SIZE(loaded))
+@@ -1478,6 +1492,8 @@ gather_shader_info(struct kk_shader *shader, nir_shader *nir,
+          for (unsigned i = 0; i < kk_cs_compact_pending.count; i++) {
+             shader->info.cs.compact[i].set = kk_cs_compact_pending.image[i].set;
+             shader->info.cs.compact[i].reads = kk_cs_compact_pending.image[i].reads;
++            shader->info.cs.compact_own_texel = kk_cs_compact_pending.own_texel;
++            shader->info.cs.compact_samples = kk_cs_compact_pending.samples;
+             shader->info.cs.compact[i].index = kk_cs_compact_pending.image[i].index;
+             shader->info.cs.compact[i].binding = kk_cs_compact_pending.image[i].binding;
+          }
+diff --git a/src/kosmickrisp/vulkan/kk_shader.h b/src/kosmickrisp/vulkan/kk_shader.h
+index b1a024b..306c619 100644
+--- a/src/kosmickrisp/vulkan/kk_shader.h
++++ b/src/kosmickrisp/vulkan/kk_shader.h
+@@ -124,6 +124,10 @@ struct kk_shader_info {
+           * run one invocation per physical texel of a foveated image. */
+          uint8_t compact_count;
+          char compact_reject[24];
++         /* Every load, store and atomic on the written images uses one coordinate
++          * (each invocation touches only its own texel); texture samples. */
++         bool compact_own_texel;
++         uint16_t compact_samples;
+          struct {
+             uint8_t set;
+             uint8_t reads; /* the shader also loads from this image */
