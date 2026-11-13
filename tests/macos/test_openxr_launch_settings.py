@@ -113,7 +113,7 @@ class OpenXRLaunchSettingsTests(unittest.TestCase):
         self.assertEqual(self.game('552440', MWXR_VULKAN='off').stdout.split(), ['unset'])
         self.assertEqual(self.game('546560').stdout.split(), ['unset'])
 
-    def test_nms_foveates_storage_targets_and_compacts_compute(self):
+    def test_nms_foveates_storage_targets_without_compaction(self):
         def switches(appid, **values):
             env = {k: v for k, v in os.environ.items() if k not in KEYS}
             env.update(values)
@@ -121,8 +121,8 @@ class OpenXRLaunchSettingsTests(unittest.TestCase):
                 'source "$1" "$2"; print -r -- "${KK_IMPLICIT_STORAGE-unset}" '
                 '"${KK_IMPLICIT_COMPACT-unset}"', 'test', str(GAME_SETTINGS), appid],
                 env=env, capture_output=True, text=True).stdout.split()
-        self.assertEqual(switches('275850'), ['1', '1'])
-        self.assertEqual(switches('275850', KK_IMPLICIT_COMPACT='0'), ['1', '0'])
+        self.assertEqual(switches('275850'), ['1', '0'])
+        self.assertEqual(switches('275850', KK_IMPLICIT_COMPACT='1'), ['1', '1'])
         self.assertEqual(switches('552440'), ['unset', 'unset'])
 
     def test_pass_timing_from_launch_options(self):

@@ -522,6 +522,30 @@ Patch `0008-relaxed-count-and-size-skip.patch`.
   is not yet known. `KK_IMPLICIT_SKIP=WxH,...` excludes sizes from foveation;
   excluding the 824×848 image did not help.
 
+### First headset runs (2026-11-13)
+
+NMS at standard graphics settings, run A without foveation and B with
+`MWXR_FOVEATION=gaze`. Wall-clock rates come from KosmicKrisp's present count, the
+game's desktop mirror:
+- **Run A:** about 6.6 frames/s at about 85 ms of GPU per frame.
+- **Run B:** about 9 frames/s at about 57 ms.
+
+The GPU was busy only about half the time in both, so frame rate is held down by
+more than GPU work, probably CPU time (the game under Rosetta and Wine) or how the
+frame is synchronised.
+
+- **Rectangles.** In B, both eyes went dark outside a rectangle 61% wide and 59% high
+  of the side-by-side render-scale target: exactly the 2008×1000 physical size of the
+  3296×1696 target. Compacted compute passes left everything outside it unwritten,
+  the same symptom as the quarter-size edge in the simulator. NMS's settings now leave
+  compaction off (`KK_IMPLICIT_COMPACT=0`) until it is understood.
+- **No gaze.** The bridge reported gaze `valid=0` throughout and 3,145
+  `XR_ERROR_HANDLE_INVALID` from `xrUpdateSwapchainFB` with the foveation profile, so B
+  used the fixed centre, not eye tracking.
+- **Controller prompts.** NMS's action manifest has PS VR2 Sense bindings, which
+  xrizer ignores ("unknown profile playstation_vr2_sense"). It presents Oculus Touch
+  instead, and the game's prompts show warning triangles.
+
 ## Next
 
 1. Talos and NMS in the headset with real gaze.
