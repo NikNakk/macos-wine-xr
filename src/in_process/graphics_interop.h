@@ -62,6 +62,11 @@ public:
     // Present would. Applications in XR may never present, so without this a layer that
     // counts frames at Present sees one endless frame. No-op unless the backend opts in.
     virtual void end_frame() {}
+    virtual bool supports_target_foveation() const { return false; }
+    virtual HRESULT set_target_foveation(ID3D11Texture2D *, void *) { return E_NOTIMPL; }
+    // Context-wide rate map for subsequently recorded passes (null: none). The layer
+    // decides which passes take it and keeps their targets readable.
+    virtual HRESULT set_frame_rate_map(void *) { return E_NOTIMPL; }
 };
 
 // MWXR_GRAPHICS_BACKEND=auto (default), dxmt, d3dmetal or d3dmetal-copy.

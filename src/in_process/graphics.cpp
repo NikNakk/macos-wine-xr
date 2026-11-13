@@ -10,10 +10,14 @@
 #include <dxgi1_2.h>
 #include <stdio.h>
 #include "graphics_interop.h"
+#include "graphics_vulkan.h"
 struct SwapState { wine_XrSwapchain *wrapper; GraphicsImage *images; XrSwapchainImageMetalKHR *metal; uint32_t count;
-    uint32_t *acquired, acquired_head, acquired_count; SwapState *next; };
+    uint32_t *acquired, acquired_head, acquired_count; SwapState *next;
+    bool waited, foveation_applied, foveation_failed, requires_foveation_apply; uint64_t foveation_map; };
 struct SessionState { ID3D11Device *device; GraphicsInterop *interop; SwapState *swapchains;
-    CRITICAL_SECTION release_lock; };
+    CRITICAL_SECTION release_lock;
+    // MWXR_GAZE_FOVEATION: the packed stereo layout last submitted, and the map now set.
+    XrSwapchain gaze_swapchain; XrRect2Di gaze_rects[2]; XrFovf gaze_fovs[2]; uint64_t gaze_map; };
 static wine_XrSession *active_session;
 static XrResult call_result(NTSTATUS status, XrResult result) { return status ? XR_ERROR_RUNTIME_FAILURE : result; }
 static int32_t native_graphics_call(void *params) { return UNIX_CALL(mw_graphics_native, params); }
@@ -53,6 +57,12 @@ extern "C" XrResult WINAPI xrCreateSession(XrInstance instance, const XrSessionC
     *session = XR_NULL_HANDLE;
     if (active_session) return XR_ERROR_LIMIT_REACHED;
     wine_XrInstance *parent = wine_instance_from_handle(instance);
+    const auto *base_binding = (const XrBaseInStructure *)info->next;
+    if (base_binding && base_binding->type == XR_TYPE_GRAPHICS_BINDING_VULKAN_KHR) {
+        XrResult result = mw_vk_create_session(instance, info, session);
+        if (XR_SUCCEEDED(result)) active_session = wine_session_from_handle(*session);
+        return result;
+    }
     if (!parent->d3d11_enabled) return XR_ERROR_GRAPHICS_DEVICE_INVALID;
     const auto *binding = (const XrGraphicsBindingD3D11KHR *)info->next;
     if (!binding || binding->type != XR_TYPE_GRAPHICS_BINDING_D3D11_KHR || binding->next || !binding->device)
@@ -66,6 +76,9 @@ extern "C" XrResult WINAPI xrCreateSession(XrInstance instance, const XrSessionC
     if (FAILED(hr)) {
         fprintf(stderr, "wineopenxr: ERROR no graphics interop backend for this D3D11 device hr=%#lx\n", hr);
         destroy_state(state); free(wrapper); return XR_ERROR_GRAPHICS_DEVICE_INVALID;
+    }
+    if (parent->foveation_d3d11_enabled && !state->interop->supports_target_foveation()) {
+        destroy_state(state); free(wrapper); return XR_ERROR_FEATURE_UNSUPPORTED;
     }
     wrapper->instance = parent; wrapper->metal_device = state->interop->metal_device(); wrapper->graphics = state;
     struct xrCreateSession_params params = {};
@@ -94,8 +107,11 @@ extern "C" XrResult WINAPI xrCreateSession(XrInstance instance, const XrSessionC
 }
 extern "C" XrResult WINAPI xrCreateSwapchain(XrSession session, const XrSwapchainCreateInfo *info, XrSwapchain *swapchain)
 {
+    if (wine_session_from_handle(session)->vulkan) return mw_vk_create_swapchain(session, info, swapchain);
     if (!info || !swapchain || info->type != XR_TYPE_SWAPCHAIN_CREATE_INFO) return XR_ERROR_VALIDATION_FAILURE;
     *swapchain = XR_NULL_HANDLE;
+    if (info->next && wine_session_from_handle(session)->instance->foveation_d3d11_enabled && info->arraySize != 1)
+        return XR_ERROR_FEATURE_UNSUPPORTED;
     auto *wrapper = (wine_XrSwapchain *)calloc(1, sizeof(wine_XrSwapchain));
     auto *state = (SwapState *)calloc(1, sizeof(SwapState));
     if (!wrapper || !state) { free(wrapper); free(state); return XR_ERROR_OUT_OF_MEMORY; }
@@ -107,6 +123,7 @@ extern "C" XrResult WINAPI xrCreateSwapchain(XrSession session, const XrSwapchai
     NTSTATUS status = UNIX_CALL(xrCreateSwapchain, &params);
     XrResult result = call_result(status, params.result);
     if (XR_FAILED(result)) { free(state); free(wrapper); return result; }
+    state->requires_foveation_apply = info->next && wrapper->session->instance->foveation_d3d11_enabled;
     auto *parent = (SessionState *)wrapper->session->graphics;
     state->next = parent->swapchains; parent->swapchains = state;
     *swapchain = (XrSwapchain)wrapper;
@@ -115,6 +132,7 @@ extern "C" XrResult WINAPI xrCreateSwapchain(XrSession session, const XrSwapchai
 extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uint32_t capacity,
     uint32_t *count, XrSwapchainImageBaseHeader *images)
 {
+    if (wine_swapchain_from_handle(swapchain)->session->vulkan) return mw_vk_enumerate_images(swapchain, capacity, count, images);
     if (!count || (capacity && !images)) return XR_ERROR_VALIDATION_FAILURE;
     wine_XrSwapchain *wrapper = wine_swapchain_from_handle(swapchain);
     auto *state = (SwapState *)wrapper->graphics;
@@ -179,6 +197,7 @@ extern "C" __declspec(dllexport) XrResult WINAPI MWXRProbeSwapchainImage(
 {
     if (!swapchain || !device || !texture) return XR_ERROR_VALIDATION_FAILURE;
     auto *wrapper = wine_swapchain_from_handle(swapchain);
+    if (wrapper->session->vulkan) return XR_ERROR_FUNCTION_UNSUPPORTED;
     auto *state = (SwapState *)wrapper->graphics;
     if (!state->metal || index >= state->count) return XR_ERROR_INDEX_OUT_OF_RANGE;
     *device = (UINT64)wrapper->session->metal_device;
@@ -187,6 +206,7 @@ extern "C" __declspec(dllexport) XrResult WINAPI MWXRProbeSwapchainImage(
 }
 extern "C" XrResult WINAPI xrDestroySwapchain(XrSwapchain swapchain)
 {
+    if (wine_swapchain_from_handle(swapchain)->session->vulkan) return mw_vk_destroy_swapchain(swapchain);
     wine_XrSwapchain *wrapper = wine_swapchain_from_handle(swapchain);
     auto *state = (SwapState *)wrapper->graphics;
     struct xrDestroySwapchain_params params = {swapchain};
@@ -194,6 +214,10 @@ extern "C" XrResult WINAPI xrDestroySwapchain(XrSwapchain swapchain)
     XrResult result = call_result(status, params.result);
     if (XR_FAILED(result)) return result;
     auto *parent = (SessionState *)wrapper->session->graphics;
+    if (swapchain == parent->gaze_swapchain) {
+        parent->gaze_swapchain = XR_NULL_HANDLE;
+        if (parent->gaze_map) { parent->interop->set_frame_rate_map(nullptr); parent->gaze_map = 0; }
+    }
     SwapState **link = &parent->swapchains;
     while (*link && *link != state) link = &(*link)->next;
     if (*link) *link = state->next;
@@ -203,6 +227,11 @@ extern "C" XrResult WINAPI xrDestroySwapchain(XrSwapchain swapchain)
 }
 extern "C" XrResult WINAPI xrDestroySession(XrSession session)
 {
+    if (wine_session_from_handle(session)->vulkan) {
+        XrResult result = mw_vk_destroy_session(session);
+        if (XR_SUCCEEDED(result)) active_session = nullptr;
+        return result;
+    }
     auto *wrapper = wine_session_from_handle(session);
     auto *state = (SessionState *)wrapper->graphics;
     while (state->swapchains) {
@@ -225,6 +254,7 @@ extern "C" XrResult mw_pe_cleanup_instance(wine_XrInstance *instance)
 extern "C" XrResult WINAPI xrAcquireSwapchainImage(XrSwapchain swapchain, const XrSwapchainImageAcquireInfo *info,
                                                    uint32_t *index)
 {
+    if (wine_swapchain_from_handle(swapchain)->session->vulkan) return mw_vk_acquire(swapchain, info, index);
     auto *wrapper = wine_swapchain_from_handle(swapchain);
     auto *state = (SwapState *)wrapper->graphics;
     struct xrAcquireSwapchainImage_params params = {swapchain, info, index};
@@ -232,20 +262,69 @@ extern "C" XrResult WINAPI xrAcquireSwapchainImage(XrSwapchain swapchain, const 
     XrResult result = call_result(status, params.result);
     if (XR_SUCCEEDED(result) && state->acquired && state->acquired_count < state->count)
         state->acquired[(state->acquired_head + state->acquired_count++) % state->count] = *index;
+    // Once per frame, before the application records the passes for this image.
+    auto *session = (SessionState *)wrapper->session->graphics;
+    if (XR_SUCCEEDED(result) && wrapper->session->instance->gaze_foveation && swapchain == session->gaze_swapchain) {
+        mw_gaze_foveation_params gaze = {swapchain, wrapper->info.width, wrapper->info.height,
+            {session->gaze_rects[0], session->gaze_rects[1]}, {session->gaze_fovs[0], session->gaze_fovs[1]}, 0, XR_SUCCESS};
+        // An application that copies its own eye textures into the swapchain (OpenVR through
+        // xrizer) renders at that texture's size, which need not be the swapchain's: a render
+        // scale, both eyes in one texture, or part of a larger texture under dynamic
+        // resolution. DXMT leaves the latest copy's source on the image (patch 0022).
+        uint32_t source[2][8] = {};
+        for (uint32_t i = 0; state->images && i < state->count; ++i) {
+            for (unsigned slice = 0; slice < 2; ++slice) {
+                GUID guid = {0x6d777872, 0x6373, 0x4f56, {0x90, 0x01, 'c', 'o', 'p', 'y', 0, (BYTE)slice}};
+                uint32_t found[8] = {}; UINT size = sizeof(found);
+                auto *texture = (ID3D11Texture2D *)state->images[i].texture;
+                if (texture && SUCCEEDED(texture->GetPrivateData(guid, &size, found)) && size == sizeof(found) &&
+                    found[0] > source[slice][0])
+                    memcpy(source[slice], found, sizeof(found));
+            }
+        }
+        if (source[0][0] && source[1][0] && source[0][1] == source[1][1] && source[0][2] == source[1][2] &&
+            source[0][7] == 1 && source[1][7] == 1) {
+            bool usable = true;
+            for (unsigned v = 0; v < 2; ++v)
+                usable = usable && source[v][5] > source[v][3] && source[v][6] > source[v][4] &&
+                         source[v][5] <= source[v][1] && source[v][6] <= source[v][2];
+            if (usable) {
+                gaze.width = source[0][1]; gaze.height = source[0][2];
+                for (unsigned v = 0; v < 2; ++v)
+                    gaze.rects[v] = {{(int32_t)source[v][3], (int32_t)source[v][4]},
+                                     {(int32_t)(source[v][5] - source[v][3]), (int32_t)(source[v][6] - source[v][4])}};
+            }
+        }
+        if (!UNIX_CALL(mw_gaze_foveation, &gaze) && gaze.map != session->gaze_map &&
+            SUCCEEDED(session->interop->set_frame_rate_map((void *)gaze.map)))
+            session->gaze_map = gaze.map;
+    }
     return result;
 }
 extern "C" XrResult WINAPI xrReleaseSwapchainImage(XrSwapchain swapchain, const XrSwapchainImageReleaseInfo *info)
 {
+    if (wine_swapchain_from_handle(swapchain)->session->vulkan) return mw_vk_release(swapchain, info);
     auto *wrapper = wine_swapchain_from_handle(swapchain);
     auto *session = wrapper->session; auto *state = (SessionState *)session->graphics;
     EnterCriticalSection(&state->release_lock);
+    auto *swap = (SwapState *)wrapper->graphics;
+    if (swap->foveation_failed || (swap->requires_foveation_apply && !swap->foveation_applied)) {
+        LeaveCriticalSection(&state->release_lock);
+        return XR_ERROR_CALL_ORDER_INVALID;
+    }
     HRESULT hr = state->interop->signal_completion(++session->fence_value);
     if (FAILED(hr)) {
         LeaveCriticalSection(&state->release_lock);
         fprintf(stderr, "wineopenxr: ERROR %s producer completion signal failed hr=%#lx\n", state->interop->name(), hr);
         return XR_ERROR_RUNTIME_FAILURE;
     }
-    auto *swap = (SwapState *)wrapper->graphics;
+    if (swap->foveation_applied) {
+        uint32_t index = swap->acquired[swap->acquired_head];
+        hr = state->interop->set_target_foveation(swap->images[index].texture, nullptr);
+        if (FAILED(hr)) { LeaveCriticalSection(&state->release_lock); return XR_ERROR_RUNTIME_FAILURE; }
+        swap->foveation_applied = false;
+        swap->foveation_map = 0;
+    }
     if (swap->acquired && swap->acquired_count) {
         uint32_t index = swap->acquired[swap->acquired_head];
         if (swap->images[index].copy_source) {
@@ -260,9 +339,55 @@ extern "C" XrResult WINAPI xrReleaseSwapchainImage(XrSwapchain swapchain, const 
     if (XR_SUCCEEDED(result) && swap->acquired_count) {
         swap->acquired_head = (swap->acquired_head + 1) % swap->count;
         --swap->acquired_count;
+        swap->waited = false;
     }
     LeaveCriticalSection(&state->release_lock);
     return result;
+}
+extern "C" XrResult WINAPI xrWaitSwapchainImage(XrSwapchain swapchain, const XrSwapchainImageWaitInfo *info)
+{
+    if (wine_swapchain_from_handle(swapchain)->session->vulkan) return mw_vk_wait(swapchain, info);
+    struct xrWaitSwapchainImage_params params = {swapchain, info};
+    NTSTATUS status = UNIX_CALL(xrWaitSwapchainImage, &params);
+    XrResult result = call_result(status, params.result);
+    if (result == XR_SUCCESS || result == XR_SESSION_LOSS_PENDING)
+        ((SwapState *)wine_swapchain_from_handle(swapchain)->graphics)->waited = true;
+    return result;
+}
+extern "C" XrResult WINAPI xrApplyFoveationD3D11MWXR(XrSwapchain swapchain, uint32_t view,
+                                                    XrFoveationD3D11StateMWXR *out)
+{
+    if (!swapchain || !out || out->type != XR_TYPE_FOVEATION_D3D11_STATE_MWXR || out->next)
+        return XR_ERROR_VALIDATION_FAILURE;
+    auto *wrapper = wine_swapchain_from_handle(swapchain);
+    auto *swap = (SwapState *)wrapper->graphics;
+    auto *session = (SessionState *)wrapper->session->graphics;
+    if (!wrapper->session->instance->foveation_d3d11_enabled) return XR_ERROR_FUNCTION_UNSUPPORTED;
+    if (wrapper->info.arraySize != 1 || !session->interop->supports_target_foveation())
+        return XR_ERROR_FEATURE_UNSUPPORTED;
+    EnterCriticalSection(&session->release_lock);
+    if (!swap->images || !swap->waited || swap->acquired_count != 1 || swap->foveation_applied) {
+        LeaveCriticalSection(&session->release_lock);
+        return XR_ERROR_CALL_ORDER_INVALID;
+    }
+    mw_foveation_params params = {swapchain, view, 0, out};
+    XrResult result = UNIX_CALL(mw_foveation, &params) ? XR_ERROR_RUNTIME_FAILURE : params.result;
+    swap->foveation_failed = XR_FAILED(result);
+    if (XR_SUCCEEDED(result)) {
+        HRESULT hr = session->interop->set_target_foveation(swap->images[swap->acquired[swap->acquired_head]].texture,
+                                                           (void *)params.map);
+        swap->foveation_failed = FAILED(hr);
+        swap->foveation_applied = SUCCEEDED(hr);
+        swap->foveation_map = params.map;
+        if (FAILED(hr)) result = XR_ERROR_GRAPHICS_DEVICE_INVALID;
+    }
+    LeaveCriticalSection(&session->release_lock);
+    return result;
+}
+// Diagnostic only, like MWXRProbeSwapchainImage; not advertised through GIPA.
+extern "C" __declspec(dllexport) UINT64 WINAPI MWXRProbeFoveationMap(XrSwapchain swapchain)
+{
+    return ((SwapState *)wine_swapchain_from_handle(swapchain)->graphics)->foveation_map;
 }
 extern "C" XrResult WINAPI xrPollEvent(XrInstance instance, XrEventDataBuffer *event)
 {
@@ -275,6 +400,7 @@ extern "C" XrResult WINAPI xrPollEvent(XrInstance instance, XrEventDataBuffer *e
         case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: session = &((XrEventDataSessionStateChanged *)event)->session; break;
         case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED: session = &((XrEventDataInteractionProfileChanged *)event)->session; break;
         case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING: session = &((XrEventDataReferenceSpaceChangePending *)event)->session; break;
+        case XR_TYPE_EVENT_DATA_VISIBILITY_MASK_CHANGED_KHR: session = &((XrEventDataVisibilityMaskChangedKHR *)event)->session; break;
         default: break;
         }
         if (session && *session) {
@@ -288,7 +414,7 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
 {
     if (!info || info->next || info->layerCount > 1) return XR_ERROR_LAYER_INVALID;
     XrFrameEndInfo native = *info;
-    XrCompositionLayerProjection projection; XrCompositionLayerProjectionView views[2];
+    XrCompositionLayerProjection projection; XrCompositionLayerProjectionView views[4];
     const XrCompositionLayerBaseHeader *layer = nullptr;
     if (info->layerCount) {
         if (!info->layers || !info->layers[0] || info->layers[0]->type != XR_TYPE_COMPOSITION_LAYER_PROJECTION)
@@ -298,8 +424,26 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
         const auto *marker = (const XrCompositionLayerDisplayImageMNDX *)projection.next;
         if (marker && (marker->type != XR_TYPE_COMPOSITION_LAYER_DISPLAY_IMAGE_MNDX || marker->next))
             return XR_ERROR_LAYER_INVALID;
-        if (projection.viewCount != 2 || !projection.views) return XR_ERROR_LAYER_INVALID;
-        for (unsigned i = 0; i < 2; ++i) {
+        // Stereo, or XR_VARJO_quad_views' two context views followed by two insets.
+        if ((projection.viewCount != 2 && projection.viewCount != 4) || !projection.views) return XR_ERROR_LAYER_INVALID;
+        static uint32_t logged_view_count;
+        if (projection.viewCount != logged_view_count) {
+            logged_view_count = projection.viewCount;
+            fprintf(stderr, "wineopenxr: projection layer with %u views\n", projection.viewCount);
+        }
+        // Gaze foveation covers one swapchain holding both eyes: side by side in one layer, or
+        // one array layer each (xrizer), where the two rectangles overlap and the map is the
+        // higher of the two eyes' rates.
+        auto *gaze = wine_session_from_handle(session)->vulkan ? nullptr : (SessionState *)wine_session_from_handle(session)->graphics;
+        if (gaze && projection.viewCount == 2 && projection.views[0].subImage.swapchain &&
+            projection.views[0].subImage.swapchain == projection.views[1].subImage.swapchain) {
+            gaze->gaze_swapchain = projection.views[0].subImage.swapchain;
+            for (unsigned i = 0; i < 2; ++i) {
+                gaze->gaze_rects[i] = projection.views[i].subImage.imageRect; gaze->gaze_fovs[i] = projection.views[i].fov;
+            }
+        }
+        if (wine_session_from_handle(session)->vulkan) mw_vk_note_projection(session, &projection);
+        for (unsigned i = 0; i < projection.viewCount; ++i) {
             views[i] = projection.views[i];
             if (views[i].next || !views[i].subImage.swapchain) return XR_ERROR_LAYER_INVALID;
             views[i].subImage.swapchain = wine_swapchain_from_handle(views[i].subImage.swapchain)->host_swapchain;
@@ -311,7 +455,7 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
     NTSTATUS status = UNIX_CALL(xrEndFrame, &params);
     XrResult result = call_result(status, params.result);
     // After the frame is submitted, as Present marks its boundary.
-    if (XR_SUCCEEDED(result)) {
+    if (XR_SUCCEEDED(result) && !wine_session_from_handle(session)->vulkan) {
         auto *state = (SessionState *)wine_session_from_handle(session)->graphics;
         if (state && state->interop) state->interop->end_frame();
     }

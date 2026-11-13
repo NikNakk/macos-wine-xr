@@ -26,6 +26,47 @@ fi
 # does not offer: it runs on Zink over KosmicKrisp (docs/zink-kosmickrisp.md).
 # MWXR_OPENGL=wine, also from the game's Launch Options, keeps Wine's OpenGL.
 [[ ${_mwxr_settings_app} == 348250 ]] && export MWXR_OPENGL=${MWXR_OPENGL:-zink}
+# Windows Vulkan games run on KosmicKrisp through wineopenxr's Vulkan path
+# (docs/vulkan-bridge.md), with the private Wine whose FreeType name is fixed (readable
+# dialogs) and xrizer with the queue-family fix. The Talos Principle VR needs
+# "+gfx_strAPI Vulkan" in its Launch Options (otherwise it uses D3D11 on DXMT).
+# MWXR_VULKAN=off, also from the Launch Options, keeps the ordinary setup.
+if [[ ${_mwxr_settings_app} == (552440|275850) && ${MWXR_VULKAN:-} != off ]]; then
+  _mwxr_root=${MWXR_FOVEATION_ROOT:-${${(%):-%x}:A:h:h}/build-in-process}
+  export MWXR_VULKAN=kosmickrisp
+  export MWXR_KK_ROOT=${MWXR_KK_ROOT:-${_mwxr_root}/zink-fov}
+  export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-${_mwxr_root}/vulkan-wine}
+  export MWXR_XRIZER_ROOT=${MWXR_XRIZER_ROOT:-${_mwxr_root}/vulkan-xrizer}
+  export MWXR_IN_PROCESS_BUILD=${MWXR_IN_PROCESS_BUILD:-${_mwxr_root}/vk-fov-gate}
+  # No Man's Sky stops on a "driver does not support wide lines" box; the private
+  # KosmicKrisp claims them (drawn one pixel wide).
+  [[ ${_mwxr_settings_app} == 275850 ]] && export KK_FAKE_WIDE_LINES=${KK_FAKE_WIDE_LINES:-1}
+  # NMS renders single-sampled, at a render scale (about 59%), and reads and writes its
+  # eye targets from compute: with MWXR_FOVEATION those are foveated too.
+  if [[ ${_mwxr_settings_app} == 275850 ]]; then
+    export KK_IMPLICIT_SINGLE=${KK_IMPLICIT_SINGLE:-1} KK_IMPLICIT_SCALED=${KK_IMPLICIT_SCALED:-1}
+    export KK_IMPLICIT_STORAGE=${KK_IMPLICIT_STORAGE:-1}
+  fi
+  # Talos renders single-sampled (and some effects at half size): with MWXR_FOVEATION,
+  # KosmicKrisp foveates those targets too (docs/kk-implicit-foveation.md).
+  if [[ ${_mwxr_settings_app} == 552440 ]]; then
+    export KK_IMPLICIT_SINGLE=${KK_IMPLICIT_SINGLE:-1} KK_IMPLICIT_HALF=${KK_IMPLICIT_HALF:-1}
+  fi
+  unset _mwxr_root
+fi
+[[ ${MWXR_VULKAN:-} == off ]] && unset MWXR_VULKAN
+# MWXR_FOVEATION=fixed|gaze[:numbers] (docs/foveation.md), also from the game's Launch
+# Options: the runtime copy that carries the foveation DXMT, unless the caller chose one.
+# scripts/openxr-launch-settings.zsh checks the value and sets the rest.
+if [[ -n ${MWXR_FOVEATION:-} && ${MWXR_FOVEATION} != off && ${MWXR_VULKAN:-} != kosmickrisp ]]; then
+  _mwxr_fov=${MWXR_FOVEATION_ROOT:-${${(%):-%x}:A:h:h}/build-in-process}
+  if [[ ${_mwxr_wow64} == 1 ]]; then
+    export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-${_mwxr_fov}/wine-foveation-wow64}
+  else
+    export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-${_mwxr_fov}/wine-foveation}
+  fi
+  unset _mwxr_fov
+fi
 if [[ ${_mwxr_wow64} == 1 ]]; then
   export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-$HOME/Code/wine-crossover/runtime-wow64}
   export MWXR_GAME_PREFIXES=${MWXR_GAME_PREFIXES:-$HOME/Windows/prefixes-wow64}

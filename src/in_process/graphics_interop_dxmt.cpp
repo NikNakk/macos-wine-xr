@@ -15,6 +15,8 @@ public:
     ~DxmtInterop() override
     {
         if (fence) fence->Release();
+        if (foveation) foveation->Release();
+        if (frame_map) frame_map->Release();
         if (frames) frames->Release();
         if (context) context->Release();
         if (native) native->Release();
@@ -28,6 +30,10 @@ public:
         hr = immediate->QueryInterface(__uuidof(ID3D11DeviceContext4), (void **)&context);
         immediate->Release();
         if (SUCCEEDED(hr)) hr = native->GetMetalDevice(&device_object);
+#ifdef MWXR_DXMT_TARGET_FOVEATION
+        if (context) context->QueryInterface(DXMT_IID_NATIVE_CONTEXT2, (void **)&foveation);
+        if (context) context->QueryInterface(DXMT_IID_NATIVE_CONTEXT1, (void **)&frame_map);
+#endif
         // MWXR_DXMT_FRAME_BOUNDARY=1: end a DXMT frame at each xrEndFrame (per-frame
         // statistics, DXMT_CAPTURE_FRAME, the maximum frame latency). Off by default
         // while its effect on pacing is measured.
@@ -80,10 +86,34 @@ public:
     {
         if (frames) frames->EndFrame();
     }
+    HRESULT set_frame_rate_map(void *map) override
+    {
+#ifdef MWXR_DXMT_TARGET_FOVEATION
+        return frame_map ? frame_map->SetRasterizationRateMap((UINT64)map) : E_NOTIMPL;
+#else
+        return E_NOTIMPL;
+#endif
+    }
+    bool supports_target_foveation() const override { return foveation != nullptr; }
+    HRESULT set_target_foveation(ID3D11Texture2D *target, void *map) override
+    {
+#ifdef MWXR_DXMT_TARGET_FOVEATION
+        return foveation ? foveation->SetRenderTargetRasterizationRateMap(target, (UINT64)map) : E_NOTIMPL;
+#else
+        return E_NOTIMPL;
+#endif
+    }
 private:
     GraphicsNativeHost host;
     IDXMTNativeDevice2 *native = nullptr;
     IDXMTNativeDevice4 *frames = nullptr;
+#ifdef MWXR_DXMT_TARGET_FOVEATION
+    IDXMTNativeContext2 *foveation = nullptr;
+    IDXMTNativeContext1 *frame_map = nullptr;
+#else
+    IUnknown *foveation = nullptr;
+    IUnknown *frame_map = nullptr;
+#endif
     ID3D11DeviceContext4 *context = nullptr;
     ID3D11Fence *fence = nullptr;
     UINT64 device_object = 0;
