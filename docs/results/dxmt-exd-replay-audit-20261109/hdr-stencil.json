@@ -1,0 +1,141 @@
+{
+  "cases": [
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/hdr-stencil-final/hdr-2x-1.log",
+      "result": {
+        "size": 512,
+        "samples": 2,
+        "rate": 1.0,
+        "peak_hdr": 4.0,
+        "identity_bad": 0,
+        "mapped_bad": 0,
+        "dropped_mask_bad": 66220,
+        "retained_depth_bad": 0,
+        "stale_stencil_samples": 524288,
+        "marker_reference": 88738,
+        "marker_stale": 0,
+        "restored_stencil_bad": 0,
+        "restored_color_depth_bad": 0,
+        "marker_restored": 88738,
+        "resolved_peak_hdr": 4.0,
+        "fullrate_bad": 0
+      },
+      "actually_mapped_passes": 3
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/hdr-stencil-final/hdr-2x-0.5.log",
+      "result": {
+        "size": 512,
+        "samples": 2,
+        "rate": 0.5,
+        "peak_hdr": 4.0,
+        "identity_bad": 0,
+        "mapped_bad": 0,
+        "dropped_mask_bad": 66220,
+        "retained_depth_bad": 0,
+        "stale_stencil_samples": 524288,
+        "marker_reference": 88738,
+        "marker_stale": 0,
+        "restored_stencil_bad": 0,
+        "restored_color_depth_bad": 0,
+        "marker_restored": 88738,
+        "resolved_peak_hdr": 4.0,
+        "fullrate_bad": 0
+      },
+      "actually_mapped_passes": 3
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/hdr-stencil-final/hdr-2x-0.75.log",
+      "result": {
+        "size": 512,
+        "samples": 2,
+        "rate": 0.75,
+        "peak_hdr": 4.0,
+        "identity_bad": 0,
+        "mapped_bad": 0,
+        "dropped_mask_bad": 66220,
+        "retained_depth_bad": 0,
+        "stale_stencil_samples": 524288,
+        "marker_reference": 88738,
+        "marker_stale": 0,
+        "restored_stencil_bad": 0,
+        "restored_color_depth_bad": 0,
+        "marker_restored": 88738,
+        "resolved_peak_hdr": 4.0,
+        "fullrate_bad": 0
+      },
+      "actually_mapped_passes": 3
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/hdr-stencil-final/hdr-4x-1.log",
+      "result": {
+        "size": 512,
+        "samples": 4,
+        "rate": 1.0,
+        "peak_hdr": 4.0,
+        "identity_bad": 0,
+        "mapped_bad": 0,
+        "dropped_mask_bad": 160680,
+        "retained_depth_bad": 0,
+        "stale_stencil_samples": 1048576,
+        "marker_reference": 149243,
+        "marker_stale": 0,
+        "restored_stencil_bad": 0,
+        "restored_color_depth_bad": 0,
+        "marker_restored": 149243,
+        "resolved_peak_hdr": 4.0,
+        "fullrate_bad": 0
+      },
+      "actually_mapped_passes": 3
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/hdr-stencil-final/hdr-4x-0.5.log",
+      "result": {
+        "size": 512,
+        "samples": 4,
+        "rate": 0.5,
+        "peak_hdr": 4.0,
+        "identity_bad": 0,
+        "mapped_bad": 0,
+        "dropped_mask_bad": 160680,
+        "retained_depth_bad": 0,
+        "stale_stencil_samples": 1048576,
+        "marker_reference": 149243,
+        "marker_stale": 0,
+        "restored_stencil_bad": 0,
+        "restored_color_depth_bad": 0,
+        "marker_restored": 149243,
+        "resolved_peak_hdr": 4.0,
+        "fullrate_bad": 0
+      },
+      "actually_mapped_passes": 3
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/hdr-stencil-final/hdr-4x-0.75.log",
+      "result": {
+        "size": 512,
+        "samples": 4,
+        "rate": 0.75,
+        "peak_hdr": 4.0,
+        "identity_bad": 0,
+        "mapped_bad": 0,
+        "dropped_mask_bad": 160680,
+        "retained_depth_bad": 0,
+        "stale_stencil_samples": 1048576,
+        "marker_reference": 149243,
+        "marker_stale": 0,
+        "restored_stencil_bad": 0,
+        "restored_color_depth_bad": 0,
+        "marker_restored": 149243,
+        "resolved_peak_hdr": 4.0,
+        "fullrate_bad": 0
+      },
+      "actually_mapped_passes": 3
+    }
+  ],
+  "limitations": [
+    "Correctness-only fixture, not EXD performance or transparent replay.",
+    "Exact stencil-only replay adds full-resolution geometry and coverage work; its cost is unmeasured.",
+    "No material reconstruction from mapped stencil or HDR foveated image-quality claim."
+  ]
+}

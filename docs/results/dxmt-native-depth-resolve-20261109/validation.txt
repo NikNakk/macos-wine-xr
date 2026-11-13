@@ -1,0 +1,7 @@
+Native Metal: 2x/4x, source+destination depth/stencil checks, 3 validation and 3 performance trials each; 48 cases including sample0 negative controls all pass.
+Nine analyser tests pass (six TBDR plus three depth-provenance).
+Final DXMT build succeeds; patches 0001-0010 reproduce all 307 source files byte for byte.
+Final diagnostic detail-on D3D11 regression: 8192 pixels checked per audit-off/on run, zero errors, Metal validation on; clear/render/resolve fusion preserved.
+Existing automatic foveation regression: all ten cases pass; 4194304 pixels checked per case.
+Private EXD save restored; temporary EXD and simulated service processes stopped.
+No automatic DXMT depth-resolve substitution or EXD performance improvement claimed.

@@ -1,0 +1,13 @@
+{
+  "mean_of_run_medians_ms": {
+    "baseline": 16.94682275,
+    "flags": 19.162687750000003,
+    "map": 19.37664575
+  },
+  "map_minus_baseline_ms": 2.4298230000000025,
+  "flags_minus_baseline_ms": 2.2158650000000044,
+  "map_minus_flags_ms": 0.2139579999999981,
+  "map_minus_flags_percent": 1.1165343963818408,
+  "cpu_prepare_map_ms": 0.466,
+  "interpretation": "Most measured increase is present in flags-only control. Incremental map difference overlaps run variation. No causal hardware-map-cost estimate is established."
+}

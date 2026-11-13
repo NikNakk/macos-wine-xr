@@ -1,0 +1,19 @@
+MSAASampleCount=2
+UpscalerPreferredSelection=0
+FogQuality=1
+r.VolumetricFog=1
+r.DefaultFeature.AntiAliasing=3
+UDLSSMode=UDLSSMode::Off
+sg.ShadowQuality=1
+sg.ResolutionQuality=100.000000
+sg.ViewDistanceQuality=3
+sg.AntiAliasingQuality=3
+sg.PostProcessQuality=1
+sg.TextureQuality=1
+sg.EffectsQuality=1
+sg.FoliageQuality=3
+sg.ShadingQuality=3
+[SystemSettings]
+r.WarnOfBadDrivers=0
+
+SIMULATED_DESKTOP=1 XRT_MACOS_REFRESH_RATE_HZ=0

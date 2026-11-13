@@ -1,0 +1,22 @@
+{
+  "mode": "summary",
+  "seconds": 35,
+  "baseline": "preserved pre-NGX save; upscaler off, MSAA2",
+  "save_sha256": "cbb04928329793804c0cf5301e8f683fcc330de84f4d856d8eec3000e9c66ea4",
+  "environment": {
+    "DXMT_BASE_FOVEATION": "0",
+    "DXMT_RATE_MAP_POSITION": "0",
+    "DXMT_RATE_MAP_ATTACHMENT_PROBE": "0",
+    "MWXR_DXMT_FRAME_BOUNDARY": "0",
+    "DXMT_NGX_SUBRECTS": "0",
+    "DXMT_SCENE_TRACE": "0",
+    "DXMT_NGX_TRACE": "0",
+    "DXMT_TBDR_AUDIT": "1",
+    "DXMT_TBDR_AUDIT_DETAIL": "0",
+    "DXMT_ENCODER_LABELS": "0",
+    "MTL_DEBUG_LAYER": "0",
+    "MTL_CAPTURE_ENABLED": null,
+    "DXMT_CAPTURE_FRAME": null,
+    "DXMT_CAPTURE_FRAME_COUNT": null
+  }
+}

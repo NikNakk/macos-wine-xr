@@ -1,7 +1,11 @@
 # EXD performance investigation, 2026-11-08
 
 EXD – Extra Dimensional, Steam app 3962020, Unreal Engine 4.27. Investigation
-of the existing launches; no new game benchmark has been run yet.
+of the existing launches. Subsequent private simulated-headset runs are documented
+in the [DXMT TBDR audit](dxmt-tbdr-audit.md), including separate initial and loaded
+scene windows; the earlier launch-log observations below are historical.
+PS VR2 hardware measurements of MSAA, DLSS→MetalFX, quality and resolution are in
+[EXD on PS VR2](exd-headset-performance.md).
 
 ## Evidence
 
@@ -70,7 +74,10 @@ and set shadows, effects, postprocessing and volumetric fog Low, then restore
 quality one setting at a time. The developer's November 3 notes say Low
 volumetric fog disables its volumetric component. FSR2 is a possible later
 comparison; its Wine/DXMT compatibility and benefit here are unmeasured.
-Advanced DLSS foveation is tied to DLSS and is not an Apple GPU solution.
+Advanced DLSS foveation may use DXMT’s experimental NGX-to-MetalFX bridge.
+The private integration now has an opt-in, tested per-eye subrect fix; EXD
+headset quality and GPU savings remain unmeasured. See
+[the current DXMT investigation](dxmt-base-render-foveation.md).
 See the [developer's update notes](https://steamcommunity.com/app/3962020/allnews/).
 
 Validation: `python3 tests/macos/test_openxr_launch_settings.py` checks inherited

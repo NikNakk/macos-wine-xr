@@ -1,0 +1,62 @@
+{
+ "frame": 1201,
+ "bindings": 162,
+ "bindings_slot_unused": 0,
+ "shaders_missing": [],
+ "shaders": 26,
+ "shaders_fully_translated": 26,
+ "shaders_with_derivatives": 0,
+ "shaders_reading_sv_position": 20,
+ "kinds": [
+  {
+   "kind": "sample_l",
+   "where": "scene-sized",
+   "bindings": 90,
+   "status": "translated"
+  },
+  {
+   "kind": "ld",
+   "where": "scene-sized",
+   "bindings": 58,
+   "status": "translated"
+  },
+  {
+   "kind": "resinfo",
+   "where": "scene-sized",
+   "bindings": 19,
+   "status": "no coordinates"
+  },
+  {
+   "kind": "sample",
+   "where": "scene-sized",
+   "bindings": 5,
+   "status": "translated"
+  },
+  {
+   "kind": "ld2dms",
+   "where": "scene-sized",
+   "bindings": 4,
+   "status": "translated"
+  },
+  {
+   "kind": "sample_l",
+   "where": "compute",
+   "bindings": 2,
+   "status": "translated"
+  },
+  {
+   "kind": "sample_l",
+   "where": "other-sized",
+   "bindings": 2,
+   "status": "translated"
+  },
+  {
+   "kind": "sample",
+   "where": "other-sized",
+   "bindings": 1,
+   "status": "translated"
+  }
+ ],
+ "untranslated_shaders": [],
+ "offset_sample_shaders": []
+}

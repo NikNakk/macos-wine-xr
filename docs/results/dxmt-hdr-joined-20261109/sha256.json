@@ -1,0 +1,14 @@
+{
+  "tests/windows/dxmt_hdr_joined_probe.h": "2ac620abd6a6fe17188e394608e6a8b63a2a0a835a9168a5a5ccba6689b21982",
+  "tests/windows/dxmt_hdr_stencil_probe.h": "4f127b78a082617404242d498c2248d0dd8c7a6bcadf69570fdfe09593b055b9",
+  "tests/windows/dxmt_depth_foveation_probe.cpp": "9c45df527569821df7fbb360f7d02fe9384e77f9231de3483a1545ddb5fb93bd",
+  "tools/analyze_dxmt_hdr_joined.py": "fdef32032e2ccc8796d3b8de44cca3449b1f9ae8cbe77e7479a8a396391470d0",
+  "build-in-process/depth-foveation-probe/dxmt_depth_foveation_probe.exe": "d68033c41324655edc14655bc54977340eab79c4fc71a4849dc56959105ba076",
+  "build-in-process/depth-foveation-probe/x86_64-windows/wine_depth_foveation_probe.dll": "877654305904c5eb505a86589f54c40f17dd371694ed79570baa76b25d8aaa6d",
+  "build-in-process/depth-foveation-probe/x86_64-unix/wine_depth_foveation_probe.so": "9b1b5413067bf989f01f83326b5aebdec1351eb02a0172f780fe858d28713511",
+  "build-in-process/exd-ngx/wine/lib/wine/x86_64-windows/d3d11.dll": "615e4cd4fddbb3ac087400e31a66e6108ed7d78197f7cc6f3825455fa89e0cc8",
+  "build-in-process/exd-ngx/wine/lib/wine/x86_64-windows/winemetal.dll": "4c2d930ada633d03ac534f0aa09d3a6a9751bfd9eaafbbddd5e3aa00c467ffee",
+  "build-in-process/exd-ngx/wine/lib/wine/x86_64-unix/winemetal.so": "ee208b9b4e48e2998ccb5e3695abd066442be6cc5911dc401b11949d5dca3521",
+  "tools/analyze_dxmt_replay_audit.py": "fabdb29da98d6dceebfecd8f4e19174d8336436f92e55df41c31e4a376b764df",
+  "scripts/test-dxmt-hdr-joined.zsh": "cf2f633ae1d92946b16595c226774ae5d0645102e5b0f3935b7e9867be3ff0e9"
+}

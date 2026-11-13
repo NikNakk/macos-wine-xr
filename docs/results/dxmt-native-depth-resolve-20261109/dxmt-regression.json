@@ -1,0 +1,16 @@
+{
+  "pixels_per_run": 8192,
+  "wrong": 0,
+  "audit_off_no_rows": true,
+  "metal_validation": true,
+  "counters": {
+    "render_before": 3,
+    "render_after": 2,
+    "clear_before": 2,
+    "clear_after": 0,
+    "resolve_before": 1,
+    "resolve_after": 0,
+    "timestamps": 0,
+    "mapped_render": 0
+  }
+}

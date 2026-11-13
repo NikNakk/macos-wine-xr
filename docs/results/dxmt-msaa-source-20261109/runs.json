@@ -1,0 +1,31 @@
+{
+  "base": "4c3a2f5ea661bd258c14cf8ccb6924791cc75a77",
+  "patches": [
+    "0001-immediate-context-metal-rate-map.patch",
+    "0002-target-specific-metal-rate-map.patch",
+    "0003-ngx-feature-routing-and-trace.patch",
+    "0004-scene-resource-provenance-trace.patch",
+    "0005-ngx-subrect-copy-and-validation.patch",
+    "0006-rate-map-position-translation.patch",
+    "0007-bounded-automatic-base-foveation.patch",
+    "0008-explicit-depth-msaa-diagnostic.patch",
+    "0009-passive-tbdr-audit.patch",
+    "0010-depth-resolve-shader-diagnostics.patch",
+    "0011-explicit-depth-only-rate-map-diagnostic.patch",
+    "0012-per-draw-depth-stencil-audit.patch",
+    "0013-explicit-combined-stencil-diagnostic.patch"
+  ],
+  "private_run": "build-in-process/msaa-source-final",
+  "cases": 16,
+  "modes": [
+    "ordinary baseline",
+    "four-traversal foveation with eager MSAA source materialisation"
+  ],
+  "rounds": 65,
+  "warmup": 24,
+  "measured": 41,
+  "metal_validation": true,
+  "primary_audit": false,
+  "audit_mapped_passes": 135,
+  "scope": "Owned single-mip R11G11B10 MSAA source and typed SRV/RTV views; no game capture/replay feature or EXD FPS claim."
+}

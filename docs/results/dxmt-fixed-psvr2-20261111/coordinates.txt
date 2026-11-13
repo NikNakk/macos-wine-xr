@@ -1,0 +1,13 @@
+5600x2856 outer=0.30 physical=3280x1728 protected_15deg_min_rate=1.00000 edge_max_rate=0.30774 identity_error=0.00000
+5600x2856 outer=0.50 physical=3968x2052 protected_15deg_min_rate=1.00000 edge_max_rate=0.50793 identity_error=0.00000
+5600x2856 outer=0.75 physical=4804x2470 protected_15deg_min_rate=1.00000 edge_max_rate=0.76196 identity_error=0.00000
+5600x2856 outer=1.00 physical=5600x2856 protected_15deg_min_rate=1.00000 edge_max_rate=1.00000 identity_error=0.00000
+5120x1440 outer=0.30 physical=3003x888 protected_15deg_min_rate=1.00000 edge_max_rate=0.30481 identity_error=0.00000
+5120x1440 outer=0.50 physical=3616x1056 protected_15deg_min_rate=1.00000 edge_max_rate=0.50794 identity_error=0.00000
+5120x1440 outer=0.75 physical=4395x1248 protected_15deg_min_rate=1.00000 edge_max_rate=0.76190 identity_error=0.00000
+5120x1440 outer=1.00 physical=5120x1440 protected_15deg_min_rate=1.00000 edge_max_rate=1.00000 identity_error=0.00000
+1792x1008 outer=0.30 physical=1104x636 protected_15deg_min_rate=1.00000 edge_max_rate=0.43243 identity_error=0.00000
+1792x1008 outer=0.50 physical=1300x738 protected_15deg_min_rate=1.00000 edge_max_rate=0.54237 identity_error=0.00000
+1792x1008 outer=0.75 physical=1552x876 protected_15deg_min_rate=1.00000 edge_max_rate=0.76196 identity_error=0.00000
+1792x1008 outer=1.00 physical=1792x1008 protected_15deg_min_rate=1.00000 edge_max_rate=1.00000 identity_error=0.00000
+failures=0

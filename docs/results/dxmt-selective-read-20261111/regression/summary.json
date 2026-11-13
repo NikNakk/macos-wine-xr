@@ -1,0 +1,98 @@
+[
+  {
+    "case": "mapped",
+    "enabled": false,
+    "counters": {
+      "read_ordinary": 0,
+      "read_capable": 0,
+      "mapped_render": 2,
+      "render_before": 4,
+      "render_after": 4
+    },
+    "pixels": "PASS"
+  },
+  {
+    "case": "ordinary",
+    "enabled": false,
+    "counters": {
+      "read_ordinary": 0,
+      "read_capable": 0,
+      "mapped_render": 0,
+      "render_before": 4,
+      "render_after": 4
+    },
+    "pixels": "PASS"
+  },
+  {
+    "case": "late",
+    "enabled": false,
+    "counters": {
+      "read_ordinary": 0,
+      "read_capable": 0,
+      "mapped_render": 2,
+      "render_before": 5,
+      "render_after": 5
+    },
+    "pixels": "PASS"
+  },
+  {
+    "case": "merge",
+    "enabled": false,
+    "counters": {
+      "read_ordinary": 0,
+      "read_capable": 0,
+      "mapped_render": 0,
+      "render_before": 6,
+      "render_after": 5
+    },
+    "pixels": "PASS"
+  },
+  {
+    "case": "mapped",
+    "enabled": true,
+    "counters": {
+      "read_ordinary": 1,
+      "read_capable": 3,
+      "mapped_render": 2,
+      "render_before": 4,
+      "render_after": 4
+    },
+    "pixels": "PASS"
+  },
+  {
+    "case": "ordinary",
+    "enabled": true,
+    "counters": {
+      "read_ordinary": 4,
+      "read_capable": 0,
+      "mapped_render": 0,
+      "render_before": 4,
+      "render_after": 4
+    },
+    "pixels": "PASS"
+  },
+  {
+    "case": "late",
+    "enabled": true,
+    "counters": {
+      "read_ordinary": 2,
+      "read_capable": 3,
+      "mapped_render": 2,
+      "render_before": 5,
+      "render_after": 5
+    },
+    "pixels": "PASS"
+  },
+  {
+    "case": "merge",
+    "enabled": true,
+    "counters": {
+      "read_ordinary": 6,
+      "read_capable": 0,
+      "mapped_render": 0,
+      "render_before": 6,
+      "render_after": 5
+    },
+    "pixels": "PASS"
+  }
+]

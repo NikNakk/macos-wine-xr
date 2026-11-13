@@ -1,0 +1,77 @@
+frame 1200: 63 render passes, scene size 1792x1008
+render pass sizes: 1792x1008 s1 c1 ×12, 1792x1008 s2 c1 d ×7, 448x252 s1 c1 ×4, 224x126 s1 c1 ×4, 112x63 s1 c1 ×4, 56x32 s1 c1 ×4, 28x16 s1 c1 ×4, 1024x1024 s1 c2 ×2, 1792x1008 s2 c0 d ×2, 1792x1008 s1 c3 d ×2, 896x504 s1 c1 ×2, 14x16 s1 c1 ×2, 28x32 s1 c1 ×2, 56x63 s1 c1 ×2, 112x126 s1 c1 ×2, 224x252 s1 c1 ×2, 1024x1024 s1 c4 ×1, 1792x1008 s1 c0 d ×1, 512x512 s1 c0 d ×1, 1x1 s1 c1 ×1, 32x32 s1 c1 ×1, 1280x720 s1 c1 ×1
+
+scene-family textures (16):
+ a5dfe0 1792x1008 Depth32Float_Stencil8 s2 mips1
+    attachment in scene-sized pass               9
+    clear                                        1
+    pixel read in scene-sized pass               2
+ a5e0a0 1792x1008 Depth32Float_Stencil8 s1 mips1
+    ATTACHMENT in scene-sized MRT pass           2
+    COMPUTE srv compute                          2
+    attachment in scene-sized pass               1
+    pixel read in scene-sized pass               49
+ 8aaf70 1792x1008 BGRA8Unorm s2 mips1
+    attachment in scene-sized pass               2
+    clear                                        1
+    resolve                                      1
+ 8ab030 1792x1008 BGRA8Unorm s1 mips1
+    pixel read in scene-sized pass               20
+    resolve                                      1
+ 7cc5d0 1792x1008 BGRA8Unorm s1 mips1
+    ATTACHMENT in scene-sized MRT pass           2
+    clear                                        1
+    pixel read in scene-sized pass               20
+ 8aa8b0 1792x1008 BGRA8Unorm s1 mips1
+    ATTACHMENT in scene-sized MRT pass           2
+    clear                                        1
+    pixel read in scene-sized pass               20
+ 8aa970 1792x1008 BGRA8Unorm s1 mips1
+    ATTACHMENT in scene-sized MRT pass           2
+    clear                                        1
+    pixel read in scene-sized pass               20
+ 7cb010 1792x1008 R8Unorm s1 mips1
+    attachment in scene-sized pass               2
+    clear                                        1
+    pixel read in scene-sized pass               20
+ 8aaa30 1792x1008 RG11B10Float s2 mips1
+    attachment in scene-sized pass               4
+    clear                                        1
+    pixel read in scene-sized pass               2
+ 8aaaf0 1792x1008 RG11B10Float s1 mips1
+    attachment in scene-sized pass               2
+    pixel read in scene-sized pass               2
+ 8ab1b0 1792x1008 23 s1 mips1
+    attachment in scene-sized pass               1
+ 8ab270 1792x1008 RGBA16Float s2 mips1
+    attachment in scene-sized pass               1
+    clear                                        1
+    pixel read in scene-sized pass               1
+ 8ab330 1792x1008 RGBA16Float s1 mips1
+    attachment in scene-sized pass               1
+    pixel read in scene-sized pass               2
+ 8ab3f0 1792x1008 RG11B10Float s1 mips1
+    attachment in scene-sized pass               2
+    pixel read in other-sized pass               2
+    pixel read in scene-sized pass               2
+ 884cc0 1792x1008 BGRA8Unorm s1 mips1
+    attachment in scene-sized pass               2
+    clear                                        2
+    pixel read in scene-sized pass               3
+ 155eb0 1792x1008 RGBA8Unorm_sRGB s1 mips1
+    attachment in scene-sized pass               2
+    clear                                        1
+    pixel read in other-sized pass               1
+
+totals:
+  pixel read in scene-sized pass                 163
+  attachment in scene-sized pass                 29
+  clear                                          11
+  ATTACHMENT in scene-sized MRT pass             8
+  pixel read in other-sized pass                 3
+  COMPUTE srv compute                            2
+  resolve                                        2
+
+uses outside render passes and resolves:
+  enc 141261 compute srv: 1792x1008 Depth32Float_Stencil8 s1  with 1x1 BGRA8Unorm s1; 16x16 73 s1; 135x5 RG11B10Float s1; 135x5 RGBA8Unorm s1; 135x5 RGBA8Unorm s1; 135x5 RGBA8Unorm s1
+  enc 141264 compute srv: 1792x1008 Depth32Float_Stencil8 s1  with 1x1 BGRA8Unorm s1; 16x16 73 s1; 135x5 RG11B10Float s1; 135x5 RGBA8Unorm s1; 135x5 RGBA8Unorm s1; 135x5 RGBA8Unorm s1

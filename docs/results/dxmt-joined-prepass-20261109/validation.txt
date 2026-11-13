@@ -1,0 +1,10 @@
+Sixteen final joined cases pass with Metal validation: 2x/4x, rates 1/0.5/0.75, repeated and reversed-start controls.
+Each case has 65 paired rounds, 24 warm-up + 41 measured. One timestamp interval brackets the complete sequence; no phase-median sums.
+Exact ordinary depth and baseline output; mapped visibility control; full-rate RGB identity; zero central ROI mismatches; native reconstruction within 1/255.
+Separate post-guard audit: 156 actually mapped passes.
+Three joined analyser tests pass.
+Existing prepass-reuse six-case counterexample/identity suite passes.
+Existing resolve-first 16-case suite passes.
+Existing depth/MSAA four-case suite and disabled diagnostic import negative control pass.
+All 307 private DXMT source files still match pinned base with patches 0001-0011; no production DXMT source change this stage.
+No automatic EXD profile, gaze/headset validation or game FPS claim.

@@ -1,0 +1,14 @@
+{
+  "shader_selection_regression": "PASS off/on: mapped, ordinary, late mapped binding, merged passes; untranslated controls fail",
+  "msaa_stencil_cases": "PASS 2x/4x at rates 1,0.5,0.75; identity exact and reduced-rate centre within tolerance",
+  "automatic_foveation": "PASS 10 cases, 4194304 pixels each",
+  "merged_render_nodes_before_after": [
+    6,
+    5
+  ],
+  "merged_ordinary_pipeline_commands": 6,
+  "deployed_hashes_unchanged": true,
+  "private_game_settings_restored": true,
+  "nominal_thermal": true,
+  "loaded_frames": 26355
+}

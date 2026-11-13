@@ -1,0 +1,7 @@
+Final textured HDR/stencil benchmark: 16 cases, 3 modes, 65 rounds (24 warm-up + 41 measured), Metal validation enabled.
+Every case checks exact retained depth/stencil, mapped layout, full-rate identity, final replay equivalence and direct per-sample activation of the actual timed consumer.
+Supplementary map audit: 269 actually mapped render passes.
+Three HDR timing analyser tests and five replay/shader analysis tests pass.
+Existing six-case HDR/stencil and sixteen-case original joined-prepass suites pass after shared scene extension.
+Unchanged private DXMT source matches all 307 source files at pinned base plus patches 0001-0013.
+No EXD launch, game capture/replay implementation, installed-runtime changes, headset/gaze validation or game FPS claim in this stage.

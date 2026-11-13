@@ -1,0 +1,44 @@
+{
+  "bridge_head": "97d63093189f6394dbbef37c9a12c22cd66086db",
+  "seconds": 60,
+  "selection": "300 <= frame < 4000 and render_after >= 55",
+  "order": [
+    "N0a",
+    "N1a",
+    "N1b",
+    "N0b",
+    "W0a",
+    "W1a",
+    "W1b",
+    "W0b"
+  ],
+  "shader_cache": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/selective-read-cache-20261111",
+  "settings_before": {
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/prefix/drive_c/users/crossover/AppData/Local/EXD/Saved/SaveGames/GameSettings.sav": "0dbc0c6a964ea06f57d5f30d3ff46df2049ee51d41d2c42fb08bf900770a8526",
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/prefix/drive_c/users/crossover/AppData/Local/EXD/Saved/Config/WindowsNoEditor/GameUserSettings.ini": "25b4c519395df5444e07d032a7ffa9b269bb6f5723a06a11d382839e33d2f83b",
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/prefix/drive_c/users/crossover/AppData/Local/EXD/Saved/Config/WindowsNoEditor/Engine.ini": "7e76f675b1493adaa359e94934a5eed9f8d353d8a23c79b92a876339a2b72294"
+  },
+  "binaries": {
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/wine/lib/wine/x86_64-windows/d3d11.dll": "5d50b0105b488d026546ac86d609bc63f24e108e1b75441e41d578463484e4c7",
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/wine/lib/wine/x86_64-windows/dxgi.dll": "67dd859e1edabf231402888d857e49ab6e4f904ca02ca7073f3ea3fd4409a2e5",
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/wine/lib/wine/x86_64-unix/winemetal.so": "9f6b228bdf322c00b1080c060e2bada57321f119213a88bd8fef652567b93357",
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/prefix/drive_c/windows/system32/d3d11.dll": "5d50b0105b488d026546ac86d609bc63f24e108e1b75441e41d578463484e4c7",
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/prefix/drive_c/windows/system32/dxgi.dll": "67dd859e1edabf231402888d857e49ab6e4f904ca02ca7073f3ea3fd4409a2e5"
+  },
+  "source": {
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/dxmt-warp-source/src/d3d11/d3d11_shader.cpp": "c4a5adcb6fe39126aef341e0bd4e68bb9a8c5d25335cadf4f6ace40ec83377ea",
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/dxmt-warp-source/src/dxmt/dxmt_context.cpp": "04406dcb8cc9e13b9381d657554ec181cccf3db2d6b9ff99820279f235ffbbb1",
+    "/Users/nickkennedy/Code/macos-wine-xr/patches/dxmt/0019-selective-read-shader-variants.patch": "afea00921de90cfe9d444e64919851e34ed91b70587b54c72625d1d200a9eb54"
+  },
+  "settings_after": {
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/prefix/drive_c/users/crossover/AppData/Local/EXD/Saved/SaveGames/GameSettings.sav": "0dbc0c6a964ea06f57d5f30d3ff46df2049ee51d41d2c42fb08bf900770a8526",
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/prefix/drive_c/users/crossover/AppData/Local/EXD/Saved/Config/WindowsNoEditor/GameUserSettings.ini": "25b4c519395df5444e07d032a7ffa9b269bb6f5723a06a11d382839e33d2f83b",
+    "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/exd-warp/prefix/drive_c/users/crossover/AppData/Local/EXD/Saved/Config/WindowsNoEditor/Engine.ini": "7e76f675b1493adaa359e94934a5eed9f8d353d8a23c79b92a876339a2b72294"
+  },
+  "additional_identity_cases": [
+    "I0a",
+    "I1a",
+    "I1b",
+    "I0b"
+  ]
+}

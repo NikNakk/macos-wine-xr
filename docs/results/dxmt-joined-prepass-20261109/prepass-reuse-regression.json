@@ -1,0 +1,359 @@
+{
+  "cases": [
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/joined-prepass-reuse-regression/prepass-2x-1-1024.log",
+      "control": {
+        "size": 1024,
+        "samples": 2,
+        "rate": 1.0,
+        "full_color_bad": 0,
+        "mapped_color_bad": 0,
+        "readonly_depth_bad": 0,
+        "physical_width": 1024,
+        "physical_height": 1024
+      },
+      "rows": [
+        {
+          "size": 1024,
+          "samples": 2,
+          "rate": 1.0,
+          "filter": 0,
+          "checked_samples": 2097152,
+          "color_bad": 0,
+          "center_bad": 0,
+          "holes": 0,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 0.0,
+          "nonblack_color_bad": 0
+        },
+        {
+          "size": 1024,
+          "samples": 2,
+          "rate": 1.0,
+          "filter": 1,
+          "checked_samples": 2097152,
+          "color_bad": 0,
+          "center_bad": 0,
+          "holes": 0,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 0.0,
+          "nonblack_color_bad": 0
+        },
+        {
+          "size": 1024,
+          "samples": 2,
+          "rate": 1.0,
+          "filter": 2,
+          "checked_samples": 2097152,
+          "color_bad": 0,
+          "center_bad": 0,
+          "holes": 0,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 0.0,
+          "nonblack_color_bad": 0
+        }
+      ],
+      "actually_mapped_d3d_passes": 144
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/joined-prepass-reuse-regression/prepass-2x-0.5-1024.log",
+      "control": {
+        "size": 1024,
+        "samples": 2,
+        "rate": 0.5,
+        "full_color_bad": 0,
+        "mapped_color_bad": 0,
+        "readonly_depth_bad": 0,
+        "physical_width": 696,
+        "physical_height": 696
+      },
+      "rows": [
+        {
+          "size": 1024,
+          "samples": 2,
+          "rate": 0.5,
+          "filter": 0,
+          "checked_samples": 968832,
+          "color_bad": 235608,
+          "center_bad": 2573,
+          "holes": 235603,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 24.318767340467698,
+          "nonblack_color_bad": 5
+        },
+        {
+          "size": 1024,
+          "samples": 2,
+          "rate": 0.5,
+          "filter": 1,
+          "checked_samples": 968832,
+          "color_bad": 15601,
+          "center_bad": 2573,
+          "holes": 15268,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 1.6102895032368874,
+          "nonblack_color_bad": 333
+        },
+        {
+          "size": 1024,
+          "samples": 2,
+          "rate": 0.5,
+          "filter": 2,
+          "checked_samples": 968832,
+          "color_bad": 456994,
+          "center_bad": 2573,
+          "holes": 456994,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 47.16958151671291,
+          "nonblack_color_bad": 0
+        }
+      ],
+      "actually_mapped_d3d_passes": 144
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/joined-prepass-reuse-regression/prepass-2x-0.75-1024.log",
+      "control": {
+        "size": 1024,
+        "samples": 2,
+        "rate": 0.75,
+        "full_color_bad": 0,
+        "mapped_color_bad": 0,
+        "readonly_depth_bad": 0,
+        "physical_width": 864,
+        "physical_height": 864
+      },
+      "rows": [
+        {
+          "size": 1024,
+          "samples": 2,
+          "rate": 0.75,
+          "filter": 0,
+          "checked_samples": 1492992,
+          "color_bad": 352077,
+          "center_bad": 5126,
+          "holes": 351921,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 23.58197498713992,
+          "nonblack_color_bad": 156
+        },
+        {
+          "size": 1024,
+          "samples": 2,
+          "rate": 0.75,
+          "filter": 1,
+          "checked_samples": 1492992,
+          "color_bad": 45943,
+          "center_bad": 5126,
+          "holes": 45518,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 3.0772435485253773,
+          "nonblack_color_bad": 425
+        },
+        {
+          "size": 1024,
+          "samples": 2,
+          "rate": 0.75,
+          "filter": 2,
+          "checked_samples": 1492992,
+          "color_bad": 662465,
+          "center_bad": 5126,
+          "holes": 662465,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 44.371637624314126,
+          "nonblack_color_bad": 0
+        }
+      ],
+      "actually_mapped_d3d_passes": 144
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/joined-prepass-reuse-regression/prepass-4x-1-1024.log",
+      "control": {
+        "size": 1024,
+        "samples": 4,
+        "rate": 1.0,
+        "full_color_bad": 0,
+        "mapped_color_bad": 0,
+        "readonly_depth_bad": 0,
+        "physical_width": 1024,
+        "physical_height": 1024
+      },
+      "rows": [
+        {
+          "size": 1024,
+          "samples": 4,
+          "rate": 1.0,
+          "filter": 0,
+          "checked_samples": 4194304,
+          "color_bad": 0,
+          "center_bad": 0,
+          "holes": 0,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 0.0,
+          "nonblack_color_bad": 0
+        },
+        {
+          "size": 1024,
+          "samples": 4,
+          "rate": 1.0,
+          "filter": 1,
+          "checked_samples": 4194304,
+          "color_bad": 0,
+          "center_bad": 0,
+          "holes": 0,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 0.0,
+          "nonblack_color_bad": 0
+        },
+        {
+          "size": 1024,
+          "samples": 4,
+          "rate": 1.0,
+          "filter": 2,
+          "checked_samples": 4194304,
+          "color_bad": 0,
+          "center_bad": 0,
+          "holes": 0,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 0.0,
+          "nonblack_color_bad": 0
+        }
+      ],
+      "actually_mapped_d3d_passes": 144
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/joined-prepass-reuse-regression/prepass-4x-0.5-1024.log",
+      "control": {
+        "size": 1024,
+        "samples": 4,
+        "rate": 0.5,
+        "full_color_bad": 0,
+        "mapped_color_bad": 0,
+        "readonly_depth_bad": 0,
+        "physical_width": 696,
+        "physical_height": 696
+      },
+      "rows": [
+        {
+          "size": 1024,
+          "samples": 4,
+          "rate": 0.5,
+          "filter": 0,
+          "checked_samples": 1937664,
+          "color_bad": 471541,
+          "center_bad": 5178,
+          "holes": 471538,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 24.33554011428194,
+          "nonblack_color_bad": 3
+        },
+        {
+          "size": 1024,
+          "samples": 4,
+          "rate": 0.5,
+          "filter": 1,
+          "checked_samples": 1937664,
+          "color_bad": 31156,
+          "center_bad": 5178,
+          "holes": 30689,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 1.6079155106354868,
+          "nonblack_color_bad": 467
+        },
+        {
+          "size": 1024,
+          "samples": 4,
+          "rate": 0.5,
+          "filter": 2,
+          "checked_samples": 1937664,
+          "color_bad": 913266,
+          "center_bad": 5178,
+          "holes": 913266,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 47.13232015457788,
+          "nonblack_color_bad": 0
+        }
+      ],
+      "actually_mapped_d3d_passes": 144
+    },
+    {
+      "log": "/Users/nickkennedy/Code/macos-wine-xr/build-in-process/joined-prepass-reuse-regression/prepass-4x-0.75-1024.log",
+      "control": {
+        "size": 1024,
+        "samples": 4,
+        "rate": 0.75,
+        "full_color_bad": 0,
+        "mapped_color_bad": 0,
+        "readonly_depth_bad": 0,
+        "physical_width": 864,
+        "physical_height": 864
+      },
+      "rows": [
+        {
+          "size": 1024,
+          "samples": 4,
+          "rate": 0.75,
+          "filter": 0,
+          "checked_samples": 2985984,
+          "color_bad": 706858,
+          "center_bad": 10182,
+          "holes": 706755,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 23.672531400034295,
+          "nonblack_color_bad": 103
+        },
+        {
+          "size": 1024,
+          "samples": 4,
+          "rate": 0.75,
+          "filter": 1,
+          "checked_samples": 2985984,
+          "color_bad": 92708,
+          "center_bad": 10182,
+          "holes": 92071,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 3.104772162208505,
+          "nonblack_color_bad": 637
+        },
+        {
+          "size": 1024,
+          "samples": 4,
+          "rate": 0.75,
+          "filter": 2,
+          "checked_samples": 2985984,
+          "color_bad": 1329501,
+          "center_bad": 10182,
+          "holes": 1329501,
+          "readonly_depth_bad": 0,
+          "source_depth_bad": 0,
+          "color_bad_percent": 44.52471948945473,
+          "nonblack_color_bad": 0
+        }
+      ],
+      "actually_mapped_d3d_passes": 144
+    }
+  ],
+  "limitations": [
+    "Correctness gate only: no end-to-end GPU time or EXD speedup is claimed.",
+    "Reduced-rate errors are expected counterexamples; they do not pass compatibility.",
+    "Colour comparison is per sample in the active physical layout against a matching mapped prepass, before unwarp.",
+    "D32Float and synthetic depth-invariant geometry; EXD combined stencil/HDR/eye layout are not tested.",
+    "center_bad is a central physical ROI, not proof of logical gaze-region correctness."
+  ]
+}

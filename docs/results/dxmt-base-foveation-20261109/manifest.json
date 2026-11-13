@@ -1,0 +1,15 @@
+{
+  "patches/dxmt/0004-scene-resource-provenance-trace.patch": "19efc86009c806ee0d5be3da901d3ab6ffa617f62d59e82f926e328402ce56d9",
+  "patches/dxmt/0002-target-specific-metal-rate-map.patch": "2ed697426e42f207832514b56485931ec15baefec54400b1cfab23951069f217",
+  "patches/dxmt/0001-immediate-context-metal-rate-map.patch": "537088ba2c033e7b3988e984fa84c94d3704dfd8d6253929d42a35bfededac26",
+  "patches/dxmt/0003-ngx-feature-routing-and-trace.patch": "245fe8bff3d243677cf8ddaf33f7d52d55cb94b9c0a2f35bddcab93ce0af5dc5",
+  "tests/windows/dxmt_foveation_probe.cpp": "b0daa8672d8b163d156515574632d01c4c9a03d1b779fbd9ea6fa1bdc143dfe2",
+  "tests/in_process/foveation_probe_native.m": "e0dd1f78ec1fb79d9ae2c98f6b10f6457a3086de4060152beca5d65f423588a5",
+  "tests/in_process/foveation_probe.h": "8fa09918ba05720c95f2ae2e6294c17e8670eb54046390f6fab6cb37e5fd7d0d",
+  "scripts/run-exd-scene-trace.zsh": "bdd14c6a4e8a305dff7af91537988fed8a3673f799efe8aa339d7937090ae205",
+  "tools/analyze_dxmt_scene_trace.py": "5ae3bc38c9811857b5820691097b46646b577aa0a452c731b045c6ece4dac9e2",
+  "base_revision": "4c3a2f5ea661bd258c14cf8ccb6924791cc75a77",
+  "repo_revision": "97d63093189f6394dbbef37c9a12c22cd66086db",
+  "scripts/run-openxr-foveation-probe.zsh": "8184574988959f638fb1b65fa7b9134b8d1d5fc8afd2fe47c2d8ff407d6a998b",
+  "tests/macos/test_dxmt_scene_trace.py": "849fc2c3f504ea0d2b959095968750ed928f8271dac99aaf13da5efba3f065a6"
+}

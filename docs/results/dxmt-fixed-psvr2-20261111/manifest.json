@@ -1,0 +1,5 @@
+{
+  "patches/dxmt/0021-fixed-psvr2-profile.patch": "db00f300b9523d0f5eb13b9a526d282ba32b05e8e4f65fef0cfc780f98097114",
+  "build-in-process/dxmt-warp-source/src/winemetal/unix/winemetal_fixed_psvr2_profile.h": "a61d5b60667ef92e4a5ba7da5fae4946a769cb53ed0dcba80ab7029d78c1b563",
+  "build-in-process/dxmt-warp-build/src/winemetal/unix/winemetal.so": "4f5f31fac56b8c28e63dc0e38686510f2d13c8ee0a7b625bd353f3befb93bae1"
+}

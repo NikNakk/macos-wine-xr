@@ -1,0 +1,17 @@
+{
+  "audit_private_run": "build-in-process/exd-ngx/tbdr-20261109-192531-detail",
+  "audit_patches": "0001-0012",
+  "fixture_patches": "0001-0013",
+  "frames": [
+    1200,
+    1201
+  ],
+  "selector": {
+    "width": 1792,
+    "height": 1008,
+    "color_format": 92,
+    "samples": 2
+  },
+  "original_game_shaders": "Private under build-in-process/exd-ngx/tbdr-depth-shaders; bytecode and disassembly excluded",
+  "scope": "Shader/stencil audit and correctness gate only; no EXD foveation enabled or performance result."
+}

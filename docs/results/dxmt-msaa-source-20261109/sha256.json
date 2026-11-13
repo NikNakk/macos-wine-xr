@@ -1,0 +1,15 @@
+{
+  "tests/windows/dxmt_msaa_source_probe.h": "a00aeac5eb39c1f1ca975b92ece3d8ca593c0c45778be8feeb1700974e912770",
+  "tests/windows/dxmt_hdr_joined_probe.h": "7703c9e3f9d39b425d44e7189af5360563edc0e3298dc1aeb25296e18f7d8380",
+  "tests/windows/dxmt_depth_foveation_probe.cpp": "949465948b9a3b0097b4987817fdee73d756261f09b924cd8d3aae26d405c883",
+  "tests/in_process/depth_foveation_probe.h": "556e129d6493ec3b66ade864d340ea51fbaa301f15d843ba73e7e45f41f84b5f",
+  "tests/in_process/depth_foveation_probe_native.m": "495955a2c09cf9316dae63065c4f5af6c7fc08de4951c585bf79003b1787140d",
+  "tools/analyze_dxmt_hdr_joined.py": "532aa15acbcce6d4ef01e6c8c9c97d7bccae516f8c0b2dff2f2bc62dbfb61fcc",
+  "scripts/test-dxmt-msaa-source.zsh": "ff547b768e981f946b5123063b4beea05e44b30257e3a9035a0d99dbe8cd2b4f",
+  "build-in-process/depth-foveation-probe/dxmt_depth_foveation_probe.exe": "4e5f0ac7e4797437b8b74d8bec29baaf6a10f2c352ff60d82943834f1981ac20",
+  "build-in-process/depth-foveation-probe/x86_64-windows/wine_depth_foveation_probe.dll": "065a333af788be8b701fce5749817a3a3cd237f9286c2682974a0da623e83fbd",
+  "build-in-process/depth-foveation-probe/x86_64-unix/wine_depth_foveation_probe.so": "8b850c234b0c5bf0a76f9f85985e40c44e22d140cf9293687409aadde3914d6b",
+  "build-in-process/exd-ngx/wine/lib/wine/x86_64-windows/d3d11.dll": "615e4cd4fddbb3ac087400e31a66e6108ed7d78197f7cc6f3825455fa89e0cc8",
+  "build-in-process/exd-ngx/wine/lib/wine/x86_64-windows/winemetal.dll": "4c2d930ada633d03ac534f0aa09d3a6a9751bfd9eaafbbddd5e3aa00c467ffee",
+  "build-in-process/exd-ngx/wine/lib/wine/x86_64-unix/winemetal.so": "ee208b9b4e48e2998ccb5e3695abd066442be6cc5911dc401b11949d5dca3521"
+}

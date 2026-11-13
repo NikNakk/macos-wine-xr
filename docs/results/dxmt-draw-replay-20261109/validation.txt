@@ -1,0 +1,11 @@
+Private DXMT build: ninja exit 0; no new compiler warnings in final build.
+Probe build: exit 0 (standard bundled DirectX header warnings).
+Replay matrix: RGBA8 and HDR, 1x and 2x; all four pass.
+393216 replay sample tuples checked across the four cases, plus restored-draw and rejection comparisons.
+16 failed-capture ordinary-rendering controls and capture-disabled ordinary draw pass.
+Automatic base foveation: all 10 cases pass (8 fallback/default controls).
+Existing HDR MSAA source/materialisation: all 16 cases pass, including collapse negative controls.
+Python analysis regressions: 4 HDR joined tests and 2 replay-audit tests pass.
+Three new zsh scripts: syntax checks pass.
+Original DXMT checkout remains clean; source changes are in private build source plus patch 14 only.
+No new frame-rate or capture-overhead result is claimed.

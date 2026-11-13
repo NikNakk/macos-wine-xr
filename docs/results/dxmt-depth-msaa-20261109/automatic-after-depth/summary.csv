@@ -1,0 +1,11 @@
+case,gpu_ms,cpu_record_ms,mapped_passes,unwarps,wrong
+baseline,3.651292,0.0005,0,0,0
+enabled,1.021791,0.0008,24,24,0
+two-draws,3.657042,0.0008,0,0,0
+no-uav,3.651458,0.0005,0,0,0
+depth,3.651958,0.0006,0,0,0
+msaa,3.655708,0.0005,0,0,0
+no-clear,3.651667,0.0007,0,0,0
+unselected,3.65125,0.0009,0,0,0
+position-disabled,3.579375,0.0006,0,0,0
+default,3.57925,0.0005,0,0,0

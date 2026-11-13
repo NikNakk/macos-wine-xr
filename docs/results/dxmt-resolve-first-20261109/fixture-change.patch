@@ -1,0 +1,209 @@
+--- a/tests/in_process/depth_foveation_probe.h
++++ b/tests/in_process/depth_foveation_probe.h
+@@ -2,9 +2,11 @@
+ // SPDX-License-Identifier: LGPL-2.1-or-later
+ #pragma once
+ #include <stdint.h>
+-enum { DEPTH_CREATE, DEPTH_RECONSTRUCT, DEPTH_RELEASE };
++enum { DEPTH_CREATE, DEPTH_RECONSTRUCT, DEPTH_RELEASE, DEPTH_RESOLVE_FIRST };
+ struct depth_foveation_params {
+  uint64_t device, color, depth, event, map, value, output_color, output_depth;
+  uint32_t size, samples, mapped, filter, physical_width, physical_height, status;
+  double reconstruction_gpu_ms;
++ float peripheral_rate;
++ double resolve_gpu_ms, unwarp_gpu_ms;
+ };
+--- a/tests/in_process/depth_foveation_probe_native.m
++++ b/tests/in_process/depth_foveation_probe_native.m
+@@ -20,12 +20,12 @@
+  struct depth_foveation_params *p=args;p->status=1;
+  @autoreleasepool {
+   id<MTLDevice> device=(id<MTLDevice>)p->device;
+-  if(!p->size || p->size>4096 || (p->samples!=2 && p->samples!=4) || ![device supportsTextureSampleCount:p->samples] ||
++  if(!isfinite(p->peripheral_rate) || p->peripheral_rate<=0 || p->peripheral_rate>1 || !p->size || p->size>4096 || (p->samples!=2 && p->samples!=4) || ![device supportsTextureSampleCount:p->samples] ||
+       ![device supportsRasterizationRateMapWithLayerCount:1])return 0;
+   id<MTLRasterizationRateMap> map=nil;
+   if(p->mapped) {
+    MTLRasterizationRateLayerDescriptor *layer=[[MTLRasterizationRateLayerDescriptor alloc] initWithSampleCount:MTLSizeMake(8,8,1)];
+-   for(unsigned i=0;i<8;++i){layer.horizontal[i]=@((i==3||i==4)?1.f:.25f);layer.vertical[i]=@((i==3||i==4)?1.f:.25f);}
++   for(unsigned i=0;i<8;++i){layer.horizontal[i]=@((i==3||i==4)?1.f:p->peripheral_rate);layer.vertical[i]=@((i==3||i==4)?1.f:p->peripheral_rate);}
+    map=[device newRasterizationRateMapWithDescriptor:[MTLRasterizationRateMapDescriptor
+      rasterizationRateMapDescriptorWithScreenSize:MTLSizeMake(p->size,p->size,1) layer:layer]];
+    [layer release];if(!map)return 0;
+@@ -116,7 +116,71 @@
+  }
+  return 0;
+ }
++// Resolve at physical density, then materialize only conventional single-sample colour.
++// All explicit waits and repeated timing passes belong solely to this fixture.
++static NTSTATUS resolve_first(void *args) {
++ struct depth_foveation_params *p=args;p->status=1;
++ @autoreleasepool {
++  id<MTLDevice> device=(id)p->device;id<MTLRasterizationRateMap> map=(id)p->map;id<MTLSharedEvent> event=(id)p->event;
++  for(unsigned n=0;event.signaledValue<p->value && n<10000;++n)usleep(1000);
++  if(event.signaledValue<p->value || !p->size)return 0;
++  MTLSize physical=map?[map physicalSizeForLayer:0]:MTLSizeMake(p->size,p->size,1);
++  id<MTLBuffer> lut=[device newBufferWithLength:2*p->size*sizeof(float) options:MTLResourceStorageModeShared];
++  if(!lut)return 0;
++  float *xy=lut.contents;
++  for(unsigned i=0;i<p->size;++i){
++   MTLCoordinate2D a=MTLCoordinate2DMake(i+.5f,i+.5f);if(map)a=[map mapScreenToPhysicalCoordinates:a forLayer:0];
++   xy[i]=fminf(fmaxf(a.x,.5f),physical.width-.5f);xy[p->size+i]=fminf(fmaxf(a.y,.5f),physical.height-.5f);
++  }
++  MTLTextureDescriptor *d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:p->size height:p->size mipmapped:NO];
++  d.storageMode=MTLStorageModePrivate;d.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
++  id<MTLTexture> resolved=[device newTextureWithDescriptor:d];
++  d.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite;id<MTLTexture> output=[device newTextureWithDescriptor:d];
++  NSString *source=@"#include <metal_stdlib>\nusing namespace metal;\n"
++   "kernel void unwarp(texture2d<float,access::sample> src [[texture(0)]],texture2d<float,access::write> dst [[texture(1)]],"
++   "constant float *xy [[buffer(0)]],uint2 i [[thread_position_in_grid]]){"
++   "if(any(i>=uint2(dst.get_width(),dst.get_height())))return;constexpr sampler s(coord::pixel,filter::linear,address::clamp_to_edge);"
++   "dst.write(src.sample(s,float2(xy[i.x],xy[dst.get_width()+i.y])),i);}";
++  NSError *error=nil;id<MTLLibrary> lib=[device newLibraryWithSource:source options:nil error:&error];
++  id<MTLFunction> function=[lib newFunctionWithName:@"unwarp"];
++  id<MTLComputePipelineState> pipeline=function?[device newComputePipelineStateWithFunction:function error:&error]:nil;
++  [function release];[lib release];id<MTLCommandQueue> queue=[device newCommandQueue];
++  BOOL good=resolved && output && pipeline && queue;double medians[3]={};
++  // Interleave/rotate phase order to avoid measuring one kernel only cold and
++  // another only warm. First three rounds are discarded for every phase.
++  double times[3][21]={};
++  for(unsigned n=0;good && n<24;++n){
++   for(unsigned step=0;good && step<3;++step){unsigned phase=(n+step)%3;id<MTLCommandBuffer> command=[queue commandBuffer];
++    if(phase!=1){
++     MTLRenderPassDescriptor *pass=[MTLRenderPassDescriptor renderPassDescriptor];
++     pass.colorAttachments[0].texture=(id)p->color;pass.colorAttachments[0].resolveTexture=resolved;
++     pass.colorAttachments[0].loadAction=MTLLoadActionLoad;
++     // Retain the multisample source across trials and subsequent consumers.
++     pass.colorAttachments[0].storeAction=MTLStoreActionStoreAndMultisampleResolve;
++     id<MTLRenderCommandEncoder> enc=[command renderCommandEncoderWithDescriptor:pass];[enc endEncoding];
++    }
++    if(phase!=0){id<MTLComputeCommandEncoder> enc=[command computeCommandEncoder];
++     [enc setComputePipelineState:pipeline];[enc setTexture:resolved atIndex:0];[enc setTexture:output atIndex:1];[enc setBuffer:lut offset:0 atIndex:0];
++     [enc dispatchThreads:MTLSizeMake(p->size,p->size,1) threadsPerThreadgroup:MTLSizeMake(16,16,1)];[enc endEncoding];
++    }
++    [command commit];[command waitUntilCompleted];
++    good=command.status==MTLCommandBufferStatusCompleted && command.GPUEndTime>command.GPUStartTime;
++    if(n>=3)times[phase][n-3]=(command.GPUEndTime-command.GPUStartTime)*1000;
++   }
++  }
++  if(good)for(unsigned phase=0;phase<3;++phase){
++   for(unsigned i=0;i<21;++i)for(unsigned j=i+1;j<21;++j)if(times[phase][j]<times[phase][i]){double a=times[phase][i];times[phase][i]=times[phase][j];times[phase][j]=a;}
++   medians[phase]=times[phase][10];
++  }
++  if(good){[(id)p->output_color release];[(id)p->output_depth release];p->output_color=(uint64_t)output;p->output_depth=0;output=nil;
++   p->resolve_gpu_ms=medians[0];p->unwarp_gpu_ms=medians[1];p->reconstruction_gpu_ms=medians[2];p->status=0;
++  }else if(error)fprintf(stderr,"resolve-first pipeline: %s\n",error.description.UTF8String);
++  [queue release];[pipeline release];[resolved release];[output release];[lut release];
++ }
++ return 0;
++}
++
+ static NTSTATUS release_objects(void *args){struct depth_foveation_params *p=args;
+  [(id)p->color release];[(id)p->depth release];[(id)p->event release];[(id)p->map release];
+  [(id)p->output_color release];[(id)p->output_depth release];p->color=p->depth=p->event=p->map=p->output_color=p->output_depth=0;return 0;}
+-const unixlib_entry_t __wine_unix_call_funcs[]={create,reconstruct,release_objects};
++const unixlib_entry_t __wine_unix_call_funcs[]={create,reconstruct,release_objects,resolve_first};
+--- a/tests/windows/dxmt_depth_foveation_probe.cpp
++++ b/tests/windows/dxmt_depth_foveation_probe.cpp
+@@ -88,7 +88,8 @@
+  for(unsigned i=0;i<24;++i){UINT64 a,b;wait(ctx,begin[i],&a,sizeof(a));wait(ctx,end[i],&b,sizeof(b));CHECK(b>a);if(i>=3)times[i-3]=(b-a)*1000./dj.Frequency;}
+  std::sort(times,times+21);return times[10];
+ }
+-static std::vector<unsigned> overlay_resolve(ID3D11Device *dev,ID3D11DeviceContext *ctx,Target &target,unsigned size,double &resolve_ms){
++static std::vector<unsigned> overlay_resolve(ID3D11Device *dev,ID3D11DeviceContext *ctx,Target &target,unsigned size,double &resolve_ms,bool overlay=true){
++ if(overlay){
+  const char *hlsl="float4 vs(uint i:SV_VertexID):SV_Position{return float4(i==2?3:-1,i==1?3:-1,.5,1);}float4 ps():SV_Target{return float4(0,1,1,1);}";
+  Ptr<ID3DBlob> vs,ps;vs.p=compile(hlsl,"vs","vs_5_0");ps.p=compile(hlsl,"ps","ps_5_0");Ptr<ID3D11VertexShader> vertex;Ptr<ID3D11PixelShader> pixel;
+  CHECK(SUCCEEDED(dev->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,vertex.out())));CHECK(SUCCEEDED(dev->CreatePixelShader(ps->GetBufferPointer(),ps->GetBufferSize(),nullptr,pixel.out())));
+@@ -96,6 +97,7 @@
+  D3D11_DEPTH_STENCIL_DESC dd={};dd.DepthEnable=TRUE;dd.DepthFunc=D3D11_COMPARISON_LESS;dd.DepthWriteMask=D3D11_DEPTH_WRITE_MASK_ZERO;
+  Ptr<ID3D11DepthStencilState> ds;CHECK(SUCCEEDED(dev->CreateDepthStencilState(&dd,ds.out())));ctx->OMSetDepthStencilState(ds,0);
+  ID3D11RenderTargetView *rtv=target.rtv;ctx->OMSetRenderTargets(1,&rtv,target.dsv);ctx->Draw(3,0);ctx->OMSetRenderTargets(0,nullptr,nullptr);
++ }
+  D3D11_TEXTURE2D_DESC desc={};desc.Width=desc.Height=size;desc.ArraySize=desc.MipLevels=desc.SampleDesc.Count=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+  Ptr<ID3D11Texture2D> resolved,staging;CHECK(SUCCEEDED(dev->CreateTexture2D(&desc,nullptr,resolved.out())));
+  Ptr<ID3D11Query> dj,begins[24],ends[24];D3D11_QUERY_DESC qd={D3D11_QUERY_TIMESTAMP_DISJOINT,0};CHECK(SUCCEEDED(dev->CreateQuery(&qd,dj.out())));qd.Query=D3D11_QUERY_TIMESTAMP;
+@@ -132,7 +134,68 @@
+  if(strstr(name,"-full-depth"))CHECK(maximum==0 && !coverage && !compare_bad);
+  if(identity)CHECK(!depth_bad && !color_bad && !coverage && !compare_bad && !resolved_bad);
+ }
++static std::vector<unsigned> read_single(ID3D11Device *dev,ID3D11DeviceContext *ctx,IDXMTNativeDevice2 *native,uint64_t handle,unsigned size){
++ D3D11_TEXTURE2D_DESC td={};td.Width=td.Height=size;td.MipLevels=td.ArraySize=td.SampleDesc.Count=1;td.Format=DXGI_FORMAT_R8G8B8A8_UNORM;td.BindFlags=D3D11_BIND_SHADER_RESOURCE;
++ Ptr<ID3D11Texture2D> input,output,staging;CHECK(SUCCEEDED(native->ImportMetalTexture(handle,&td,input.out())));
++ Ptr<ID3D11ShaderResourceView> srv;CHECK(SUCCEEDED(dev->CreateShaderResourceView(input,nullptr,srv.out())));
++ td.BindFlags=D3D11_BIND_UNORDERED_ACCESS;CHECK(SUCCEEDED(dev->CreateTexture2D(&td,nullptr,output.out())));
++ Ptr<ID3D11UnorderedAccessView> uav;CHECK(SUCCEEDED(dev->CreateUnorderedAccessView(output,nullptr,uav.out())));
++ td.BindFlags=0;td.Usage=D3D11_USAGE_STAGING;td.CPUAccessFlags=D3D11_CPU_ACCESS_READ;CHECK(SUCCEEDED(dev->CreateTexture2D(&td,nullptr,staging.out())));
++ Ptr<ID3DBlob> code;code.p=compile("Texture2D<float4> src:register(t0);RWTexture2D<float4> dst:register(u0);"
++  "[numthreads(8,8,1)]void main(uint3 i:SV_DispatchThreadID){dst[i.xy]=src.Load(int3(i.xy,0));}","main","cs_5_0");
++ Ptr<ID3D11ComputeShader> shader;CHECK(SUCCEEDED(dev->CreateComputeShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,shader.out())));
++ ID3D11ShaderResourceView *srvs[]={srv};ID3D11UnorderedAccessView *uavs[]={uav};ctx->OMSetRenderTargets(0,nullptr,nullptr);
++ ctx->CSSetShader(shader,nullptr,0);ctx->CSSetShaderResources(0,1,srvs);ctx->CSSetUnorderedAccessViews(0,1,uavs,nullptr);ctx->Dispatch((size+7)/8,(size+7)/8,1);
++ ID3D11ShaderResourceView *none_srv=nullptr;ID3D11UnorderedAccessView *none_uav=nullptr;ctx->CSSetShaderResources(0,1,&none_srv);ctx->CSSetUnorderedAccessViews(0,1,&none_uav,nullptr);
++ ctx->CopyResource(staging,output);D3D11_MAPPED_SUBRESOURCE mapped={};CHECK(SUCCEEDED(ctx->Map(staging,0,D3D11_MAP_READ,0,&mapped)));
++ std::vector<unsigned> pixels(size*size);for(unsigned y=0;y<size;++y)memcpy(pixels.data()+y*size,(char*)mapped.pData+y*mapped.RowPitch,size*4);ctx->Unmap(staging,0);return pixels;
++}
++static int resolve_experiment(ID3D11Device *dev,ID3D11DeviceContext *ctx,IDXMTNativeDevice2 *native,
++ LONG(WINAPI *probe)(UINT,void*),Target *targets,depth_foveation_params *p,double *scene_ms,unsigned size,unsigned samples,float peripheral_rate,bool reverse){
++ auto depth_before=read_samples(dev,ctx,targets[0],size,samples);
++ auto source_before=read_samples(dev,ctx,targets[1],size,samples);
++ double prepass=draw_scene(dev,ctx,targets[0],size,true);auto depth_after=read_samples(dev,ctx,targets[0],size,samples);
++ unsigned depth_wrong=0;for(size_t i=0;i<depth_before.size();++i)depth_wrong+=depth_before[i].d!=depth_after[i].d;CHECK(!depth_wrong);
++ double d3d_resolve=0;auto baseline=overlay_resolve(dev,ctx,targets[0],size,d3d_resolve,false);dump("resolve-baseline",baseline,size,samples);
++ CHECK(probe(DEPTH_RESOLVE_FIRST,&p[0])==0 && !p[0].status && !p[0].output_depth);
++ auto identity=read_single(dev,ctx,native,p[0].output_color,size);unsigned identity_bad=0;
++ for(size_t i=0;i<baseline.size();++i)identity_bad+=baseline[i]!=identity[i];CHECK(!identity_bad);
++ CHECK(probe(DEPTH_RESOLVE_FIRST,&p[1])==0 && !p[1].status && !p[1].output_depth);
++ auto pixels=read_single(dev,ctx,native,p[1].output_color,size);
++ auto source_after=read_samples(dev,ctx,targets[1],size,samples);
++ unsigned source_preserved_bad=0,source_color_bad=0,source_depth_bad=0;
++ for(size_t i=0;i<source_before.size();++i){
++  source_preserved_bad+=memcmp(&source_before[i],&source_after[i],sizeof(Pixel))!=0;
++  source_color_bad+=fabs(source_after[i].r-depth_before[i].r)>3./255 || fabs(source_after[i].g-depth_before[i].g)>3./255 || fabs(source_after[i].b-depth_before[i].b)>3./255;
++  source_depth_bad+=fabs(source_after[i].d-depth_before[i].d)>1e-5;
++ }
++ CHECK(!source_preserved_bad);
++ if(peripheral_rate==1)CHECK(!source_color_bad && !source_depth_bad);
++ else CHECK(source_color_bad && source_depth_bad);
++
++ unsigned wrong=0,center=0,thin_roi=0,thin_missing=0,thin_added=0,max_error=0;double absolute=0;
++ auto pink=[](unsigned c){unsigned r=c&255,g=(c>>8)&255,b=(c>>16)&255;return r>80 && b>60 && r>2*g && b>2*g;};
++ for(unsigned y=0;y<size;++y)for(unsigned x=0;x<size;++x){size_t i=y*size+x;bool bad=false;
++  for(unsigned c=0;c<3;++c){unsigned delta=abs(int((baseline[i]>>(8*c))&255)-int((pixels[i]>>(8*c))&255));absolute+=delta;max_error=std::max(max_error,delta);bad|=delta>3;}
++  wrong+=bad;if(x>.44*size&&x<.56*size&&y>.44*size&&y<.56*size)center+=bad;
++  if(x<.18*size&&y>.2*size&&y<.8*size){thin_roi+=bad;thin_missing+=pink(baseline[i])&&!pink(pixels[i]);thin_added+=!pink(baseline[i])&&pink(pixels[i]);}
++ }
++ CHECK(!center);if(peripheral_rate==1)CHECK(!wrong);
++ auto final_depth=read_samples(dev,ctx,targets[0],size,samples);unsigned final_depth_wrong=0;
++ for(size_t i=0;i<depth_before.size();++i)final_depth_wrong+=depth_before[i].d!=final_depth[i].d;CHECK(!final_depth_wrong);
++ char name[96];snprintf(name,sizeof(name),"resolve-rate%03u",(unsigned)lround(peripheral_rate*100));dump(name,pixels,size,samples);
++ double baseline_gpu=scene_ms[0]+p[0].resolve_gpu_ms,total=scene_ms[1]+prepass+p[1].reconstruction_gpu_ms;
++ printf("RESOLVE_FIRST size=%u samples=%u rate=%.3f reverse=%u physical_width=%u physical_height=%u pixels=%zu identity_bad=%u center_bad=%u depth_samples=%zu depth_wrong=%u final_depth_wrong=%u source_preserved_bad=%u logical_source_color_bad=%u logical_source_depth_bad=%u color_bad=%u thin_roi_bad=%u thin_missing=%u thin_added=%u max_color_error=%u mae=%.6f baseline_scene_gpu_ms=%.6f baseline_native_resolve_gpu_ms=%.6f baseline_d3d_resolve_gpu_ms=%.6f baseline_gpu_ms=%.6f scene_gpu_ms=%.6f depth_prepass_gpu_ms=%.6f native_resolve_gpu_ms=%.6f unwarp_gpu_ms=%.6f joined_color_gpu_ms=%.6f total_gpu_ms=%.6f\n",
++ size,samples,peripheral_rate,reverse,p[1].physical_width,p[1].physical_height,pixels.size(),identity_bad,center,depth_before.size(),depth_wrong,final_depth_wrong,source_preserved_bad,source_color_bad,source_depth_bad,
++ wrong,thin_roi,thin_missing,thin_added,max_error,absolute/(size*size*3),scene_ms[0],p[0].resolve_gpu_ms,d3d_resolve,baseline_gpu,scene_ms[1],prepass,p[1].resolve_gpu_ms,p[1].unwarp_gpu_ms,p[1].reconstruction_gpu_ms,total);fflush(stdout);
++ ctx->ClearState();ctx->Flush();for(unsigned i=0;i<2;++i)CHECK(probe(DEPTH_RELEASE,&p[i])==0);
++ printf("PASS resolve-first control and ordinary Load/depth consumers; mapped colour is approximate.\n");return 0;
++}
++
+ int main(int argc,char **argv){unsigned samples=argc>1?atoi(argv[1]):2,size=argc>2?atoi(argv[2]):512;CHECK((samples==2||samples==4)&&size>=64&&size<=2048);
++ bool reverse=argc>5 && !strcmp(argv[5],"--reverse");
++ bool resolve_first=argc>3 && !strcmp(argv[3],"--resolve-first");
++ float peripheral_rate=argc>4?strtof(argv[4],nullptr):.25f;CHECK(std::isfinite(peripheral_rate)&&peripheral_rate>0&&peripheral_rate<=1);
+  HMODULE helper=LoadLibraryA("wine_depth_foveation_probe.dll");CHECK(helper);auto probe=(LONG(WINAPI*)(UINT,void*))GetProcAddress(helper,"MWXRMetalProbe");CHECK(probe);
+  Ptr<ID3D11Device> dev;Ptr<ID3D11DeviceContext> ctx;CHECK(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,dev.out(),nullptr,ctx.out())));
+  Ptr<IDXMTNativeDevice2> native;Ptr<IDXMTNativeContext1> rate;Ptr<ID3D11DeviceContext4> ctx4;
+@@ -140,12 +203,13 @@
+  D3D11_VIEWPORT viewport={0,0,float(size),float(size),0,1};ctx->RSSetViewports(1,&viewport);D3D11_RASTERIZER_DESC rd={};rd.FillMode=D3D11_FILL_SOLID;rd.CullMode=D3D11_CULL_NONE;rd.DepthClipEnable=TRUE;rd.MultisampleEnable=TRUE;
+  Ptr<ID3D11RasterizerState> raster;CHECK(SUCCEEDED(dev->CreateRasterizerState(&rd,raster.out())));ctx->RSSetState(raster);
+  depth_foveation_params p[2]={};Target targets[2];double scene_ms[2]={};
+- for(unsigned i=0;i<2;++i){CHECK(SUCCEEDED(native->GetMetalDevice(&p[i].device)));p[i].size=size;p[i].samples=samples;p[i].mapped=i;p[i].value=1;
++ for(unsigned k=0;k<2;++k){unsigned i=reverse?1-k:k;CHECK(SUCCEEDED(native->GetMetalDevice(&p[i].device)));p[i].size=size;p[i].samples=samples;p[i].peripheral_rate=peripheral_rate;p[i].mapped=i;p[i].value=1;
+   CHECK(probe(DEPTH_CREATE,&p[i])==0 && !p[i].status);import(dev,native,targets[i],p[i].color,p[i].depth,size,samples);
+   CHECK(SUCCEEDED(rate->SetRasterizationRateMap(p[i].map)));scene_ms[i]=draw_scene(dev,ctx,targets[i],size);CHECK(SUCCEEDED(rate->SetRasterizationRateMap(0)));
+   Ptr<ID3D11Fence> fence;CHECK(SUCCEEDED(native->ImportMetalSharedEvent(p[i].event,fence.out())));CHECK(SUCCEEDED(ctx4->Signal(fence,p[i].value)));ctx->Flush();
+   printf("DEPTH_SCENE mapped=%u size=%u samples=%u physical=%ux%u scene_gpu_ms=%.6f\n",i,size,samples,p[i].physical_width,p[i].physical_height,scene_ms[i]);fflush(stdout);
+  }
++ if(resolve_first)return resolve_experiment(dev,ctx,native,probe,targets,p,scene_ms,size,samples,peripheral_rate,reverse);
+  auto reference=read_samples(dev,ctx,targets[0],size,samples);
+  double prepass_ms=draw_scene(dev,ctx,targets[0],size,true);
+  auto depth_replay=read_samples(dev,ctx,targets[0],size,samples);unsigned replay_wrong=0;

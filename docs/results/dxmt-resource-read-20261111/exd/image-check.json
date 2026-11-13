@@ -1,0 +1,8 @@
+{
+ "configuration": "1792x1008, 2x MSAA, Present 1400, DXMT_RATE_MAP_RESOURCE_READ=1; difference from the ordinary baseline dump, 8-bit, max channel",
+ "rate_1.0": {"mean": 1.50, "over16_percent": 0.28, "outside_light_shaft_mean_luma": 0.71, "inside_light_shaft_mean_luma": 2.69},
+ "rate_0.5": {"mean": 2.34, "over16_percent": 1.77, "centre_mean": 1.29, "periphery_mean": 2.41},
+ "rate_0.5_vs_unspecialised_warped": {"mean": 0.31, "over16_percent": 0.02},
+ "noise_floor_second_baseline": {"mean": 0.83},
+ "note": "The light shaft animates and scene time is not aligned between runs."
+}

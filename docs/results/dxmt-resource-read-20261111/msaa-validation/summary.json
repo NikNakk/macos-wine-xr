@@ -1,0 +1,200 @@
+[
+  {
+    "case": "msaa-2-rate-1",
+    "controls": [
+      {
+        "after": "0",
+        "size": "1024",
+        "samples": "2",
+        "rate": "1.000",
+        "final_bad": "0",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.000000"
+      },
+      {
+        "after": "1",
+        "size": "1024",
+        "samples": "2",
+        "rate": "1.000",
+        "final_bad": "0",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.000000"
+      }
+    ],
+    "counters": {
+      "read_mask_draws": 1420,
+      "read_mask_kept": 402,
+      "read_mask_pruned": 1151,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "mapped_render": 403
+    }
+  },
+  {
+    "case": "msaa-2-rate-0.5",
+    "controls": [
+      {
+        "after": "0",
+        "size": "1024",
+        "samples": "2",
+        "rate": "0.500",
+        "final_bad": "17983",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.005504"
+      },
+      {
+        "after": "1",
+        "size": "1024",
+        "samples": "2",
+        "rate": "0.500",
+        "final_bad": "17983",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.005504"
+      }
+    ],
+    "counters": {
+      "read_mask_draws": 1420,
+      "read_mask_kept": 402,
+      "read_mask_pruned": 1151,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "mapped_render": 403
+    }
+  },
+  {
+    "case": "msaa-2-rate-0.75",
+    "controls": [
+      {
+        "after": "0",
+        "size": "1024",
+        "samples": "2",
+        "rate": "0.750",
+        "final_bad": "11973",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.003623"
+      },
+      {
+        "after": "1",
+        "size": "1024",
+        "samples": "2",
+        "rate": "0.750",
+        "final_bad": "11973",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.003623"
+      }
+    ],
+    "counters": {
+      "read_mask_draws": 1420,
+      "read_mask_kept": 402,
+      "read_mask_pruned": 1151,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "mapped_render": 403
+    }
+  },
+  {
+    "case": "msaa-4-rate-1",
+    "controls": [
+      {
+        "after": "0",
+        "size": "1024",
+        "samples": "4",
+        "rate": "1.000",
+        "final_bad": "0",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.000000"
+      },
+      {
+        "after": "1",
+        "size": "1024",
+        "samples": "4",
+        "rate": "1.000",
+        "final_bad": "0",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.000000"
+      }
+    ],
+    "counters": {
+      "read_mask_draws": 1420,
+      "read_mask_kept": 402,
+      "read_mask_pruned": 1151,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "mapped_render": 403
+    }
+  },
+  {
+    "case": "msaa-4-rate-0.5",
+    "controls": [
+      {
+        "after": "0",
+        "size": "1024",
+        "samples": "4",
+        "rate": "0.500",
+        "final_bad": "17849",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.005912"
+      },
+      {
+        "after": "1",
+        "size": "1024",
+        "samples": "4",
+        "rate": "0.500",
+        "final_bad": "17849",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.005912"
+      }
+    ],
+    "counters": {
+      "read_mask_draws": 1420,
+      "read_mask_kept": 402,
+      "read_mask_pruned": 1151,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "mapped_render": 403
+    }
+  },
+  {
+    "case": "msaa-4-rate-0.75",
+    "controls": [
+      {
+        "after": "0",
+        "size": "1024",
+        "samples": "4",
+        "rate": "0.750",
+        "final_bad": "12061",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.002944"
+      },
+      {
+        "after": "1",
+        "size": "1024",
+        "samples": "4",
+        "rate": "0.750",
+        "final_bad": "12061",
+        "center_bad": "0",
+        "peak_hdr": "5.125000",
+        "mae": "0.002944"
+      }
+    ],
+    "counters": {
+      "read_mask_draws": 1420,
+      "read_mask_kept": 402,
+      "read_mask_pruned": 1151,
+      "read_mask_mixed": 0,
+      "read_mask_fallback": 0,
+      "mapped_render": 403
+    }
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "capture": "scene-20261109-080909",
+  "roi_rows": 44,
+  "distinct_shapes": [
+    "ROI input=448x504 output=896x1007 color_origin=0,0 depth_origin=0,0 motion_origin=0,0 output_origin=0,0 motion_source=896x1007 copies=1",
+    "ROI input=448x504 output=896x1007 color_origin=448,0 depth_origin=448,0 motion_origin=0,0 output_origin=0,0 motion_source=896x1007 copies=1",
+    "ROI input=598x672 output=896x1007 color_origin=0,0 depth_origin=0,0 motion_origin=0,0 output_origin=0,0 motion_source=896x1007 copies=1",
+    "ROI input=598x672 output=896x1007 color_origin=600,0 depth_origin=600,0 motion_origin=0,0 output_origin=0,0 motion_source=896x1007 copies=1"
+  ],
+  "note": "Diagnostic call trace only; no headset quality or GPU timing claim."
+}

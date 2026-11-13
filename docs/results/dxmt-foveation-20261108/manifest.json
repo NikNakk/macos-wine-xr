@@ -1,0 +1,31 @@
+{
+  "dxmt_base": "4c3a2f5ea661bd258c14cf8ccb6924791cc75a77",
+  "patch_sha256": "537088ba2c033e7b3988e984fa84c94d3704dfd8d6253929d42a35bfededac26",
+  "reused_unchanged_shader_sources": [
+    {
+      "source": "src/dxmt/dxmt_command.metal",
+      "sha256": "8c07739065fd1b6c0b6d4aebc1e70473ec4918c540cb79f789db8ea113cf2ff0"
+    },
+    {
+      "source": "src/airconv/shaders/air_msad.metal",
+      "sha256": "bb1f622f63026a0154164ed385e91e9d759f5bada897e6b0a76ff7710bc5565d"
+    },
+    {
+      "source": "src/airconv/shaders/air_samplepos.metal",
+      "sha256": "f17da691bffe9d2ab60d20e137d3ee71c3cbade714de3f35c0ee827578f320b8"
+    },
+    {
+      "source": "src/airconv/shaders/air_tessellation.metal",
+      "sha256": "aa7b3e264bf91cd885b5981805878cadb3b1f9f587a5131940ae9ee669a0fbca"
+    },
+    {
+      "source": "src/dxmt/dxmt_command_constants.hpp",
+      "sha256": "6145cddd7ea3885c1885f1920768c6843655ca178647924a527f91f717ac57d9"
+    }
+  ],
+  "metal_validation": true,
+  "positive_pixel_checks": 100,
+  "negative_control_expected_exit": 1,
+  "scope": "D3D11 renderer proof only; no live gaze/OpenXR/EXD integration yet",
+  "all_draws_recorded_before_first_signal": true
+}

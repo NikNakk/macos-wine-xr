@@ -1,0 +1,32 @@
+{
+  "dxmt_base": "4c3a2f5ea661bd258c14cf8ccb6924791cc75a77",
+  "monado_revision": "de309d5fcf13bc03e6999008ffdb1f750e617bf7",
+  "monado_source_dirty": false,
+  "metal_api_validation": true,
+  "openxr_lifecycle_cycles": 2,
+  "stereo_eye_pixel_checks": 600,
+  "ordinary_control_pixel_checks": 300,
+  "target_pixel_checks": 100,
+  "context_regression_pixel_checks": 100,
+  "negative_control_expected_exit": 1,
+  "eye_device_present": false,
+  "real_gaze_or_tracking_loss_validated": false,
+  "compositor_output_pixels_validated": false,
+  "compositor_trace": {
+    "composition_rows": 36,
+    "rows_with_two_foveated_views": 9
+  },
+  "sha256": {
+    "patches/dxmt/0001-immediate-context-metal-rate-map.patch": "537088ba2c033e7b3988e984fa84c94d3704dfd8d6253929d42a35bfededac26",
+    "patches/dxmt/0002-target-specific-metal-rate-map.patch": "2ed697426e42f207832514b56485931ec15baefec54400b1cfab23951069f217",
+    "src/in_process/foveation_d3d11.h": "d562ae01001cad81a1b374f581749f1754596e1fb04d905af965b9f1676b1e79",
+    "src/in_process/graphics.cpp": "288804ff4f6b767661860f001f493f1897913436507e6a7d1060559f0700f7a0",
+    "src/in_process/graphics_native.m": "e790ff8f0a60340d235bb02747469e4cff7091f8c4308ad4b4f2b011fe549a25",
+    "src/in_process/graphics_interop_dxmt.cpp": "428efb37573b9aa5efc422b38b2dd8b431f8a395bf1b2c97875c17c7e7175e8b",
+    "src/in_process/openxr.c": "6d96c6eb912bea14c553e6fb1d3ca1f23486a9b7990ce5e015149e7432a95901",
+    "tools/generate_in_process.py": "8c3d4090bc966ccccf404c537a8807ec32b08639185dc026340a53ebc1afd417",
+    "tests/windows/openxr_foveation_probe.cpp": "24ae314b0fefa53628d34bfa660cf38a06600fb7c7d36afe298f727752fababc",
+    "tests/windows/dxmt_foveation_probe.cpp": "ad8f7866211ed41a721fd83336c64ef04ed039918d599c65522c2710d2d756ae",
+    "tests/in_process/foveation_probe_native.m": "fa5b6460d1670bd6af7899e2fbf570ed10e80be123269720d3bfa588c297b33b"
+  }
+}

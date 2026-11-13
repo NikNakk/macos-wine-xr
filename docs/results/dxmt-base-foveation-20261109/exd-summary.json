@@ -1,0 +1,427 @@
+{
+  "truncated": true,
+  "render_encoders": 32898,
+  "upscale_encoders": 1464,
+  "explicit_resolve_attachments": 0,
+  "render_profiles": [
+    {
+      "width": 1200,
+      "height": 672,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 2920
+    },
+    {
+      "width": 75,
+      "height": 63,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 2920
+    },
+    {
+      "width": 38,
+      "height": 32,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 2920
+    },
+    {
+      "width": 19,
+      "height": 16,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 2920
+    },
+    {
+      "width": 300,
+      "height": 252,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 2919
+    },
+    {
+      "width": 150,
+      "height": 126,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 2919
+    },
+    {
+      "width": 600,
+      "height": 504,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 1460
+    },
+    {
+      "width": 10,
+      "height": 16,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 1460
+    },
+    {
+      "width": 19,
+      "height": 32,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 1460
+    },
+    {
+      "width": 38,
+      "height": 63,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 1460
+    },
+    {
+      "width": 75,
+      "height": 126,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 1459
+    },
+    {
+      "width": 150,
+      "height": 252,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 1459
+    },
+    {
+      "width": 1200,
+      "height": 1008,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 1459
+    },
+    {
+      "width": 1200,
+      "height": 672,
+      "colors": 0,
+      "samples": 2,
+      "depth": true,
+      "count": 1424
+    },
+    {
+      "width": 1,
+      "height": 1,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 732
+    },
+    {
+      "width": 32,
+      "height": 32,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 732
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 730
+    },
+    {
+      "width": 1200,
+      "height": 672,
+      "colors": 0,
+      "samples": 1,
+      "depth": true,
+      "count": 730
+    },
+    {
+      "width": 1200,
+      "height": 672,
+      "colors": 1,
+      "samples": 2,
+      "depth": true,
+      "count": 730
+    },
+    {
+      "width": 896,
+      "height": 504,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 8
+    },
+    {
+      "width": 224,
+      "height": 252,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 8
+    },
+    {
+      "width": 112,
+      "height": 126,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 8
+    },
+    {
+      "width": 56,
+      "height": 63,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 8
+    },
+    {
+      "width": 28,
+      "height": 32,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 8
+    },
+    {
+      "width": 14,
+      "height": 16,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 8
+    },
+    {
+      "width": 896,
+      "height": 504,
+      "colors": 1,
+      "samples": 4,
+      "depth": true,
+      "count": 4
+    },
+    {
+      "width": 448,
+      "height": 504,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 4
+    },
+    {
+      "width": 7,
+      "height": 16,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 4
+    },
+    {
+      "width": 14,
+      "height": 32,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 4
+    },
+    {
+      "width": 28,
+      "height": 63,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 4
+    },
+    {
+      "width": 56,
+      "height": 126,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 4
+    },
+    {
+      "width": 112,
+      "height": 252,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 4
+    },
+    {
+      "width": 1792,
+      "height": 1008,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 4
+    },
+    {
+      "width": 896,
+      "height": 504,
+      "colors": 0,
+      "samples": 4,
+      "depth": true,
+      "count": 2
+    },
+    {
+      "width": 896,
+      "height": 504,
+      "colors": 0,
+      "samples": 1,
+      "depth": true,
+      "count": 2
+    },
+    {
+      "width": 512,
+      "height": 512,
+      "colors": 1,
+      "samples": 1,
+      "depth": false,
+      "count": 1
+    }
+  ],
+  "upscale_resources": [
+    {
+      "role": "input",
+      "width": 896,
+      "height": 504,
+      "metal_format": 92,
+      "samples": 1,
+      "layers": 1,
+      "observations": 4,
+      "prior_writer_found": 4,
+      "render_producers": [
+        311,
+        355,
+        416,
+        461
+      ]
+    },
+    {
+      "role": "depth",
+      "width": 896,
+      "height": 504,
+      "metal_format": 260,
+      "samples": 1,
+      "layers": 1,
+      "observations": 4,
+      "prior_writer_found": 4,
+      "render_producers": [
+        296,
+        401
+      ]
+    },
+    {
+      "role": "motion",
+      "width": 896,
+      "height": 504,
+      "metal_format": 105,
+      "samples": 1,
+      "layers": 1,
+      "observations": 4,
+      "prior_writer_found": 4,
+      "render_producers": []
+    },
+    {
+      "role": "output",
+      "width": 896,
+      "height": 1008,
+      "metal_format": 115,
+      "samples": 1,
+      "layers": 1,
+      "observations": 4,
+      "prior_writer_found": 2,
+      "render_producers": []
+    },
+    {
+      "role": "input",
+      "width": 1200,
+      "height": 672,
+      "metal_format": 92,
+      "samples": 1,
+      "layers": 1,
+      "observations": 1460,
+      "prior_writer_found": 1460,
+      "render_producers": [
+        520,
+        567,
+        628,
+        675,
+        736,
+        783,
+        844,
+        891,
+        952,
+        999,
+        1060,
+        1107
+      ]
+    },
+    {
+      "role": "depth",
+      "width": 1200,
+      "height": 672,
+      "metal_format": 260,
+      "samples": 1,
+      "layers": 1,
+      "observations": 1460,
+      "prior_writer_found": 1460,
+      "render_producers": [
+        507,
+        615,
+        723,
+        831,
+        939,
+        1047,
+        1156,
+        1264,
+        1372,
+        1480,
+        1588,
+        1696
+      ]
+    },
+    {
+      "role": "motion",
+      "width": 1200,
+      "height": 672,
+      "metal_format": 105,
+      "samples": 1,
+      "layers": 1,
+      "observations": 1460,
+      "prior_writer_found": 1460,
+      "render_producers": []
+    },
+    {
+      "role": "output",
+      "width": 1200,
+      "height": 1008,
+      "metal_format": 115,
+      "samples": 1,
+      "layers": 1,
+      "observations": 1460,
+      "prior_writer_found": 1456,
+      "render_producers": []
+    }
+  ],
+  "limitations": [
+    "Diagnostic only; no GPU pass durations or eye labels.",
+    "Single queue capture assumed; pointer/allocation reuse limits long-term identity.",
+    "Encoder merges and read-only depth tracking limit producer attribution.",
+    "Multiple attachments suggest a G-buffer but do not prove deferred rendering.",
+    "A dimension match does not establish foveation safety."
+  ]
+}

@@ -1,0 +1,1990 @@
+[
+  {
+    "run": "B0a",
+    "mode": "baseline",
+    "path": "build-in-process/exd-warp/headset-20261111-200639-msaa4-s143-resourceread-B0a",
+    "loaded_frames": 2253,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 14.963292,
+        "p10": 15.959,
+        "median": 16.194417,
+        "p90": 16.4825,
+        "max": 49.004459
+      },
+      "command_buffers": {
+        "min": 6,
+        "p10": 6,
+        "median": 7,
+        "p90": 7,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 403,
+        "median": 409,
+        "p90": 415,
+        "max": 1266
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1,
+        "p90": 1,
+        "max": 7
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.28400000000000003,
+        "p10": 0.411,
+        "median": 0.4799999999999999,
+        "p90": 0.5740000000000001,
+        "max": 38.633
+      },
+      "encode_ms": {
+        "min": 1.151,
+        "p10": 1.673,
+        "median": 1.844,
+        "p90": 1.991,
+        "max": 13.841000000000001
+      },
+      "read_mask_draws": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 15.128375,
+      "p10": 16.373208,
+      "median": 16.6727085,
+      "p90": 17.073833,
+      "max": 1328.430333
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "N0a",
+    "mode": "nomap-off",
+    "path": "build-in-process/exd-warp/headset-20261111-200740-msaa4-s143-resourceread-N0a",
+    "loaded_frames": 2149,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 16.90925,
+        "p10": 17.672417,
+        "median": 17.976833,
+        "p90": 18.577959,
+        "max": 71.564584
+      },
+      "command_buffers": {
+        "min": 6,
+        "p10": 6,
+        "median": 7,
+        "p90": 7,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 403,
+        "median": 409,
+        "p90": 415,
+        "max": 1266
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1,
+        "p90": 3,
+        "max": 8
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.28700000000000003,
+        "p10": 0.402,
+        "median": 0.44300000000000006,
+        "p90": 0.516,
+        "max": 38.019
+      },
+      "encode_ms": {
+        "min": 1.1179999999999999,
+        "p10": 1.696,
+        "median": 1.8350000000000002,
+        "p90": 2.018,
+        "max": 11.869000000000002
+      },
+      "read_mask_draws": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 16.773333,
+      "p10": 17.9205,
+      "median": 18.254563,
+      "p90": 19.046125,
+      "max": 1225.343042
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "N1a",
+    "mode": "nomap-on",
+    "path": "build-in-process/exd-warp/headset-20261111-200842-msaa4-s143-resourceread-N1a",
+    "loaded_frames": 2264,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 15.131249,
+        "p10": 16.173292,
+        "median": 16.574020500000003,
+        "p90": 16.891,
+        "max": 58.651791
+      },
+      "command_buffers": {
+        "min": 5,
+        "p10": 6,
+        "median": 7.0,
+        "p90": 8,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63.0,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59.0,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 404,
+        "median": 411.0,
+        "p90": 434,
+        "max": 1244
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1.0,
+        "p90": 1,
+        "max": 8
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736.0,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424.0,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.31200000000000006,
+        "p10": 0.40499999999999997,
+        "median": 0.445,
+        "p90": 0.5279999999999999,
+        "max": 1148.696
+      },
+      "encode_ms": {
+        "min": 1.112,
+        "p10": 1.5460000000000003,
+        "median": 1.661,
+        "p90": 1.808,
+        "max": 9.792000000000002
+      },
+      "read_mask_draws": {
+        "min": 117,
+        "p10": 117,
+        "median": 118.0,
+        "p90": 119,
+        "max": 494
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 828,
+        "p10": 828,
+        "median": 828.0,
+        "p90": 830,
+        "max": 2022
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 15.082541,
+      "p10": 16.531791,
+      "median": 16.873416,
+      "p90": 17.347792,
+      "max": 2189.009791
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "N1b",
+    "mode": "nomap-on",
+    "path": "build-in-process/exd-warp/headset-20261111-200943-msaa4-s143-resourceread-N1b",
+    "loaded_frames": 2275,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 15.178749,
+        "p10": 16.307208,
+        "median": 16.714625,
+        "p90": 17.063416,
+        "max": 51.393126
+      },
+      "command_buffers": {
+        "min": 5,
+        "p10": 6,
+        "median": 7,
+        "p90": 8,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 404,
+        "median": 411,
+        "p90": 434,
+        "max": 1266
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1,
+        "p90": 1,
+        "max": 8
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.31,
+        "p10": 0.40800000000000003,
+        "median": 0.446,
+        "p90": 0.521,
+        "max": 45.973
+      },
+      "encode_ms": {
+        "min": 1.083,
+        "p10": 1.556,
+        "median": 1.678,
+        "p90": 1.813,
+        "max": 12.918999999999999
+      },
+      "read_mask_draws": {
+        "min": 117,
+        "p10": 117,
+        "median": 118,
+        "p90": 119,
+        "max": 494
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 828,
+        "p10": 828,
+        "median": 828,
+        "p90": 830,
+        "max": 2022
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 15.40875,
+      "p10": 16.628458,
+      "median": 17.0093125,
+      "p90": 17.695667,
+      "max": 1125.046208
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "N0b",
+    "mode": "nomap-off",
+    "path": "build-in-process/exd-warp/headset-20261111-201044-msaa4-s143-resourceread-N0b",
+    "loaded_frames": 2117,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 17.358291,
+        "p10": 17.972958,
+        "median": 18.44,
+        "p90": 18.992375,
+        "max": 58.125708
+      },
+      "command_buffers": {
+        "min": 6,
+        "p10": 6,
+        "median": 7,
+        "p90": 7,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 403,
+        "median": 409,
+        "p90": 415,
+        "max": 1267
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1,
+        "p90": 2,
+        "max": 7
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.28600000000000003,
+        "p10": 0.415,
+        "median": 0.46799999999999997,
+        "p90": 0.545,
+        "max": 3.126
+      },
+      "encode_ms": {
+        "min": 1.153,
+        "p10": 1.7670000000000001,
+        "median": 1.9289999999999998,
+        "p90": 2.126,
+        "max": 12.722
+      },
+      "read_mask_draws": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 16.592167,
+      "p10": 18.219208,
+      "median": 18.7006875,
+      "p90": 19.4145,
+      "max": 1207.569208
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "W0a",
+    "mode": "warped-off",
+    "path": "build-in-process/exd-warp/headset-20261111-201146-msaa4-s143-resourceread-W0a",
+    "loaded_frames": 2388,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 9.87275,
+        "p10": 13.256417,
+        "median": 14.2165205,
+        "p90": 14.506417,
+        "max": 38.620333
+      },
+      "command_buffers": {
+        "min": 5,
+        "p10": 6,
+        "median": 6.0,
+        "p90": 7,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63.0,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 58,
+        "median": 59.0,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 18,
+        "p10": 18,
+        "median": 19.0,
+        "p90": 19,
+        "max": 42
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 403,
+        "median": 409.0,
+        "p90": 415,
+        "max": 1266
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1.0,
+        "p90": 1,
+        "max": 7
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 889727536,
+        "median": 1066674736.0,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1336306224,
+        "median": 1513253424.0,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.30900000000000005,
+        "p10": 0.41000000000000003,
+        "median": 0.45000000000000007,
+        "p90": 0.505,
+        "max": 3.274
+      },
+      "encode_ms": {
+        "min": 1.279,
+        "p10": 1.695,
+        "median": 1.8159999999999998,
+        "p90": 1.903,
+        "max": 14.171999999999999
+      },
+      "read_mask_draws": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 10.09325,
+      "p10": 16.33,
+      "median": 16.662167,
+      "p90": 17.007625,
+      "max": 1125.794125
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "W1a",
+    "mode": "warped-on",
+    "path": "build-in-process/exd-warp/headset-20261111-201247-msaa4-s143-resourceread-W1a",
+    "loaded_frames": 2334,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 8.525709,
+        "p10": 13.468999,
+        "median": 14.093834,
+        "p90": 14.347583,
+        "max": 44.841459
+      },
+      "command_buffers": {
+        "min": 5,
+        "p10": 5,
+        "median": 6.0,
+        "p90": 6,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63.0,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 58,
+        "median": 59.0,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 18,
+        "p10": 18,
+        "median": 19.0,
+        "p90": 19,
+        "max": 42
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 403,
+        "median": 409.0,
+        "p90": 415,
+        "max": 1267
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1.0,
+        "p90": 1,
+        "max": 7
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 889727536,
+        "median": 1066674736.0,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1336306224,
+        "median": 1513253424.0,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.325,
+        "p10": 0.418,
+        "median": 0.478,
+        "p90": 0.539,
+        "max": 1003.4220000000001
+      },
+      "encode_ms": {
+        "min": 1.242,
+        "p10": 1.5810000000000002,
+        "median": 1.6760000000000002,
+        "p90": 1.7750000000000001,
+        "max": 13.259000000000002
+      },
+      "read_mask_draws": {
+        "min": 117,
+        "p10": 117,
+        "median": 118.0,
+        "p90": 119,
+        "max": 494
+      },
+      "read_mask_kept": {
+        "min": 196,
+        "p10": 196,
+        "median": 196.0,
+        "p90": 196,
+        "max": 516
+      },
+      "read_mask_pruned": {
+        "min": 632,
+        "p10": 632,
+        "median": 632.0,
+        "p90": 634,
+        "max": 1506
+      },
+      "read_mask_mixed": {
+        "min": 60,
+        "p10": 60,
+        "median": 60.0,
+        "p90": 60,
+        "max": 223
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 8.73875,
+      "p10": 16.334041,
+      "median": 16.674958,
+      "p90": 16.972792,
+      "max": 2072.103542
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "W1b",
+    "mode": "warped-on",
+    "path": "build-in-process/exd-warp/headset-20261111-201349-msaa4-s143-resourceread-W1b",
+    "loaded_frames": 2393,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 8.524708,
+        "p10": 12.498751,
+        "median": 14.098583,
+        "p90": 14.373375,
+        "max": 32.535457
+      },
+      "command_buffers": {
+        "min": 5,
+        "p10": 5,
+        "median": 6,
+        "p90": 6,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63,
+        "p90": 63,
+        "max": 223
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 18,
+        "p10": 18,
+        "median": 19,
+        "p90": 19,
+        "max": 42
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 400,
+        "median": 409,
+        "p90": 415,
+        "max": 1267
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1,
+        "p90": 1,
+        "max": 7
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736,
+        "p90": 1100229168,
+        "max": 2182233744
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424,
+        "p90": 1546807856,
+        "max": 3421290128
+      },
+      "prepare_ms": {
+        "min": 0.36000000000000004,
+        "p10": 0.41800000000000004,
+        "median": 0.47,
+        "p90": 0.539,
+        "max": 15.276999999999997
+      },
+      "encode_ms": {
+        "min": 1.2759999999999998,
+        "p10": 1.5560000000000003,
+        "median": 1.665,
+        "p90": 1.758,
+        "max": 15.272
+      },
+      "read_mask_draws": {
+        "min": 117,
+        "p10": 117,
+        "median": 118,
+        "p90": 119,
+        "max": 487
+      },
+      "read_mask_kept": {
+        "min": 196,
+        "p10": 196,
+        "median": 196,
+        "p90": 196,
+        "max": 516
+      },
+      "read_mask_pruned": {
+        "min": 632,
+        "p10": 632,
+        "median": 632,
+        "p90": 634,
+        "max": 1504
+      },
+      "read_mask_mixed": {
+        "min": 60,
+        "p10": 60,
+        "median": 60,
+        "p90": 60,
+        "max": 223
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 8.90425,
+      "p10": 16.339708,
+      "median": 16.664958499999997,
+      "p90": 17.003584,
+      "max": 1104.902375
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "W0b",
+    "mode": "warped-off",
+    "path": "build-in-process/exd-warp/headset-20261111-201450-msaa4-s143-resourceread-W0b",
+    "loaded_frames": 2393,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 9.640458,
+        "p10": 13.423667,
+        "median": 14.19725,
+        "p90": 14.424208,
+        "max": 37.210792
+      },
+      "command_buffers": {
+        "min": 5,
+        "p10": 6,
+        "median": 7,
+        "p90": 7,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 58,
+        "median": 59,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 18,
+        "p10": 18,
+        "median": 19,
+        "p90": 19,
+        "max": 42
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 403,
+        "median": 409,
+        "p90": 415,
+        "max": 1267
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1,
+        "p90": 2,
+        "max": 8
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 889727536,
+        "median": 1066674736,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1336306224,
+        "median": 1513253424,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.29400000000000004,
+        "p10": 0.40700000000000003,
+        "median": 0.44600000000000006,
+        "p90": 0.509,
+        "max": 3.1969999999999996
+      },
+      "encode_ms": {
+        "min": 1.275,
+        "p10": 1.7009999999999998,
+        "median": 1.816,
+        "p90": 1.9070000000000003,
+        "max": 13.299000000000001
+      },
+      "read_mask_draws": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 9.843042,
+      "p10": 16.333875,
+      "median": 16.6647705,
+      "p90": 16.996083,
+      "max": 1192.124959
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "I0a",
+    "mode": "identity-off",
+    "path": "build-in-process/exd-warp/headset-20261111-201551-msaa4-s143-resourceread-I0a",
+    "loaded_frames": 2009,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 18.662167,
+        "p10": 19.049459,
+        "median": 19.593083,
+        "p90": 20.22675,
+        "max": 61.045417
+      },
+      "command_buffers": {
+        "min": 6,
+        "p10": 6,
+        "median": 7,
+        "p90": 7,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 18,
+        "p10": 18,
+        "median": 19,
+        "p90": 19,
+        "max": 42
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 403,
+        "median": 409,
+        "p90": 415,
+        "max": 1266
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1,
+        "p90": 2,
+        "max": 8
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.28900000000000003,
+        "p10": 0.42700000000000005,
+        "median": 0.478,
+        "p90": 0.5549999999999999,
+        "max": 3.2550000000000003
+      },
+      "encode_ms": {
+        "min": 1.1669999999999998,
+        "p10": 1.818,
+        "median": 1.9949999999999999,
+        "p90": 2.2279999999999998,
+        "max": 14.504000000000001
+      },
+      "read_mask_draws": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 17.750417,
+      "p10": 19.283958,
+      "median": 19.843438,
+      "p90": 20.476791,
+      "max": 1133.754125
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "I1a",
+    "mode": "identity-on",
+    "path": "build-in-process/exd-warp/headset-20261111-201657-msaa4-s143-resourceread-I1a",
+    "loaded_frames": 2159,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 16.621958,
+        "p10": 17.503667,
+        "median": 17.933459,
+        "p90": 18.491708,
+        "max": 61.334709
+      },
+      "command_buffers": {
+        "min": 5,
+        "p10": 6,
+        "median": 7,
+        "p90": 8,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 18,
+        "p10": 18,
+        "median": 19,
+        "p90": 19,
+        "max": 42
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 404,
+        "median": 411,
+        "p90": 434,
+        "max": 1266
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1,
+        "p90": 1,
+        "max": 8
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.31400000000000006,
+        "p10": 0.42400000000000004,
+        "median": 0.461,
+        "p90": 0.534,
+        "max": 14.067000000000002
+      },
+      "encode_ms": {
+        "min": 1.149,
+        "p10": 1.63,
+        "median": 1.749,
+        "p90": 1.9160000000000001,
+        "max": 14.879999999999997
+      },
+      "read_mask_draws": {
+        "min": 117,
+        "p10": 118,
+        "median": 118,
+        "p90": 119,
+        "max": 494
+      },
+      "read_mask_kept": {
+        "min": 196,
+        "p10": 196,
+        "median": 196,
+        "p90": 196,
+        "max": 516
+      },
+      "read_mask_pruned": {
+        "min": 632,
+        "p10": 632,
+        "median": 632,
+        "p90": 634,
+        "max": 1506
+      },
+      "read_mask_mixed": {
+        "min": 60,
+        "p10": 60,
+        "median": 60,
+        "p90": 60,
+        "max": 223
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 16.049875,
+      "p10": 17.757708,
+      "median": 18.2106455,
+      "p90": 18.839792,
+      "max": 1137.505125
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "I1b",
+    "mode": "identity-on",
+    "path": "build-in-process/exd-warp/headset-20261111-201759-msaa4-s143-resourceread-I1b",
+    "loaded_frames": 2142,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 17.075959,
+        "p10": 17.712833,
+        "median": 18.216416000000002,
+        "p90": 18.781375,
+        "max": 57.488958
+      },
+      "command_buffers": {
+        "min": 5,
+        "p10": 6,
+        "median": 7.0,
+        "p90": 8,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 63,
+        "median": 63.0,
+        "p90": 63,
+        "max": 224
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59.0,
+        "p90": 60,
+        "max": 164
+      },
+      "mapped_render": {
+        "min": 18,
+        "p10": 18,
+        "median": 19.0,
+        "p90": 19,
+        "max": 42
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 404,
+        "median": 412.0,
+        "p90": 434,
+        "max": 1262
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1.0,
+        "p90": 1,
+        "max": 6
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736.0,
+        "p90": 1100229168,
+        "max": 2148810384
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424.0,
+        "p90": 1546807856,
+        "max": 3387342480
+      },
+      "prepare_ms": {
+        "min": 0.32800000000000007,
+        "p10": 0.42600000000000005,
+        "median": 0.4600000000000001,
+        "p90": 0.524,
+        "max": 14.177000000000001
+      },
+      "encode_ms": {
+        "min": 1.21,
+        "p10": 1.634,
+        "median": 1.752,
+        "p90": 1.917,
+        "max": 11.494000000000002
+      },
+      "read_mask_draws": {
+        "min": 117,
+        "p10": 118,
+        "median": 118.0,
+        "p90": 119,
+        "max": 493
+      },
+      "read_mask_kept": {
+        "min": 196,
+        "p10": 196,
+        "median": 196.0,
+        "p90": 196,
+        "max": 516
+      },
+      "read_mask_pruned": {
+        "min": 632,
+        "p10": 632,
+        "median": 632.0,
+        "p90": 634,
+        "max": 1506
+      },
+      "read_mask_mixed": {
+        "min": 60,
+        "p10": 60,
+        "median": 60.0,
+        "p90": 60,
+        "max": 223
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 16.239875,
+      "p10": 17.949834,
+      "median": 18.472875,
+      "p90": 19.070792,
+      "max": 1146.088333
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "I0b",
+    "mode": "identity-off",
+    "path": "build-in-process/exd-warp/headset-20261111-201905-msaa4-s143-resourceread-I0b",
+    "loaded_frames": 1952,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 18.707292,
+        "p10": 19.445624,
+        "median": 20.143895999999998,
+        "p90": 20.947958,
+        "max": 55.994541
+      },
+      "command_buffers": {
+        "min": 6,
+        "p10": 6,
+        "median": 7.0,
+        "p90": 7,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63.0,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59.0,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 18,
+        "p10": 18,
+        "median": 19.0,
+        "p90": 19,
+        "max": 42
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 403,
+        "median": 409.0,
+        "p90": 415,
+        "max": 1266
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1.0,
+        "p90": 3,
+        "max": 8
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736.0,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424.0,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.30500000000000005,
+        "p10": 0.435,
+        "median": 0.48499999999999993,
+        "p90": 0.548,
+        "max": 3.0809999999999995
+      },
+      "encode_ms": {
+        "min": 1.175,
+        "p10": 1.812,
+        "median": 2.001,
+        "p90": 2.193,
+        "max": 12.989
+      },
+      "read_mask_draws": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 17.757083,
+      "p10": 19.675042,
+      "median": 20.392125,
+      "p90": 21.206916,
+      "max": 1105.317208
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  },
+  {
+    "run": "B0b",
+    "mode": "baseline",
+    "path": "build-in-process/exd-warp/headset-20261111-202006-msaa4-s143-resourceread-B0b",
+    "loaded_frames": 2318,
+    "warnings": 0,
+    "statistics": {
+      "cb_interval_union_ms": {
+        "min": 15.393542,
+        "p10": 16.311209,
+        "median": 16.7700825,
+        "p90": 17.221125,
+        "max": 49.567708
+      },
+      "command_buffers": {
+        "min": 6,
+        "p10": 6,
+        "median": 7.0,
+        "p90": 7,
+        "max": 13
+      },
+      "render_before": {
+        "min": 62,
+        "p10": 62,
+        "median": 63.0,
+        "p90": 63,
+        "max": 225
+      },
+      "render_after": {
+        "min": 58,
+        "p10": 59,
+        "median": 59.0,
+        "p90": 60,
+        "max": 165
+      },
+      "mapped_render": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "fence_waits": {
+        "min": 400,
+        "p10": 403,
+        "median": 409.0,
+        "p90": 415,
+        "max": 1266
+      },
+      "waits": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "init_wait": {
+        "min": 1,
+        "p10": 1,
+        "median": 1.0,
+        "p90": 3,
+        "max": 8
+      },
+      "load_proxy": {
+        "min": 889727536,
+        "p10": 923281968,
+        "median": 1066674736.0,
+        "p90": 1100229168,
+        "max": 2182364816
+      },
+      "store_proxy": {
+        "min": 1336306224,
+        "p10": 1369860656,
+        "median": 1513253424.0,
+        "p90": 1546807856,
+        "max": 3420896912
+      },
+      "prepare_ms": {
+        "min": 0.29300000000000004,
+        "p10": 0.4020000000000001,
+        "median": 0.448,
+        "p90": 0.541,
+        "max": 6.2459999999999996
+      },
+      "encode_ms": {
+        "min": 1.146,
+        "p10": 1.681,
+        "median": 1.8239999999999998,
+        "p90": 1.983,
+        "max": 11.769
+      },
+      "read_mask_draws": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_kept": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_pruned": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_mixed": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      },
+      "read_mask_fallback": {
+        "min": 0,
+        "p10": 0,
+        "median": 0.0,
+        "p90": 0,
+        "max": 0
+      }
+    },
+    "frame_period_ms": {
+      "min": 15.711458,
+      "p10": 16.635125,
+      "median": 17.13125,
+      "p90": 17.753167,
+      "max": 1141.888792
+    },
+    "thermal_states": [
+      0
+    ],
+    "low_power_states": [
+      false
+    ],
+    "settings_restored": true
+  }
+]

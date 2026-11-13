@@ -1,0 +1,12 @@
+frame 1200: 162 scene-family shader bindings (0 never read by their shader), 26 distinct shaders
+shaders using only translated or coordinate-free reads: 26 / 26; explicit derivatives: 0; reading SV_Position: 20
+  sample_l           scene-sized    90  translated
+  ld                 scene-sized    58  translated
+  resinfo            scene-sized    19  no coordinates
+  sample             scene-sized     5  translated
+  ld2dms             scene-sized     4  translated
+  sample_l           compute         2  translated
+  sample_l           other-sized     2  translated
+  sample             other-sized     1  translated
+shaders with untranslated reads:
+shaders using Sample with texel offsets: 0

@@ -1,0 +1,308 @@
+{
+  "primary_queue": "000000000c1040a0",
+  "parsed_command_buffers": 19901,
+  "duplicate_rows": 0,
+  "selected_frames": 700,
+  "omitted_no_present": 0,
+  "invalid_gpu_intervals": 0,
+  "frame_range": [
+    900,
+    1599
+  ],
+  "statistics": {
+    "command_buffers": {
+      "min": 5,
+      "p10": 6,
+      "median": 6.5,
+      "p90": 7,
+      "max": 7
+    },
+    "cb_interval_union_ms": {
+      "min": 8.870334,
+      "p10": 12.064958,
+      "median": 14.0131665,
+      "p90": 14.472625,
+      "max": 15.068625
+    },
+    "cb_interval_sum_ms": {
+      "min": 11.989793,
+      "p10": 22.954252,
+      "median": 27.552584,
+      "p90": 35.955791,
+      "max": 37.586874
+    },
+    "envelope_ms": {
+      "min": 11.168708,
+      "p10": 16.054416,
+      "median": 16.444938,
+      "p90": 16.731083,
+      "max": 43.774541
+    },
+    "inter_cb_gap_ms": {
+      "min": 0.0,
+      "p10": 1.90775,
+      "median": 2.3836455,
+      "p90": 4.329583,
+      "max": 30.29175
+    },
+    "interval_overlap_ms": {
+      "min": 2.680959,
+      "p10": 10.580084,
+      "median": 13.4142295,
+      "p90": 21.664168,
+      "max": 22.928
+    },
+    "init_wait": {
+      "min": 1,
+      "p10": 1,
+      "median": 1.0,
+      "p90": 1,
+      "max": 3
+    },
+    "render_before": {
+      "min": 62,
+      "p10": 63,
+      "median": 65.0,
+      "p90": 66,
+      "max": 68
+    },
+    "render_after": {
+      "min": 58,
+      "p10": 59,
+      "median": 61.0,
+      "p90": 62,
+      "max": 64
+    },
+    "clear_before": {
+      "min": 12,
+      "p10": 12,
+      "median": 12.0,
+      "p90": 12,
+      "max": 13
+    },
+    "clear_after": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "resolve_before": {
+      "min": 1,
+      "p10": 1,
+      "median": 1.0,
+      "p90": 1,
+      "max": 1
+    },
+    "resolve_after": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "compute": {
+      "min": 6,
+      "p10": 6,
+      "median": 8.0,
+      "p90": 8,
+      "max": 8
+    },
+    "blit": {
+      "min": 1,
+      "p10": 1,
+      "median": 1.5,
+      "p90": 2,
+      "max": 2
+    },
+    "temporal": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "present": {
+      "min": 1,
+      "p10": 1,
+      "median": 1.0,
+      "p90": 1,
+      "max": 1
+    },
+    "mapped_render": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "signals": {
+      "min": 1,
+      "p10": 1,
+      "median": 1.0,
+      "p90": 1,
+      "max": 1
+    },
+    "waits": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "timestamps": {
+      "min": 1,
+      "p10": 1,
+      "median": 1.0,
+      "p90": 1,
+      "max": 1
+    },
+    "fence_waits": {
+      "min": 403,
+      "p10": 404,
+      "median": 424.0,
+      "p90": 437,
+      "max": 451
+    },
+    "load_proxy": {
+      "min": 304625488,
+      "p10": 311850832,
+      "median": 350304080.0,
+      "p90": 388757328,
+      "max": 388888400
+    },
+    "store_proxy": {
+      "min": 437012304,
+      "p10": 444237648,
+      "median": 482953040.0,
+      "p90": 521144144,
+      "max": 521799504
+    },
+    "resolve_proxy": {
+      "min": 7225344,
+      "p10": 7225344,
+      "median": 7225344.0,
+      "p90": 7225344,
+      "max": 7225344
+    },
+    "shaderwrite_proxy": {
+      "min": 3612688,
+      "p10": 3612688,
+      "median": 10838032.0,
+      "p90": 10838032,
+      "max": 10838032
+    },
+    "pfv_proxy": {
+      "min": 217284608,
+      "p10": 217284608,
+      "median": 231997440.0,
+      "p90": 246185984,
+      "max": 246841344
+    },
+    "unknown_formats": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "reject_map": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "reject_layout": {
+      "min": 34,
+      "p10": 36,
+      "median": 38.0,
+      "p90": 38,
+      "max": 44
+    },
+    "reject_argbuf": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 1
+    },
+    "reject_attachment": {
+      "min": 63,
+      "p10": 63,
+      "median": 63.0,
+      "p90": 64,
+      "max": 66
+    },
+    "reject_action": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "reject_dependency": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "blit_ops": {
+      "min": 2,
+      "p10": 2,
+      "median": 3.0,
+      "p90": 4,
+      "max": 4
+    },
+    "texture_copies": {
+      "min": 0,
+      "p10": 0,
+      "median": 0.0,
+      "p90": 0,
+      "max": 0
+    },
+    "buffer_copies": {
+      "min": 1,
+      "p10": 1,
+      "median": 1.5,
+      "p90": 2,
+      "max": 2
+    },
+    "prepare_ms": {
+      "min": 0.29000000000000004,
+      "p10": 0.38000000000000006,
+      "median": 0.41700000000000004,
+      "p90": 0.4600000000000001,
+      "max": 4.449000000000001
+    },
+    "encode_ms": {
+      "min": 1.205,
+      "p10": 1.6400000000000001,
+      "median": 1.7469999999999999,
+      "p90": 1.8419999999999999,
+      "max": 1.98
+    }
+  },
+  "frame_start_period_ms": {
+    "min": 11.372458,
+    "p10": 16.2865,
+    "median": 16.677209,
+    "p90": 17.021334,
+    "max": 44.003583
+  },
+  "attachment_profiles": [],
+  "large_allocations": [],
+  "render_label_counts": [],
+  "limitations": [
+    "GPU intervals cover DXMT command buffers, including internal waits; union is not shader-active time.",
+    "Envelope includes inter-buffer gaps; summing overlapping intervals overcounts elapsed time.",
+    "Attachment byte proxies are nominal uncompressed work, NOT measured DRAM bytes/bandwidth.",
+    "Depth32Float_Stencil8 proxy uses nominal 8-byte packed payload; actual Metal storage may differ.",
+    "Presenter/scaler internals, resource-initializer queue and service compositor are outside attachment proxies.",
+    "Render/clear/resolve counts are DXMT nodes, not complete native Metal encoder counts.",
+    "Detail rows have a 20,000-row budget; allocation pointer reuse and multiple queues limit joins.",
+    "Merge rejection counts are optimizer attempts, not counts of removable passes.",
+    "Recorded frame IDs follow the existing DXMT Present boundary; simulated headset caps presentation."
+  ]
+}
