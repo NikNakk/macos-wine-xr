@@ -42,10 +42,11 @@ if [[ ${_mwxr_settings_app} == (552440|275850) && ${MWXR_VULKAN:-} != off ]]; th
   # KosmicKrisp claims them (drawn one pixel wide).
   [[ ${_mwxr_settings_app} == 275850 ]] && export KK_FAKE_WIDE_LINES=${KK_FAKE_WIDE_LINES:-1}
   # NMS renders single-sampled, at a render scale (about 59%), and reads and writes its
-  # eye targets from compute: with MWXR_FOVEATION those are foveated too.
+  # eye targets from compute: with MWXR_FOVEATION those are foveated too, and compute
+  # passes that only write them run one invocation per foveated texel.
   if [[ ${_mwxr_settings_app} == 275850 ]]; then
     export KK_IMPLICIT_SINGLE=${KK_IMPLICIT_SINGLE:-1} KK_IMPLICIT_SCALED=${KK_IMPLICIT_SCALED:-1}
-    export KK_IMPLICIT_STORAGE=${KK_IMPLICIT_STORAGE:-1}
+    export KK_IMPLICIT_STORAGE=${KK_IMPLICIT_STORAGE:-1} KK_IMPLICIT_COMPACT=${KK_IMPLICIT_COMPACT:-1}
   fi
   # Talos renders single-sampled (and some effects at half size): with MWXR_FOVEATION,
   # KosmicKrisp foveates those targets too (docs/kk-implicit-foveation.md).

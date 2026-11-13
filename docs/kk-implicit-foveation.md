@@ -329,7 +329,7 @@ foveation uses `VK_KHR_fragment_shading_rate`, which KosmicKrisp lacks.
   `imageLoad`, `imageStore` and atomics on a foveated image go through its rate map,
   screen to physical, behind the same run-time `valid` flag as sampled reads; several
   screen texels may store to one physical texel. Compute work still runs per screen
-  texel, so compute passes do not get cheaper.
+  texel (but see "Compute at the foveated size" below).
 - **`KK_IMPLICIT_SCALED=1`**: targets that are the eye layout scaled down uniformly
   (40–100%, the two scales within 0.8%, not power-of-two sizes) are candidates too,
   each with its own map of the profile. NMS renders its scene at 3296×1696 (about 59%
@@ -353,9 +353,80 @@ the outer rate. Compute and transfers (about 12–14 ms) are unchanged.
 A later Talos recheck ran while the Mac was busier (unfoveated 27 ms, not 21.3): the
 foveated run gave 18.6 ms there, the same proportion, and the same image.
 
+### Compute at the foveated size (2026-11-13)
+
+`KK_IMPLICIT_COMPACT=1` (with `KK_IMPLICIT_STORAGE`; patch
+`0005-compact-compute-dispatch.patch`) runs some compute dispatches over a foveated
+target at its physical size, one invocation per physical texel, rather than one per
+screen texel.
+
+- **Which shaders.** At compile time a compute shader qualifies if its invocations are
+  independent and it writes only 2D storage images, at most four:
+  - none of these: shared memory, workgroup barriers, subgroup or quad operations,
+    derivatives or implicit-LOD sampling;
+  - no buffer stores or buffer atomics.
+  
+  Image atomics count as writes that read. A qualifying shader gets a prologue: when
+  the root table's `cs.compact_params` is set, each invocation takes its physical
+  texel's centre through the map's physical-to-screen mapping and replaces the
+  workgroup, local, global and index IDs with the ones that screen texel's invocation
+  would have had. Invocations past the physical size repeat the last texel. Its loads
+  and stores at that screen texel translate back to the same physical texel.
+- **Which dispatches.** A direct dispatch with no base group or conditional rendering
+  is compacted only if all of these hold:
+  - every image it writes is foveated now: the descriptor's rate parameters belong to
+    an image whose current map is the latest one;
+  - all written images share one map;
+  - the grid covers exactly the map's screen size;
+  - the shader reads none of the images it writes.
+  
+  The group counts then shrink to the physical size, and the shader sees the
+  application's counts.
+- **Compute-only targets.** NMS writes several eye-scaled images only from compute, so
+  no render pass ever gave them a map. A qualifying dispatch that rewrites such an image
+  whole without reading it now gives it the profile's map, as a pass that does not load
+  its target would. Every reader already translates through the image's rate
+  parameters.
+- **Not compacted: shaders that read what they write.** NMS's largest compute pass
+  (about 13–15 ms per dispatch at 3296×1696) writes four eye images and also loads
+  and atomically updates them. It ran 15.2 → 5.7 ms compacted, but in the same session
+  the image showed ghosting (ship fin and hands semi-transparent) and banded clouds and
+  aurora. Such shaders are refused (`KK_IMPLICIT_COMPACT_READS=1` compacts them anyway,
+  for diagnosis).
+
+NMS at 2800×2856 per eye, same session and scene, before and after switching mode
+(per dispatch):
+
+| Shader | Full size | Compacted (2008×1000 of 3296×1696) |
+|---|---|---|
+| A | 1.33 ms | 0.71 ms |
+| B | 0.56 ms | 0.44 ms |
+| C | 0.46 ms | 0.31 ms |
+
+That is about 0.9 ms per frame, too small to show through frame-to-frame variation of
+40–55 ms in total. The images in daylight and at night match full-size dispatch: clouds,
+ship, hands and HUD. The remaining big compute passes are the read-write one above and
+an upscale that writes the 5600×2856 target from a 3296×1696 grid (2.4–3.4 ms), which
+compaction does not fit.
+
+Diagnostics:
+- `KK_PASS_TIMING_DISPATCH=1` (with `KK_PASS_TIMING`) stamps every dispatch, labelled by
+  shader, grid and compaction outcome (`COMPACT`, `eligible`, or the compile-time reason
+  it is not).
+- `KK_IMPLICIT_COMPACT_LOG=1` logs each shader's dispatch decision once.
+- `KK_IMPLICIT_COMPACT_FILE=path` switches modes while the application runs: `off`, `map`
+  (map compute-only targets, dispatch at full size) or `compact`. The A/B runs above
+  used it.
+- `MWXR_CAPTURE_MAX` raises the bridge's capture count from 6.
+
+`scripts/steam-play-game-settings.zsh` turns compaction on for NMS.
+
 ## Next
 
 1. Talos and NMS in the headset with real gaze.
-2. Avoid the unwarp blits where the last pass before a copy can render ordinary.
-3. Decide whether the push-descriptor and occlusion-query fixes go into the
+2. NMS's read-write compute pass: find out what it accumulates (probably temporal, from
+   the ghosting) before trying to compact it, for example with a per-frame jitter of
+   the representative screen texel.
+3. Avoid the unwarp blits where the last pass before a copy can render ordinary.
+4. Decide whether the push-descriptor and occlusion-query fixes go into the
    `kk-zink` branch on their own.

@@ -159,7 +159,7 @@ int32_t mw_foveation_call(void *args)
     }
     return 0;
 }
-// MWXR_CAPTURE_DIR=dir MWXR_CAPTURE_EVERY=n: every n-th release of a Vulkan session's
+// MWXR_CAPTURE_DIR=dir MWXR_CAPTURE_EVERY=n [MWXR_CAPTURE_MAX=m]: every n-th release of a Vulkan session's
 // image, up to six times, write each array layer as dir/eye-K-L.png (debugging only;
 // it waits for the GPU).
 #pragma push_macro("interface")
@@ -169,12 +169,14 @@ int32_t mw_foveation_call(void *args)
 #pragma pop_macro("interface")
 static void capture_release(id<MTLCommandQueue> queue, id<MTLTexture> texture)
 {
-    static const char *dir; static int every = -1, taken; static unsigned count;
+    static const char *dir; static int every = -1, taken, most = 6; static unsigned count;
     if (every < 0) {
         const char *e = getenv("MWXR_CAPTURE_EVERY"); dir = getenv("MWXR_CAPTURE_DIR");
         every = dir && *dir && e ? atoi(e) : 0;
+        const char *m = getenv("MWXR_CAPTURE_MAX"); // default 6
+        if (m && atoi(m) > 0) most = atoi(m);
     }
-    if (every <= 0 || !texture || taken >= 6 || ++count % every) return;
+    if (every <= 0 || !texture || taken >= most || ++count % every) return;
     MTLPixelFormat f = texture.pixelFormat;
     BOOL bgra = f == MTLPixelFormatBGRA8Unorm || f == MTLPixelFormatBGRA8Unorm_sRGB;
     if (!bgra && f != MTLPixelFormatRGBA8Unorm && f != MTLPixelFormatRGBA8Unorm_sRGB) return;

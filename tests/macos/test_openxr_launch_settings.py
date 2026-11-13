@@ -10,7 +10,8 @@ KEYS = ('MWXR_CLIENT_COMPOSITOR', 'MWXR_VIEWPORT_SCALE_PERCENTAGE',
         'MWXR_FOVEATION', 'MWXR_GAZE_FOVEATION', 'MWXR_GAZE_FOVEATION_FIXED', 'DXMT_STAY_WARPED',
         'MWXR_IN_PROCESS_WINE', 'MWXR_IN_PROCESS_BUILD', 'MWXR_FOVEATION_BUILD',
         'MWXR_VULKAN', 'MWXR_KK_ROOT', 'KK_IMPLICIT_FDM', 'MWXR_KK_FOVEATION', 'MESA_KK_EXPERIMENTAL',
-        'MWXR_XRIZER_ROOT', 'MWXR_WOW64', 'GAME_EXE', 'STEAM_COMPAT_INSTALL_PATH', 'MWXR_OPENGL')
+        'MWXR_XRIZER_ROOT', 'MWXR_WOW64', 'KK_IMPLICIT_SINGLE', 'KK_IMPLICIT_SCALED',
+        'KK_IMPLICIT_STORAGE', 'KK_IMPLICIT_COMPACT', 'KK_IMPLICIT_HALF', 'GAME_EXE', 'STEAM_COMPAT_INSTALL_PATH', 'MWXR_OPENGL')
 GAME_SETTINGS = SCRIPT.parent / 'steam-play-game-settings.zsh'
 
 
@@ -110,6 +111,18 @@ class OpenXRLaunchSettingsTests(unittest.TestCase):
                          'kosmickrisp vulkan-wine vulkan-xrizer zink-fov')
         self.assertEqual(self.game('552440', MWXR_VULKAN='off').stdout.split(), ['unset'])
         self.assertEqual(self.game('546560').stdout.split(), ['unset'])
+
+    def test_nms_foveates_storage_targets_and_compacts_compute(self):
+        def switches(appid, **values):
+            env = {k: v for k, v in os.environ.items() if k not in KEYS}
+            env.update(values)
+            return subprocess.run(['zsh', '-ec',
+                'source "$1" "$2"; print -r -- "${KK_IMPLICIT_STORAGE-unset}" '
+                '"${KK_IMPLICIT_COMPACT-unset}"', 'test', str(GAME_SETTINGS), appid],
+                env=env, capture_output=True, text=True).stdout.split()
+        self.assertEqual(switches('275850'), ['1', '1'])
+        self.assertEqual(switches('275850', KK_IMPLICIT_COMPACT='0'), ['1', '0'])
+        self.assertEqual(switches('552440'), ['unset', 'unset'])
 
 
 if __name__ == '__main__':
