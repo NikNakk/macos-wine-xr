@@ -53,6 +53,9 @@ if [[ ${_mwxr_settings_app} == (552440|275850) && ${MWXR_VULKAN:-} != off ]]; th
   if [[ ${_mwxr_settings_app} == 552440 ]]; then
     export KK_IMPLICIT_SINGLE=${KK_IMPLICIT_SINGLE:-1} KK_IMPLICIT_HALF=${KK_IMPLICIT_HALF:-1}
   fi
+  # MWXR_KK_PASS_TIMING=1 from the Launch Options (macOS Steam passes only MWXR_ words to
+  # the tool as settings): KosmicKrisp's per-pass GPU timing in the game log.
+  [[ ${MWXR_KK_PASS_TIMING:-} == 1 ]] && export KK_PASS_TIMING=1
   unset _mwxr_root
 fi
 [[ ${MWXR_VULKAN:-} == off ]] && unset MWXR_VULKAN

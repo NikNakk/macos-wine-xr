@@ -11,7 +11,8 @@ KEYS = ('MWXR_CLIENT_COMPOSITOR', 'MWXR_VIEWPORT_SCALE_PERCENTAGE',
         'MWXR_IN_PROCESS_WINE', 'MWXR_IN_PROCESS_BUILD', 'MWXR_FOVEATION_BUILD',
         'MWXR_VULKAN', 'MWXR_KK_ROOT', 'KK_IMPLICIT_FDM', 'MWXR_KK_FOVEATION', 'MESA_KK_EXPERIMENTAL',
         'MWXR_XRIZER_ROOT', 'MWXR_WOW64', 'KK_IMPLICIT_SINGLE', 'KK_IMPLICIT_SCALED',
-        'KK_IMPLICIT_STORAGE', 'KK_IMPLICIT_COMPACT', 'KK_IMPLICIT_HALF', 'GAME_EXE', 'STEAM_COMPAT_INSTALL_PATH', 'MWXR_OPENGL')
+        'KK_IMPLICIT_STORAGE', 'KK_IMPLICIT_COMPACT', 'KK_IMPLICIT_HALF', 'KK_PASS_TIMING',
+        'MWXR_KK_PASS_TIMING', 'GAME_EXE', 'STEAM_COMPAT_INSTALL_PATH', 'MWXR_OPENGL')
 GAME_SETTINGS = SCRIPT.parent / 'steam-play-game-settings.zsh'
 
 
@@ -123,6 +124,17 @@ class OpenXRLaunchSettingsTests(unittest.TestCase):
         self.assertEqual(switches('275850'), ['1', '1'])
         self.assertEqual(switches('275850', KK_IMPLICIT_COMPACT='0'), ['1', '0'])
         self.assertEqual(switches('552440'), ['unset', 'unset'])
+
+    def test_pass_timing_from_launch_options(self):
+        def timing(appid, **values):
+            env = {k: v for k, v in os.environ.items() if k not in KEYS}
+            env.update(values)
+            return subprocess.run(['zsh', '-ec',
+                'source "$1" "$2"; print -r -- "${KK_PASS_TIMING-unset}"',
+                'test', str(GAME_SETTINGS), appid], env=env, capture_output=True,
+                text=True).stdout.strip()
+        self.assertEqual(timing('275850', MWXR_KK_PASS_TIMING='1'), '1')
+        self.assertEqual(timing('275850'), 'unset')
 
 
 if __name__ == '__main__':
