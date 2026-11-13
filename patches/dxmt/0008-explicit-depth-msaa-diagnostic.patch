@@ -1,0 +1,42 @@
+--- a/src/d3d11/d3d11_texture_device.cpp
++++ b/src/d3d11/d3d11_texture_device.cpp
+@@ -748,11 +748,17 @@
+                           const D3D11_TEXTURE2D_DESC *desc, ID3D11Texture2D **out) {
+   if (!out) return E_POINTER;
+   *out = nullptr;
++  static const bool attachment_probe=env::getEnvVar("DXMT_RATE_MAP_ATTACHMENT_PROBE")=="1";
++  const bool probe_texture=attachment_probe && desc && desc->ArraySize==1 &&
++      (desc->SampleDesc.Count==2 || desc->SampleDesc.Count==4) &&
++      (desc->Format==DXGI_FORMAT_R8G8B8A8_UNORM || desc->Format==DXGI_FORMAT_R32_TYPELESS);
++  const UINT allowed_bind=D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE |
++      (probe_texture ? D3D11_BIND_DEPTH_STENCIL : 0);
+   if (!object || !desc ||
+       desc->Usage != D3D11_USAGE_DEFAULT || desc->CPUAccessFlags || desc->MiscFlags ||
+-      desc->MipLevels != 1 || desc->SampleDesc.Count != 1 || desc->SampleDesc.Quality ||
++      desc->MipLevels != 1 || (desc->SampleDesc.Count != 1 && !probe_texture) || desc->SampleDesc.Quality ||
+       !desc->Width || !desc->Height || !desc->ArraySize || !desc->BindFlags ||
+-      (desc->BindFlags & ~(D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE)))
++      (desc->BindFlags & ~allowed_bind))
+     return E_INVALIDARG;
+   D3D11_TEXTURE2D_DESC1 requested = {};
+   requested.Width = desc->Width;
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -1205,9 +1205,15 @@
+             unsigned(data->colors[i].slice), unsigned(data->colors[i].load_action), unsigned(data->colors[i].store_action));
+       }
+       static const bool position_mode=env::getEnvVar("DXMT_RATE_MAP_POSITION")=="1";
++      // Explicit-map attachment experiment only. Automatic profiles still reject depth/MSAA.
++      static const bool attachment_probe=env::getEnvVar("DXMT_RATE_MAP_ATTACHMENT_PROBE")=="1";
++      const bool attachment_supported=(!data->depth.attachment && !data->stencil.attachment &&
++          data->tile_barrier_pso_key.raster_sample_count==1) ||
++          (attachment_probe && data->depth.attachment && !data->stencil.attachment &&
++           data->depth.attachment->allocation->descriptor->pixelFormat()==WMTPixelFormatDepth32Float &&
++           (data->tile_barrier_pso_key.raster_sample_count==2 || data->tile_barrier_pso_key.raster_sample_count==4));
+       const bool mapped_position=position_mode && data->rate_map_positions &&
+-          data->render_target_count==1 && !data->depth.attachment && !data->stencil.attachment &&
+-          data->tile_barrier_pso_key.raster_sample_count==1 && data->render_target_array_length<=1 &&
++          data->render_target_count==1 && attachment_supported && data->render_target_array_length<=1 &&
+           data->render_target_width==data->rate_map_logical_size.width && data->render_target_height==data->rate_map_logical_size.height;
+       if(position_mode && !mapped_position) render_pass_info.rasterization_rate_map=0;
+       auto encoder = cmdbuf.renderCommandEncoder(render_pass_info);

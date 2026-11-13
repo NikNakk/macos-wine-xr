@@ -1,0 +1,165 @@
+--- a/src/nvngx/nvngx.cpp
++++ b/src/nvngx/nvngx.cpp
+@@ -2,19 +2,44 @@
+ #include "d3d11.h"
+ #include "nvngx.hpp"
+ #include "log/log.hpp"
++#include "util_env.hpp"
+ #include "nvngx_feature.hpp"
+ #include "nvngx_parameter.hpp"
+ #include "../d3d11/d3d11_interfaces.hpp"
+ #include "../dxgi/dxgi_interfaces.h"
+ #include <cmath>
++#include <atomic>
+ 
+ namespace dxmt {
+ Logger Logger::s_instance("nvngx.log");
+ 
++static bool ngx_trace_enabled() {
++  static const bool enabled = env::getEnvVar("DXMT_NGX_TRACE") == "1";
++  return enabled;
++}
++static void ngx_trace(const std::string &message) {
++  if (ngx_trace_enabled()) Logger::info("NGX trace: " + message);
++}
++
++// Opt-in split between NGX core and its SR feature, for tools which hook the
++// feature DLL. The identical implementation is installed as nvngx_dlss.dll.
++// Keep the module resident: feature handles and third-party trampolines outlive
++// individual calls. Never forward again from the feature module itself.
++static bool ngx_is_feature_module = false;
++static bool ngx_forward_feature() {
++  return !ngx_is_feature_module && env::getEnvVar("DXMT_NGX_CHEEKY") == "1";
++}
++template<typename Function> static Function ngx_feature_export(const char *name) {
++  static HMODULE feature_module = LoadLibraryW(L"nvngx_dlss.dll");
++  return feature_module ? reinterpret_cast<Function>(GetProcAddress(feature_module, name)) : nullptr;
++}
++
++
+ NVNGX_API NVNGX_RESULT
+ NVSDK_NGX_D3D11_Init_Ext(
+     unsigned long long id, const wchar_t *path, ID3D11Device *device, unsigned int sdk_version, const void *feature_info
+ ) {
++  ngx_trace("NVSDK_NGX_D3D11_Init_Ext");
+   return NVNGX_RESULT_OK;
+ }
+ 
+@@ -22,6 +47,7 @@
+ NVSDK_NGX_D3D11_Init(
+     unsigned long long id, const wchar_t *path, ID3D11Device *device, const void *feature_info, unsigned int sdk_version
+ ) {
++  ngx_trace("NVSDK_NGX_D3D11_Init");
+   return NVNGX_RESULT_OK;
+ }
+ 
+@@ -30,6 +56,7 @@
+     const char *project, unsigned int engine_type, const char *engine_version, const wchar_t *path,
+     ID3D11Device *device, unsigned int sdk_version, const void *feature_info
+ ) {
++  ngx_trace("NVSDK_NGX_D3D11_Init_ProjectID");
+   return NVNGX_RESULT_OK;
+ }
+ 
+@@ -38,6 +65,7 @@
+     const char *project, unsigned int engine_type, const char *engine_version, const wchar_t *path,
+     ID3D11Device *device, const void *feature_info, unsigned int sdk_version
+ ) {
++  ngx_trace("NVSDK_NGX_D3D11_Init_with_ProjectID");
+   return NVNGX_RESULT_OK;
+ }
+ 
+@@ -45,6 +73,13 @@
+ NVSDK_NGX_D3D11_CreateFeature(
+     ID3D11DeviceContext *context, unsigned int feature, NVNGXParameter *params, unsigned int **out_handle
+ ) {
++  if (ngx_forward_feature()) {
++    auto fn = ngx_feature_export<decltype(&NVSDK_NGX_D3D11_CreateFeature)>("NVSDK_NGX_D3D11_CreateFeature");
++    ngx_trace("Core -> feature CreateFeature");
++    return fn ? fn(context, feature, params, out_handle) : NVNGX_RESULT_FAIL;
++  }
++  ngx_trace(str::format("CreateFeature feature=", feature, " context=", context));
++  if (!context || !params || !out_handle) return NVNGX_RESULT_INVALID_PARAMETER;
+   auto parameters = static_cast<ParametersImpl *>(params);
+   Com<IMTLD3D11ContextExt1> pCtxExt = nullptr;
+   if (FAILED(context->QueryInterface(IID_PPV_ARGS(&pCtxExt))))
+@@ -73,6 +108,9 @@
+     if (NVNGX_FAILED(parameters->Get("DLSS.Enable.Output.Subrects", &dlss->enable_output_subrects)))
+       dlss->enable_output_subrects = 0;
+ 
++    ngx_trace(str::format("CreateFeature input=", dlss->width, "x", dlss->height,
++        " output=", dlss->target_width, "x", dlss->target_height, " flags=", dlss->flag,
++        " output_subrects=", dlss->enable_output_subrects));
+     *out_handle = &dlss.release()->handle;
+     return NVNGX_RESULT_OK;
+   }
+@@ -85,6 +123,13 @@
+ NVSDK_NGX_D3D11_EvaluateFeature(
+     ID3D11DeviceContext *context, const unsigned int *handle, NVNGXParameter *params, void *callback
+ ) {
++  if (ngx_forward_feature()) {
++    auto fn = ngx_feature_export<decltype(&NVSDK_NGX_D3D11_EvaluateFeature)>("NVSDK_NGX_D3D11_EvaluateFeature");
++    return fn ? fn(context, handle, params, callback) : NVNGX_RESULT_FAIL;
++  }
++  if (!context || !handle || !params) return NVNGX_RESULT_INVALID_PARAMETER;
++  static std::atomic<uint64_t> evaluations{0};
++  uint64_t sequence = ++evaluations;
+   auto parameters = static_cast<ParametersImpl *>(params);
+   switch (static_cast<CommonFeature *>((void *)handle)->feature) {
+   case NVNGX_FEATURE_SUPERSAMPLING: {
+@@ -141,6 +186,23 @@
+     if (NVNGX_FAILED(parameters->Get(NVNGX_Parameter_DLSS_Pre_Exposure, &desc.PreExposure)))
+       desc.PreExposure = 0;
+ 
++    if (ngx_trace_enabled() && (sequence <= 32 || sequence % 512 == 0)) {
++      D3D11_TEXTURE2D_DESC in_desc = {}, out_desc = {};
++      input->GetDesc(&in_desc); output->GetDesc(&out_desc);
++      ngx_trace(str::format("Evaluate seq=", sequence, " handle=", handle,
++          " input=", in_desc.Width, "x", in_desc.Height, " fmt=", in_desc.Format,
++          " output=", out_desc.Width, "x", out_desc.Height, " fmt=", out_desc.Format,
++          " content=", width, "x", height, " reset=", reset,
++          " color=", input, " depth=", depth, " motion=", mv, " target=", output));
++      const char *keys[] = {"DLSS.Input.Color.Subrect.Base.X", "DLSS.Input.Color.Subrect.Base.Y",
++          "DLSS.Input.Depth.Subrect.Base.X", "DLSS.Input.Depth.Subrect.Base.Y",
++          "DLSS.Input.MV.Subrect.Base.X", "DLSS.Input.MV.Subrect.Base.Y",
++          "DLSS.Output.Subrect.Base.X", "DLSS.Output.Subrect.Base.Y"};
++      for (auto key : keys) { unsigned value = 0;
++        auto result = parameters->Get(key, &value);
++        ngx_trace(str::format("  ", key, "=", value, " result=", (unsigned)result));
++      }
++    }
+     pCtxExt->TemporalUpscale(&desc);
+ 
+     pCtxExt->Release();
+@@ -173,6 +235,11 @@
+ 
+ NVNGX_API NVNGX_RESULT
+ NVSDK_NGX_D3D11_ReleaseFeature(unsigned int *handle) {
++  if (ngx_forward_feature()) {
++    auto fn = ngx_feature_export<decltype(&NVSDK_NGX_D3D11_ReleaseFeature)>("NVSDK_NGX_D3D11_ReleaseFeature");
++    return fn ? fn(handle) : NVNGX_RESULT_FAIL;
++  }
++  if (!handle) return NVNGX_RESULT_INVALID_PARAMETER;
+   switch (static_cast<CommonFeature *>((void *)handle)->feature) {
+   case NVNGX_FEATURE_SUPERSAMPLING:
+     delete static_cast<DLSSFeature *>((void *)handle);
+@@ -271,6 +338,7 @@
+ 
+ NVNGX_API NVNGX_RESULT
+ NVSDK_NGX_D3D11_GetCapabilityParameters(NVNGXParameter **out_params) {
++  ngx_trace("GetCapabilityParameters");
+   auto out_parameters = new ParametersImpl();
+ 
+   out_parameters->Set("SuperSampling.Available", 1u);
+@@ -332,6 +400,11 @@
+     return TRUE;
+ 
+   DisableThreadLibraryCalls(instance);
++  wchar_t module_path[MAX_PATH] = {};
++  GetModuleFileNameW(instance, module_path, MAX_PATH);
++  const wchar_t *base = wcsrchr(module_path, L'\\');
++  ngx_is_feature_module = !_wcsicmp(base ? base + 1 : module_path, L"nvngx_dlss.dll");
++  ngx_trace(ngx_is_feature_module ? "Feature DLL attached (DXMT -> MetalFX)" : "Core DLL attached (DXMT NGX -> MetalFX)");
+ 
+   if (FAILED(DXGIGetDebugInterface1(0, DXMT_NVEXT_GUID, nullptr))) {
+     return FALSE;

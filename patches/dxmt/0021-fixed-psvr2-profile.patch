@@ -1,0 +1,75 @@
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -14,6 +14,7 @@
+ #define WINEMETAL_API
+ #include "../winemetal_thunks.h"
+ #include "../airconv_thunks.h"
++#include "winemetal_fixed_psvr2_profile.h"
+ 
+ typedef int NTSTATUS;
+ #define STATUS_SUCCESS 0
+@@ -111,11 +112,19 @@
+     if(!p->width || !p->height || p->width>16384 || p->height>16384 || p->rate_percent<10 || p->rate_percent>100 ||
+         ![device supportsRasterizationRateMapWithLayerCount:1]) return STATUS_SUCCESS;
+     float outer=p->rate_percent/100.f;
+-    // Sixteen columns: eight per eye, the middle two of each at full rate. Eight rows.
++    // Explicit headset profile; the generic fixed prototype remains the default.
++    const char *profile=getenv("DXMT_STAY_WARPED_FIXED_PROFILE");
++    bool psvr2=profile && !strcmp(profile,"psvr2");
++    unsigned columns=psvr2 ? 2*WMT_FIXED_PSVR2_COLUMNS_PER_EYE : 16;
++    unsigned rows=psvr2 ? WMT_FIXED_PSVR2_ROWS : 8;
+     MTLRasterizationRateLayerDescriptor *layer=[[MTLRasterizationRateLayerDescriptor alloc]
+-        initWithSampleCount:MTLSizeMake(16,8,1)];
+-    for(unsigned i=0;i<16;++i) layer.horizontal[i]=@(((i&7)==3 || (i&7)==4)?1.f:outer);
+-    for(unsigned i=0;i<8;++i) layer.vertical[i]=@((i==3 || i==4)?1.f:outer);
++        initWithSampleCount:MTLSizeMake(columns,rows,1)];
++    for(unsigned i=0;i<columns;++i)
++      layer.horizontal[i]=@(psvr2 ? wmt_fixed_psvr2_horizontal(i,outer) :
++                            (((i&7)==3 || (i&7)==4)?1.f:outer));
++    for(unsigned i=0;i<rows;++i)
++      layer.vertical[i]=@(psvr2 ? wmt_fixed_psvr2_vertical(i,outer) :
++                          ((i==3 || i==4)?1.f:outer));
+     MTLRasterizationRateMapDescriptor *desc=[MTLRasterizationRateMapDescriptor
+         rasterizationRateMapDescriptorWithScreenSize:MTLSizeMake(p->width,p->height,1) layer:layer];
+     id<MTLRasterizationRateMap> map=[device newRasterizationRateMapWithDescriptor:desc];
+--- /dev/null
++++ b/src/winemetal/unix/winemetal_fixed_psvr2_profile.h
+@@ -0,0 +1,38 @@
++/* Fixed PS VR2 profile for the private DXMT experiment.
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ * Rates are separable per axis, with a full-rate +/-20 degree core and
++ * a smooth transition to the peripheral rate at +/-35 degrees.
++ * Projection FOV matches Monado's PS VR2 driver, rather than texture centre.
++ */
++#ifndef WINEMETAL_FIXED_PSVR2_PROFILE_H
++#define WINEMETAL_FIXED_PSVR2_PROFILE_H
++#include <math.h>
++#define WMT_FIXED_PSVR2_COLUMNS_PER_EYE 32
++#define WMT_FIXED_PSVR2_ROWS 32
++static inline float
++wmt_fixed_psvr2_rate(float angle_degrees, float outer)
++{
++    float t = (fabsf(angle_degrees) - 20.f) / 15.f;
++    t = fminf(1.f, fmaxf(0.f, t));
++    t = t * t * (3.f - 2.f * t);
++    return 1.f + (outer - 1.f) * t;
++}
++static inline float
++wmt_fixed_psvr2_horizontal(unsigned column, float outer)
++{
++    const unsigned eye = column / WMT_FIXED_PSVR2_COLUMNS_PER_EYE;
++    const float u = (column % WMT_FIXED_PSVR2_COLUMNS_PER_EYE + .5f) /
++                    WMT_FIXED_PSVR2_COLUMNS_PER_EYE;
++    const float radians = .017453292519943295f;
++    const float left = tanf((eye == 0 ? -61.5f : -43.5f) * radians);
++    const float right = tanf((eye == 0 ? 43.5f : 61.5f) * radians);
++    return wmt_fixed_psvr2_rate(atanf(left + u * (right - left)) / radians, outer);
++}
++static inline float
++wmt_fixed_psvr2_vertical(unsigned row, float outer)
++{
++    const float radians = .017453292519943295f;
++    const float v = (row + .5f) / WMT_FIXED_PSVR2_ROWS;
++    return wmt_fixed_psvr2_rate(atanf((2.f * v - 1.f) * tanf(53.f * radians)) / radians, outer);
++}
++#endif

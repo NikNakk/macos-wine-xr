@@ -1,0 +1,216 @@
+diff --git a/include/dxmt_native_interop.h b/include/dxmt_native_interop.h
+--- a/include/dxmt_native_interop.h
++++ b/include/dxmt_native_interop.h
+@@ -70,6 +70,19 @@
+ struct IDXMTNativeDevice4 : public IUnknown {
+   virtual HRESULT STDMETHODCALLTYPE EndFrame() = 0;
+ };
++/* Experimental in-process, immediate-context-only rendering extension.
++ * map is a borrowed MTLRasterizationRateMap on this device with one layer.
++ * Retains it synchronously and snapshots it in command order for subsequent
++ * draw passes; zero disables the map. Caller supplies compatible attachments,
++ * logical viewports/scissors and handles reconstruction before ordinary texture
++ * sampling. This does not foveate an unmodified renderer automatically.
++ * Deferred command lists and layered rate maps are outside this first proof. */
++static const GUID DXMT_IID_NATIVE_CONTEXT1 = {
++    0x0a17f61b, 0x61e9, 0x488c,
++    {0xa6, 0x7d, 0x53, 0xe1, 0xf4, 0x9c, 0x07, 0xb8}};
++struct IDXMTNativeContext1 : public IUnknown {
++  virtual HRESULT STDMETHODCALLTYPE SetRasterizationRateMap(UINT64 map) = 0;
++};
+ struct IDXMTNativeDevice : public IUnknown {
+   virtual HRESULT STDMETHODCALLTYPE ImportSharedTexture(
+       const char *bootstrap_name, const D3D11_TEXTURE2D_DESC *desc,
+diff --git a/src/winemetal/winemetal.h b/src/winemetal/winemetal.h
+--- a/src/winemetal/winemetal.h
++++ b/src/winemetal/winemetal.h
+@@ -696,6 +696,7 @@
+   uint32_t render_target_height;
+   uint32_t render_target_width;
+   obj_handle_t visibility_buffer;
++  obj_handle_t rasterization_rate_map;
+ };
+ 
+ WINEMETAL_API obj_handle_t MTLCommandBuffer_renderCommandEncoder(obj_handle_t cmdbuf, struct WMTRenderPassInfo *info);
+@@ -2177,4 +2178,6 @@
+     struct WMTMemoryPointer data, uint64_t bytes_per_row, uint64_t bytes_per_image
+ );
+ 
++WINEMETAL_API obj_handle_t MTLDevice_retainRasterizationRateMap(obj_handle_t device, obj_handle_t map);
++
+ #endif
+diff --git a/src/winemetal/winemetal_thunks.c b/src/winemetal/winemetal_thunks.c
+--- a/src/winemetal/winemetal_thunks.c
++++ b/src/winemetal/winemetal_thunks.c
+@@ -1418,3 +1418,13 @@
+   UNIX_CALL(149, &params);
+   return params.ret;
+ }
++
++WINEMETAL_API obj_handle_t
++MTLDevice_retainRasterizationRateMap(obj_handle_t device, obj_handle_t map) {
++  if (!device || !map) return 0;
++  struct unixcall_mtldevice_retainobject params = {0};
++  params.device = device;
++  params.object = map;
++  UNIX_CALL(155, &params);
++  return params.ret;
++}
+diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -25,6 +25,21 @@
+   } else {
+     dispatch_sync(dispatch_get_main_queue(), block);
+   }
++}
++
++static NTSTATUS
++_MTLDevice_retainRasterizationRateMap(void *args) {
++  struct unixcall_mtldevice_retainobject *params = args;
++  params->ret = 0;
++  id object = (id)params->object;
++  if (!object || ![object respondsToSelector:@selector(physicalSizeForLayer:)] ||
++      ![object respondsToSelector:@selector(screenSize)] ||
++      ![object respondsToSelector:@selector(layerCount)] ||
++      ![object respondsToSelector:@selector(device)]) return STATUS_SUCCESS;
++  id<MTLRasterizationRateMap> map = object;
++  if (map.device != (id<MTLDevice>)params->device || map.layerCount != 1) return STATUS_SUCCESS;
++  params->ret = (obj_handle_t)[map retain];
++  return STATUS_SUCCESS;
+ }
+ 
+ static NTSTATUS
+@@ -461,6 +476,7 @@
+   descriptor.renderTargetHeight = info->render_target_height;
+   descriptor.renderTargetWidth = info->render_target_width;
+   descriptor.visibilityResultBuffer = (id<MTLBuffer>)info->visibility_buffer;
++  descriptor.rasterizationRateMap = (id<MTLRasterizationRateMap>)info->rasterization_rate_map;
+ 
+   if (info->tile_height && info->tile_width) {
+     descriptor.tileWidth = info->tile_width;
+@@ -3750,6 +3766,7 @@
+     &_WMTRemoteLayerContextId,
+     &_WMTHostRemoteLayer,
+     &_WMTSetRemoteLayerFrame,
++    &_MTLDevice_retainRasterizationRateMap,
+ };
+ 
+ #ifndef DXMT_NATIVE
+@@ -3909,5 +3926,6 @@
+     &_WMTRemoteLayerContextId,
+     &_WMTHostRemoteLayer,
+     &_WMTSetRemoteLayerFrame,
++    &_MTLDevice_retainRasterizationRateMap,
+ };
+ #endif
+diff --git a/src/dxmt/dxmt_context.hpp b/src/dxmt/dxmt_context.hpp
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -184,6 +184,7 @@
+ };
+ 
+ struct RenderEncoderData : EncoderData {
++  WMT::Reference<WMT::Object> rasterization_rate_map;
+   std::array<RenderEncoderColorAttachmentData, 8> colors;
+   RenderEncoderDepthAttachmentData depth;
+   RenderEncoderStencilAttachmentData stencil;
+@@ -689,6 +690,9 @@
+   );
+   void resolveTexture(Rc<Texture> &&src, TextureViewKey src_view, Rc<Texture> &&dst, TextureViewKey dst_view);
+ 
++  // Encode-thread state. Each render pass retains its own immutable snapshot.
++  WMT::Reference<WMT::Object> rasterization_rate_map;
++
+   RenderEncoderData *startRenderPass(
+       uint8_t dsv_planar_flags, uint8_t dsv_readonly_flags, uint8_t render_target_count, uint64_t argument_buffer_size
+   );
+diff --git a/src/dxmt/dxmt_context.cpp b/src/dxmt/dxmt_context.cpp
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -637,6 +637,8 @@
+   assert(!encoder_current);
+   auto encoder_info = allocate<RenderEncoderData>();
+   encoder_info->type = EncoderType::Render;
++  if (rasterization_rate_map)
++    encoder_info->rasterization_rate_map = rasterization_rate_map;
+   encoder_info->encoder_id_vertex = nextEncoderId();
+   encoder_info->fence_wait_vertex = {};
+   encoder_info->fence_update_vertex = {encoder_info->encoder_id_vertex};
+@@ -1058,6 +1060,7 @@
+       auto data = static_cast<RenderEncoderData *>(current);
+       WMTRenderPassInfo render_pass_info;
+       WMT::InitializeRenderPassInfo(render_pass_info);
++      render_pass_info.rasterization_rate_map = data->rasterization_rate_map.handle;
+       {
+         for (unsigned i = 0; i < std::size(render_pass_info.colors); i++) {
+           auto &color_data = data->colors[i];
+@@ -1637,6 +1640,9 @@
+ 
+ bool
+ ArgumentEncodingContext::isEncoderSignatureMatched(RenderEncoderData *r0, RenderEncoderData *r1) {
++  // Different maps change physical pixel layout and must never merge.
++  if (r0->rasterization_rate_map.handle != r1->rasterization_rate_map.handle)
++    return false;
+   // FIXME: it can be different?
+   if (r0->render_target_count != r1->render_target_count)
+     return false;
+diff --git a/src/d3d11/d3d11_context_imm.cpp b/src/d3d11/d3d11_context_imm.cpp
+--- a/src/d3d11/d3d11_context_imm.cpp
++++ b/src/d3d11/d3d11_context_imm.cpp
+@@ -1,3 +1,4 @@
++#include "dxmt_native_interop.h"
+ #include <chrono>
+ #include <unordered_map>
+ #include "config/config.hpp"
+@@ -72,13 +73,13 @@
+   return {dynamic->immediateName().ptr(), dynamic->immediateSuballocation()};
+ }
+ 
+-class MTLD3D11ImmediateContext : public ImmediateContextBase {
++class MTLD3D11ImmediateContext : public ImmediateContextBase, public IDXMTNativeContext1 {
+ public:
+   MTLD3D11ImmediateContext(MTLD3D11Device *pDevice, CommandQueue &cmd_queue) :
+       ImmediateContextBase(pDevice, ctx_state, pDevice->mutex),
+       cmd_queue(cmd_queue),
+       ctx_state({cmd_queue}),
+-      d3dmt_(this, mutex) {
++      d3dmt_(static_cast<ID3D11DeviceContext *>(this), mutex) {
+         cmd_queue.ownership_diagnostics = mutex.ownership_diagnostics;
+         ignore_map_flag_no_wait_ = Config::getInstance().getOption<bool>("d3d11.ignoreMapFlagNoWait", false);
+       }
+@@ -94,6 +95,12 @@
+       return E_POINTER;
+ 
+     *ppvObject = nullptr;
++
++    if (riid == DXMT_IID_NATIVE_CONTEXT1) {
++      *ppvObject = static_cast<IDXMTNativeContext1 *>(this);
++      AddRef();
++      return S_OK;
++    }
+ 
+     if (riid == __uuidof(ID3D11Multithread)) {
+       *ppvObject = ref(&d3dmt_);
+@@ -120,6 +127,21 @@
+       this->m_parent->Release();
+ 
+     return refCount;
++  }
++
++  HRESULT STDMETHODCALLTYPE SetRasterizationRateMap(UINT64 map) override {
++    std::lock_guard<d3d11_device_mutex> lock(mutex);
++    WMT::Reference<WMT::Object> retained;
++    if (map) {
++      auto handle = MTLDevice_retainRasterizationRateMap(m_parent->GetMTLDevice().handle, map);
++      if (!handle) return E_INVALIDARG;
++      retained = WMT::Reference<WMT::Object>(handle);
++    }
++    InvalidateCurrentPass(true);
++    EmitST([map = std::move(retained)](ArgumentEncodingContext &enc) mutable {
++      enc.rasterization_rate_map = std::move(map);
++    });
++    return S_OK;
+   }
+ 
+   void *

@@ -1,0 +1,45 @@
+diff --git a/src/kosmickrisp/vulkan/kk_physical_device.c b/src/kosmickrisp/vulkan/kk_physical_device.c
+index 875410a..b9fa771 100644
+--- a/src/kosmickrisp/vulkan/kk_physical_device.c
++++ b/src/kosmickrisp/vulkan/kk_physical_device.c
+@@ -244,6 +244,9 @@ kk_get_device_features(
+       .independentBlend = true,
+       .inheritedQueries = true,
+       .largePoints = true,
++      /* KK_FAKE_WIDE_LINES=1: claim wide lines (still drawn one pixel wide; Metal has
++       * none) for games that otherwise stop on a driver warning (No Man's Sky). */
++      .wideLines = debug_get_bool_option("KK_FAKE_WIDE_LINES", false),
+       .logicOp = true,
+       .multiViewport = true,
+       .occlusionQueryPrecise = true,
+@@ -668,9 +671,9 @@ kk_get_device_properties(
+       .maxCombinedClipAndCullDistances = 8,
+       .discreteQueuePriorities = 2,
+       .pointSizeRange = {1.0f, 511.0f},
+-      .lineWidthRange = {1.0f, 1.0f},
++      .lineWidthRange = {1.0f, debug_get_bool_option("KK_FAKE_WIDE_LINES", false) ? 8.0f : 1.0f},
+       .pointSizeGranularity = 0.0625f,
+-      .lineWidthGranularity = 0.0f,
++      .lineWidthGranularity = debug_get_bool_option("KK_FAKE_WIDE_LINES", false) ? 1.0f : 0.0f,
+       .strictLines = false,
+       .standardSampleLocations = true,
+       .optimalBufferCopyOffsetAlignment = 1,
+@@ -993,6 +996,18 @@ kk_physical_device_init_pipeline_cache(struct kk_physical_device *pdev)
+ 
+    _mesa_blake3_update(&blake3_ctx, instance->driver_build_sha,
+                        sizeof(instance->driver_build_sha));
++   /* Implicit foveation changes how shaders are lowered; an application's saved
++    * pipeline cache from one mode must not be used in another. */
++   const char *implicit_mode[] = {"KK_IMPLICIT_FDM", "KK_IMPLICIT_SINGLE", "KK_IMPLICIT_HALF",
++                                  "KK_IMPLICIT_STORAGE", "KK_IMPLICIT_SCALED", "KK_IMPLICIT_NO_FRAGCOORD",
++                                  "KK_IMPLICIT_NO_SAMPLE", "KK_IMPLICIT_NO_FETCH",
++                                  "KK_IMPLICIT_NO_FETCH_APP", "MESA_KK_EXPERIMENTAL"};
++   for (unsigned i = 0; i < ARRAY_SIZE(implicit_mode); i++) {
++      const char *v = getenv(implicit_mode[i]);
++      _mesa_blake3_update(&blake3_ctx, implicit_mode[i], strlen(implicit_mode[i]));
++      if (v)
++         _mesa_blake3_update(&blake3_ctx, v, strlen(v));
++   }
+ 
+    unsigned char blake3[BLAKE3_KEY_LEN];
+    _mesa_blake3_final(&blake3_ctx, blake3);

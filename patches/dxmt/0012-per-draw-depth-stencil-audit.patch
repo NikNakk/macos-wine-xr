@@ -1,0 +1,40 @@
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -5026,6 +5026,37 @@
+       UploadShaderStageResourceBinding<PipelineStage::Vertex, PipelineKind::Ordinary>();
+       UploadShaderStageResourceBinding<PipelineStage::Pixel, PipelineKind::Ordinary>();
+     }
++    // Bounded diagnostic snapshots every PreDraw, including state-only changes.
++    static const bool draw_state_audit = env::getEnvVar("DXMT_TBDR_DRAW_STATE") == "1";
++    if (draw_state_audit && tbdrAuditEnabled() && tbdrAuditDetail()) {
++      auto VS=GetManagedShader<PipelineStage::Vertex>();auto PS=GetManagedShader<PipelineStage::Pixel>();
++      auto GS=GetManagedShader<PipelineStage::Geometry>();auto HS=GetManagedShader<PipelineStage::Hull>();
++      auto DS=GetManagedShader<PipelineStage::Domain>();
++      auto hash=[](ManagedShader shader){return shader?shader->sha1().string():std::string("none");};
++      D3D11_DEPTH_STENCIL_DESC depth={};
++      (state_.OutputMerger.DepthStencilState?state_.OutputMerger.DepthStencilState:default_depth_stencil_state)->GetDesc(&depth);
++      D3D11_DEPTH_STENCIL_VIEW_DESC view={};
++      if(state_.OutputMerger.DSV)state_.OutputMerger.DSV->GetDesc(&view);
++      D3D11_BLEND_DESC blend={};
++      (state_.OutputMerger.BlendState?state_.OutputMerger.BlendState:default_blend_state)->GetDesc(&blend);
++      uint64_t uavs=(VS?VS->reflection().UAVSlotMask:0)|(PS?PS->reflection().UAVSlotMask:0)|
++                    (GS?GS->reflection().UAVSlotMask:0)|(HS?HS->reflection().UAVSlotMask:0)|(DS?DS->reflection().UAVSlotMask:0);
++      EmitST([vs=hash(VS),ps=hash(PS),gs=hash(GS),hs=hash(HS),ds=hash(DS),depth,uavs,
++              coverage=PS?PS->reflection().PixelShader.HasCoverageOutput:0,atoc=blend.AlphaToCoverageEnable,
++              stencil_ref=state_.OutputMerger.StencilRef,dsv_flags=view.Flags,colors=state_.OutputMerger.NumRTVs,
++              samples=state_.OutputMerger.SampleCount,sample_mask=state_.OutputMerger.SampleMask,
++              topology=state_.InputAssembler.Topology,so=state_.StreamOutput.Targets.any_bound()](ArgumentEncodingContext &enc){
++        if(enc.tbdr_audit.active && tbdrAuditDetailRow())
++          tbdrAuditLog("drawstate encoder=%llu frame=%llu vs=%s ps=%s gs=%s hs=%s ds=%s colors=%u samples=%u indexed=%u topology=%u depth_enable=%u depth_write=%u depth_func=%u stencil_enable=%u stencil_read=%u stencil_write=%u stencil_ref=%u front_func=%u front_fail=%u front_zfail=%u front_pass=%u back_func=%u back_fail=%u back_zfail=%u back_pass=%u atoc=%u coverage=%u uavs=%llu sample_mask=%u so=%u dsv_flags=%u",
++            (unsigned long long)enc.currentRenderEncoder()->id,(unsigned long long)enc.currentFrameId(),
++            vs.c_str(),ps.c_str(),gs.c_str(),hs.c_str(),ds.c_str(),colors,samples,unsigned(IndexedDraw),unsigned(topology),
++            unsigned(depth.DepthEnable),unsigned(depth.DepthWriteMask),unsigned(depth.DepthFunc),unsigned(depth.StencilEnable),
++            unsigned(depth.StencilReadMask),unsigned(depth.StencilWriteMask),stencil_ref,
++            unsigned(depth.FrontFace.StencilFunc),unsigned(depth.FrontFace.StencilFailOp),unsigned(depth.FrontFace.StencilDepthFailOp),unsigned(depth.FrontFace.StencilPassOp),
++            unsigned(depth.BackFace.StencilFunc),unsigned(depth.BackFace.StencilFailOp),unsigned(depth.BackFace.StencilDepthFailOp),unsigned(depth.BackFace.StencilPassOp),
++            unsigned(atoc),unsigned(coverage),(unsigned long long)uavs,sample_mask,unsigned(so),dsv_flags);
++      });
++    }
+     work_since_commit_++;
+     return status;
+   }

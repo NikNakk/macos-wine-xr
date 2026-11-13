@@ -1,0 +1,649 @@
+From: Nick Kennedy <local-experiment>
+Subject: [PRIVATE 17/17] automatic stay-warped stereo profile
+
+DXMT_STAY_WARPED=WIDTHxHEIGHT (with DXMT_RATE_MAP_POSITION, _READ and _ATTACHMENT_PROBE = 1)
+binds one fixed two-peak map for the session; DXMT_STAY_WARPED_RATE sets the peripheral rate.
+Adds mapped multi-target passes, compute-stage read translation, an ordinary pass for imported
+(swapchain) targets, and a DXMT_DEBUG_DUMP_PATH image dump. No shader or size heuristics beyond
+the explicit size; not a general game profile.
+Also: per-pixel integer table for Load, and no translation for a same-map Load at the
+pass's own pixel (int(SV_Position.xy) tracked within a basic block).
+
+--- a/src/airconv/airconv_public.h
++++ b/src/airconv/airconv_public.h
+@@ -241,7 +241,7 @@
+   SM50_SHADER_FLAG_DEFUSE_FMA = 1 << 1,
+   SM50_SHADER_FLAG_RATE_MAP_POSITION = 1 << 2,
+   // Separate bit so variants cached before read translation are never reused.
+-  SM50_SHADER_FLAG_RATE_MAP_READ = 1 << 4, // bit 3 was the branchless prototype
++  SM50_SHADER_FLAG_RATE_MAP_READ = 1 << 6, // bits 3 to 5 were earlier prototypes
+ };
+ 
+ struct SM50_SHADER_COMMON_DATA {
+--- a/src/airconv/dxbc_converter.cpp
++++ b/src/airconv/dxbc_converter.cpp
+@@ -520,6 +520,13 @@
+   io_binding_map resource_map;
+   air::AirType types(context);
+ 
++  uint32_t rate_map_read_argument = ~0u;
++  if(shader_flags & SM50_SHADER_FLAG_RATE_MAP_READ) {
++    rate_map_read_argument=func_signature.DefineInput(air::ArgumentBindingBuffer{
++        .buffer_size={}, .location_index=SM50_BINDING_INDEX_RATE_MAP_READ, .array_size=0,
++        .memory_access=air::MemoryAccess::read, .address_space=air::AddressSpace::constant,
++        .type=air::MSLFloat{}, .arg_name="rate_map_read_positions", .raster_order_group={}});
++  }
+   {
+     SignatureContext sig_ctx(prologue, epilogue, func_signature, resource_map);
+     for (auto &p : pShaderInternal->signature_handlers) {
+@@ -567,6 +574,7 @@
+       .pso_sample_mask = 0xffffffff,
+       .shader_type = pShaderInternal->shader_type,
+       .metal_version = metal_version,
++      .rate_map_read_argument = rate_map_read_argument,
+   };
+ 
+   if (auto err = prologue.build(ctx).takeError()) {
+--- a/src/airconv/dxbc_converter.hpp
++++ b/src/airconv/dxbc_converter.hpp
+@@ -196,6 +196,9 @@
+   llvm::AllocaInst *depth_output_reg = nullptr;
+   llvm::AllocaInst *stencil_ref_reg = nullptr;
+   llvm::AllocaInst *coverage_mask_reg = nullptr;
++  // Pixel stage with rate-map position translation: SV_Position before translation.
++  llvm::Value *rate_map_raw_position = nullptr;
++  uint32_t rate_map_position_reg = ~0u;
+ 
+   llvm::AllocaInst *cmp_exch_temp = nullptr;
+ 
+--- a/src/airconv/dxbc_converter_basicblock.cpp
++++ b/src/airconv/dxbc_converter_basicblock.cpp
+@@ -218,6 +218,7 @@
+     // The zero-header binding is identity for ordinary/unmapped render passes.
+     if(rate_map_argument!=~0u && fix_w_component) {
+       auto &b=ctx.builder;
++      ctx.resource.rate_map_raw_position=arg;ctx.resource.rate_map_position_reg=to_reg;
+       auto lut=ctx.function->getArg(rate_map_argument);
+       auto load=[&](llvm::Value *index) { return b.CreateLoad(ctx.types._float,b.CreateGEP(ctx.types._float,lut,index)); };
+       auto width=load(b.getInt32(0));
+@@ -552,6 +553,7 @@
+   auto bb_pop = builder.GetInsertBlock();
+   for (auto &[current, bb] : visit_order) {
+     builder.SetInsertPoint(bb);
++    dxbc.ResetBlockState();
+ 
+     current->instructions.for_each(dxbc);
+ 
+--- a/src/airconv/nt/dxbc_converter_base.cpp
++++ b/src/airconv/nt/dxbc_converter_base.cpp
+@@ -678,6 +678,8 @@
+ 
+ void
+ Converter::StoreOperand(const DstOperandTemp &DstOp, llvm::Value *Value) {
++  if (DstOp.regid == pixel_coord_temp && (DstOp._.mask & 3))
++    pixel_coord_temp = ~0u;
+   auto ValueInt = ZExtAndBitcastToInt32(Value);
+ 
+   auto Handle = res.temp.ptr_int4;
+@@ -1118,6 +1120,15 @@
+   }
+ 
+   StoreOperand(convert.dst, Value);
++
++  // Remember a temp that now holds int(SV_Position.xy) (translated position, truncated).
++  if (convert.op == ConversionOp::FloatToSigned || convert.op == ConversionOp::FloatToUnsigned) {
++    auto Dst = std::get_if<DstOperandTemp>(&convert.dst);
++    auto Src = std::get_if<SrcOperandInput>(&convert.src);
++    if (Dst && Src && res.rate_map_raw_position && Src->regid == res.rate_map_position_reg && Dst->phase == ~0u &&
++        (Dst->_.mask & 3) == 3 && Src->_.swizzle.x == 0 && Src->_.swizzle.y == 1 && !Src->_.abs && !Src->_.neg)
++      pixel_coord_temp = Dst->regid;
++  }
+ }
+ 
+ void
+@@ -1417,8 +1428,14 @@
+   case Texture::depth2d:
+   case Texture::texture2d_ms:
+   case Texture::depth_2d_ms:
+-    Address = RateMapTexel(Address, Tex->Metadata);
++  {
++    // int(SV_Position.xy) used directly as the address: the usual fullscreen pattern.
++    auto Temp = std::get_if<SrcOperandTemp>(&load.src_address);
++    const bool OwnPixel = Temp && Temp->regid == pixel_coord_temp && Temp->phase == ~0u && Temp->_.swizzle.x == 0 &&
++                          Temp->_.swizzle.y == 1 && !Temp->_.abs && !Temp->_.neg && Offset->isNullValue();
++    Address = RateMapTexel(Address, Tex->Metadata, OwnPixel);
+     break;
++  }
+   default:
+     break;
+   }
+@@ -1580,28 +1597,56 @@
+   return Result;
+ }
+ 
++// Integer loads use a per-pixel table: one read per axis, no interpolation.
++llvm::Value *
++Converter::RateMapTexelTable(llvm::Value *Address) {
++  auto FloatTy = air.getFloatTy();
++  auto IntTy = air.getIntTy();
++  auto Table = ctx.function->getArg(ctx.rate_map_read_argument);
++  auto Load = [&](llvm::Value *Index) { return ir.CreateLoad(FloatTy, ir.CreateGEP(FloatTy, Table, Index)); };
++  llvm::Value *Size[4];
++  for (unsigned i = 0; i < 4; i++)
++    Size[i] = ir.CreateFPToUI(Load(ir.getInt32(i)), IntTy);
++  // header, inverse tables, forward tables (logical + 1 each), then texel tables
++  llvm::Value *Base = ir.CreateAdd(
++      ir.CreateAdd(ir.getInt32(6), ir.CreateAdd(Size[0], Size[1])), ir.CreateAdd(Size[2], Size[3])
++  );
++  llvm::Value *Result = Address;
++  for (unsigned Axis = 0; Axis < 2; Axis++) {
++    llvm::Value *Pixel = ir.CreateExtractElement(Address, Axis);
++    auto Last = ir.CreateSub(Size[2 + Axis], ir.getInt32(1));
++    Pixel = ir.CreateSelect(ir.CreateICmpSLT(Pixel, ir.getInt32(0)), ir.getInt32(0), Pixel);
++    Pixel = ir.CreateSelect(ir.CreateICmpSGT(Pixel, Last), Last, Pixel);
++    Result = ir.CreateInsertElement(Result, ir.CreateFPToUI(Load(ir.CreateAdd(Base, Pixel)), IntTy), Axis);
++    Base = ir.CreateAdd(Base, Size[2 + Axis]);
++  }
++  return Result;
++}
++
+ // A real branch: reads of ordinary textures pay one test of metadata they
+ // already loaded. Block terminators are emitted at the builder's final
+ // position, so splitting the current block here is safe.
++// OwnPixel: the address is int(SV_Position.xy). When the texture shares the
++// pass's map (second metadata bit), the untranslated position already is the
++// physical texel, so neither table is consulted.
+ llvm::Value *
+-Converter::RateMapBranch(llvm::Value *Original, llvm::Value *Metadata, bool Normalized) {
++Converter::RateMapBranch(llvm::Value *Original, llvm::Value *Metadata, bool Normalized, bool OwnPixel) {
+   auto Mapped = RateMapMapped(Metadata);
+   if (!Mapped)
+     return Original;
++  if (OwnPixel && res.rate_map_raw_position) {
++    auto Same = ir.CreateICmpNE(ir.CreateAnd(Metadata, llvm::ConstantInt::get(Metadata->getType(), 1ull << 62)),
++                                llvm::ConstantInt::get(Metadata->getType(), 0));
++    auto Raw = ir.CreateShuffleVector(res.rate_map_raw_position, {0, 1});
++    Original = ir.CreateSelect(Same, ir.CreateFPToSI(Raw, air.getIntTy(2)), Original);
++    Mapped = ir.CreateAnd(Mapped, ir.CreateNot(Same));
++  }
+   auto Entry = ir.GetInsertBlock();
+   auto Translate = llvm::BasicBlock::Create(ctx.llvm, "rate_map_read", ctx.function);
+   auto Join = llvm::BasicBlock::Create(ctx.llvm, "rate_map_read_join", ctx.function);
+   ir.CreateCondBr(Mapped, Translate, Join);
+   ir.SetInsertPoint(Translate);
+-  llvm::Value *Translated;
+-  if (Normalized) {
+-    Translated = RateMapPhysical(Original, true);
+-  } else {
+-    auto Centre = ir.CreateFAdd(
+-        ir.CreateSIToFP(Original, air.getFloatTy(2)), llvm::ConstantFP::get(air.getFloatTy(2), 0.5)
+-    );
+-    Translated = ir.CreateFPToUI(RateMapPhysical(Centre, false), air.getIntTy(2));
+-  }
++  llvm::Value *Translated = Normalized ? RateMapPhysical(Original, true) : RateMapTexelTable(Original);
+   auto End = ir.GetInsertBlock();
+   ir.CreateBr(Join);
+   ir.SetInsertPoint(Join);
+@@ -1612,8 +1657,8 @@
+ }
+ 
+ llvm::Value *
+-Converter::RateMapTexel(llvm::Value *Address, llvm::Value *Metadata) {
+-  return RateMapBranch(Address, Metadata, false);
++Converter::RateMapTexel(llvm::Value *Address, llvm::Value *Metadata, bool OwnPixel) {
++  return RateMapBranch(Address, Metadata, false, OwnPixel);
+ }
+ 
+ llvm::Value *
+--- a/src/airconv/nt/dxbc_converter_base.hpp
++++ b/src/airconv/nt/dxbc_converter_base.hpp
+@@ -460,14 +460,18 @@
+   llvm::Value *
+   DecodeTextureArrayLength(llvm::Value *Metadata) {
+     // The top bit marks a target whose contents are in a rate map's physical layout.
+-    return ir.CreateAnd(ir.CreateTrunc(ir.CreateLShr(Metadata, 32uLL), air.getIntTy()), 0x7fffffffu);
++    return ir.CreateAnd(ir.CreateTrunc(ir.CreateLShr(Metadata, 32uLL), air.getIntTy()), 0x3fffffffu);
+   }
+ 
+   /* Reads of render targets left in rasterization-rate-map layout */
+   llvm::Value *RateMapMapped(llvm::Value *Metadata);
+   llvm::Value *RateMapPhysical(llvm::Value *Logical, bool Normalized);
+-  llvm::Value *RateMapBranch(llvm::Value *Original, llvm::Value *Metadata, bool Normalized);
+-  llvm::Value *RateMapTexel(llvm::Value *Address, llvm::Value *Metadata);
++  llvm::Value *RateMapBranch(llvm::Value *Original, llvm::Value *Metadata, bool Normalized, bool OwnPixel = false);
++  llvm::Value *RateMapTexelTable(llvm::Value *Address);
++  // A temp register known to hold int(SV_Position.xy) within the current block.
++  uint32_t pixel_coord_temp = ~0u;
++  void ResetBlockState() { pixel_coord_temp = ~0u; }
++  llvm::Value *RateMapTexel(llvm::Value *Address, llvm::Value *Metadata, bool OwnPixel = false);
+   llvm::Value *RateMapCoord(llvm::Value *Coord, llvm::Value *Metadata);
+ 
+   llvm::Value *
+--- a/src/d3d11/d3d11_context_def.cpp
++++ b/src/d3d11/d3d11_context_def.cpp
+@@ -437,6 +437,8 @@
+     return D3D11_DEVICE_CONTEXT_DEFERRED;
+   }
+ 
++  virtual void DebugDumpExternalTarget() override {}
++
+   virtual void WaitUntilGPUIdle() override{
+       // nop
+   };
+--- a/src/d3d11/d3d11_context_imm.cpp
++++ b/src/d3d11/d3d11_context_imm.cpp
+@@ -748,6 +748,41 @@
+     return D3D11_DEVICE_CONTEXT_IMMEDIATE;
+   }
+ 
++  // Diagnostic: DXMT_DEBUG_DUMP_PATH=Z:\\file.ppm writes the last rendered imported
++  // (swapchain) image on Present number DXMT_DEBUG_DUMP_FRAME. Blocks that one frame.
++  virtual void
++  DebugDumpExternalTarget() override {
++    static const auto path=env::getEnvVar("DXMT_DEBUG_DUMP_PATH");
++    if(path.empty()) return;
++    static const unsigned long frame=[]{auto v=env::getEnvVar("DXMT_DEBUG_DUMP_FRAME");return v.empty()?1200ul:std::strtoul(v.c_str(),nullptr,10);}();
++    static unsigned long presents=0;
++    if(++presents!=frame || !debug_dump_target_) return;
++    Com<ID3D11Texture2D> source;
++    if(FAILED(debug_dump_target_->QueryInterface(__uuidof(ID3D11Texture2D),reinterpret_cast<void **>(&source)))) return;
++    D3D11_TEXTURE2D_DESC desc={};source->GetDesc(&desc);
++    const bool bgra=desc.Format==DXGI_FORMAT_B8G8R8A8_UNORM || desc.Format==DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
++    if(!bgra && desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM && desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) return;
++    desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;desc.MiscFlags=0;desc.MipLevels=desc.ArraySize=1;
++    Com<ID3D11Texture2D> staging;
++    if(FAILED(m_parent->CreateTexture2D(&desc,nullptr,&staging))) return;
++    CopySubresourceRegion(staging.ptr(),0,0,0,0,source.ptr(),0,nullptr);
++    D3D11_MAPPED_SUBRESOURCE mapped={};
++    if(FAILED(Map(staging.ptr(),0,D3D11_MAP_READ,0,&mapped))) return;
++    if(auto file=std::fopen(path.c_str(),"wb")) {
++      std::fprintf(file,"P6\n%u %u\n255\n",desc.Width,desc.Height);
++      for(unsigned y=0;y<desc.Height;++y) {
++        auto row=static_cast<const unsigned char *>(mapped.pData)+size_t(y)*mapped.RowPitch;
++        for(unsigned x=0;x<desc.Width;++x) {
++          unsigned char rgb[3]={row[4*x+(bgra?2:0)],row[4*x+1],row[4*x+(bgra?0:2)]};
++          std::fwrite(rgb,1,3,file);
++        }
++      }
++      std::fclose(file);
++      Logger::info(str::format("DEBUG_DUMP wrote ",desc.Width,"x",desc.Height," present=",presents));
++    }
++    Unmap(staging.ptr(),0);
++  }
++
+   virtual void
+   WaitUntilGPUIdle() override {
+     uint64_t seq = cmd_queue.CurrentSeqId();
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -3310,6 +3310,8 @@
+   GetDynamicBufferAllocation(Rc<DynamicBuffer> &dynamic);
+ 
+   uint64_t *allocated_encoder_argbuf_size_ = nullptr;
++  // Diagnostic only (DXMT_DEBUG_DUMP_PATH): last imported texture bound as a render target.
++  Com<ID3D11Resource> debug_dump_target_;
+ 
+   uint64_t PreAllocateArgumentBuffer(size_t size, size_t alignment) {
+     assert(allocated_encoder_argbuf_size_ && "otherwise invalid call");
+@@ -4509,6 +4511,10 @@
+         if (rtv) {
+           auto props = rtv->description();
+           rtvs[i] = {rtv->texture(), rtv->viewId(), i, props.DepthPlane, rtv->pixelFormat()};
++          static const bool debug_dump=!env::getEnvVar("DXMT_DEBUG_DUMP_PATH").empty();
++          if(debug_dump && rtvs[i].Texture->external_storage) {
++            debug_dump_target_=nullptr;rtv->GetResource(&debug_dump_target_);
++          }
+           D3D11_ASSERT(rtv->pixelFormat() != WMTPixelFormatInvalid);
+           effective_render_target++;
+         } else {
+@@ -4605,8 +4611,10 @@
+           static const bool rate_map_read=env::getEnvVar("DXMT_RATE_MAP_READ")=="1";
+           if(rate_map_read) {
+             // endPass decides whether this target ends up in mapped layout.
+-            if(rtvs.size()==1) info.rate_map_target=rtv.Texture;
+-            else rtv.Texture->rate_map_layout={};
++            info.rate_map_targets[rtv.RenderTargetIndex]=rtv.Texture;
++            static const bool stay_warped=!env::getEnvVar("DXMT_STAY_WARPED").empty();
++            // The compositor reads swapchain images outside DXMT: keep that pass ordinary.
++            if(stay_warped && rtv.Texture->external_storage) info.rate_map_excluded=true;
+           }
+           color.depth_plane = rtv.DepthPlane;
+           color.load_action = WMTLoadActionLoad;
+--- a/src/d3d11/d3d11_device.hpp
++++ b/src/d3d11/d3d11_device.hpp
+@@ -15,6 +15,7 @@
+                      IMTLD3D11DeviceContext)
+     : public ID3D11DeviceContext4 {
+   virtual void WaitUntilGPUIdle() = 0;
++  virtual void DebugDumpExternalTarget() = 0;
+   virtual void PrepareFlush() = 0;
+   virtual void Commit() = 0;
+   virtual void SOGetTargetsWithOffsets(UINT NumBuffers, REFIID riid, void ** ppSOTargets, UINT *pOffsets) = 0;
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -754,6 +754,7 @@
+                                             OwnershipWaitDiagnostics::Present);
+     if (SyncInterval > 4)
+       return DXGI_ERROR_INVALID_CALL;
++    device_context_->DebugDumpExternalTarget();
+ 
+     HRESULT hr = S_OK;
+     bool window_minimized = wsi::isMinimized(hWnd);
+--- a/src/d3d11/d3d11_texture_device.cpp
++++ b/src/d3d11/d3d11_texture_device.cpp
+@@ -776,6 +776,7 @@
+   auto texture = Rc<Texture>(new Texture(info, device->GetMTLDevice()));
+   auto allocation = texture->importNativeObject(object);
+   if (!allocation) return E_INVALIDARG;
++  texture->external_storage = true;
+   texture->rename(std::move(allocation));
+   Com<DeviceTexture<tag_texture_2d>> resource = ref(new DeviceTexture<tag_texture_2d>(
+       &final_desc, std::move(texture), device));
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -299,6 +299,8 @@
+     const MTL_SHADER_REFLECTION *reflection, const MTL_SM50_SHADER_ARGUMENT *arguments, uint64_t argument_buffer_offset
+ );
+ 
++static bool rateMapLayoutPass(const RenderEncoderData *data);
++
+ inline uint64_t
+ TextureMetadata(uint32_t array_length, float min_lod) {
+   return ((uint64_t)array_length << 32) | (uint64_t)std::bit_cast<uint32_t>(min_lod);
+@@ -367,23 +369,34 @@
+               unsigned(stage), unsigned(arg.SM50BindingSlot), srv.texture.ptr(), bound_view.allocation,
+               (unsigned long long)bound_view.texture.handle, unsigned(viewIdChecked));
+           uint32_t array_length = srv.texture->arrayLength(viewIdChecked);
+-          if (stage == PipelineStage::Pixel && srv.texture->rate_map_layout) {
++          if ((stage == PipelineStage::Pixel || stage == PipelineStage::Compute) && srv.texture->rate_map_layout) {
+             // One read layout per pass in this experiment; others stay untranslated.
+-            auto render = currentRenderEncoder();
+-            if (!render->rate_map_read)
+-              render->rate_map_read = srv.texture->rate_map_layout;
+-            if (render->rate_map_read.handle == srv.texture->rate_map_layout.handle)
++            auto &read = stage == PipelineStage::Compute ? static_cast<ComputeEncoderData *>(encoder_current)->rate_map_read
++                                                         : currentRenderEncoder()->rate_map_read;
++            if (!read)
++              read = srv.texture->rate_map_layout;
++            static const unsigned long warp_debug = std::strtoul(env::getEnvVar("DXMT_STAY_WARPED_DEBUG").c_str(), nullptr, 10);
++            if (read.handle == srv.texture->rate_map_layout.handle && !(warp_debug & 2)) {
+               array_length |= 0x80000000u;
++              // Same layout as this mapped pass: own-pixel loads need no translation.
++              if (stage == PipelineStage::Pixel && !(warp_debug & 5)) {
++                auto render = currentRenderEncoder();
++                if (!render->base_foveation_target && rateMapLayoutPass(render) &&
++                    render->rate_map_positions.handle == srv.texture->rate_map_layout.handle)
++                  array_length |= 0x40000000u;
++              }
++            }
+-            else
++            else if (read.handle != srv.texture->rate_map_layout.handle)
+               WARN("Rate-map read: second layout in one pass left untranslated");
+             if (sceneTraceEnabled())
+-              sceneTrace("rate_map_read encoder=%llu slot=%u translated=%u", (unsigned long long)render->id,
+-                         unsigned(arg.SM50BindingSlot), unsigned(array_length >> 31));
++              sceneTrace("rate_map_read encoder=%llu stage=%u slot=%u translated=%u", (unsigned long long)encoder_current->id,
++                         unsigned(stage), unsigned(arg.SM50BindingSlot), unsigned(array_length >> 31));
+           }
+           encoded_buffer[arg.StructurePtrOffset + 1] = TextureMetadata(array_length, 0);
+           if (layoutAuditFrame(currentFrameId()))
+-            layoutAudit("bind frame=%llu encoder=%llu stage=%u kind=srv slot=%u resource=%p", (unsigned long long)currentFrameId(),
+-                        (unsigned long long)(encoder_current ? encoder_current->id : 0), unsigned(stage), unsigned(arg.SM50BindingSlot), srv.texture.ptr());
++            layoutAudit("bind frame=%llu encoder=%llu stage=%u kind=srv slot=%u resource=%p layout=%u translated=%u", (unsigned long long)currentFrameId(),
++                        (unsigned long long)(encoder_current ? encoder_current->id : 0), unsigned(stage), unsigned(arg.SM50BindingSlot), srv.texture.ptr(),
++                        unsigned(bool(srv.texture->rate_map_layout)), unsigned(array_length >> 30));
+           makeResident<stage, kind>(srv.texture.ptr(), viewIdChecked);
+         } else {
+           encoded_buffer[arg.StructurePtrOffset] = 0;
+@@ -668,6 +681,7 @@
+   assert(!encoder_current);
+   auto encoder_info = allocate<RenderEncoderData>();
+   encoder_info->type = EncoderType::Render;
++  if (!stay_warped_ready) prepareStayWarped();
+   if (rasterization_rate_map)
+     encoder_info->rasterization_rate_map = rasterization_rate_map;
+   encoder_info->rate_map_positions=rate_map_positions;
+@@ -765,6 +779,26 @@
+   return true;
+ }
+ 
++// DXMT_STAY_WARPED=WIDTHxHEIGHT: bind one fixed two-peak map for the whole session.
++// Only passes of exactly that size that satisfy rateMapLayoutPass use it.
++void
++ArgumentEncodingContext::prepareStayWarped() {
++  stay_warped_ready=true;
++  auto size=env::getEnvVar("DXMT_STAY_WARPED");
++  unsigned width=0,height=0,rate=50;
++  if(size.empty() || std::sscanf(size.c_str(),"%ux%u",&width,&height)!=2 ||
++      env::getEnvVar("DXMT_RATE_MAP_POSITION")!="1" || env::getEnvVar("DXMT_RATE_MAP_READ")!="1") return;
++  if(auto value=env::getEnvVar("DXMT_STAY_WARPED_RATE");!value.empty()) rate=unsigned(std::strtod(value.c_str(),nullptr)*100+.5);
++  WMT::Reference<WMT::Object> map(MTLDevice_newStereoRateMap(device_.handle,width,height,rate));
++  WMTSize logical={};
++  WMT::Reference<WMT::Buffer> positions(map ? MTLDevice_rateMapInversePositions(device_.handle,map.handle,&logical) : 0);
++  if(!map || !positions || logical.width!=width || logical.height!=height) {
++    Logger::warn("Stay-warped profile unavailable");return;
++  }
++  rasterization_rate_map=std::move(map);rate_map_positions=std::move(positions);rate_map_logical_size=logical;
++  Logger::info(str::format("STAY_WARPED map ",width,"x",height," peripheral_rate=",rate,"%"));
++}
++
+ // A render pass whose attachments end up in its rate map's physical layout.
+ // Depth/MSAA only under the explicit attachment diagnostic.
+ static bool
+@@ -777,8 +811,11 @@
+         (data->depth.attachment==data->stencil.attachment && data->depth.attachment->allocation->descriptor->pixelFormat()==WMTPixelFormatDepth32Float_Stencil8)) &&
+        (data->tile_barrier_pso_key.raster_sample_count==1 || data->tile_barrier_pso_key.raster_sample_count==2 ||
+         data->tile_barrier_pso_key.raster_sample_count==4));
++  // The automatic stereo profile also maps multi-target passes and declines swapchain passes.
++  static const bool stay_warped=!env::getEnvVar("DXMT_STAY_WARPED").empty();
++  if(data->rate_map_excluded) return false;
+   return data->rate_map_positions &&
+-      (data->render_target_count==1 || (attachment_probe && data->render_target_count==0 && data->depth.attachment)) &&
++      (data->render_target_count==1 || (stay_warped && data->render_target_count>1) || (attachment_probe && data->render_target_count==0 && data->depth.attachment)) &&
+       attachment_supported && data->render_target_array_length<=1 &&
+       data->render_target_width==data->rate_map_logical_size.width && data->render_target_height==data->rate_map_logical_size.height;
+ }
+@@ -815,18 +852,20 @@
+   }
+   if(encoder_current->type==EncoderType::Render && layoutAuditFrame(currentFrameId())) {
+     auto render=static_cast<RenderEncoderData *>(encoder_current);
+-    layoutAudit("pass frame=%llu encoder=%llu width=%u height=%u colors=%u samples=%u depth=%u",(unsigned long long)currentFrameId(),
++    layoutAudit("pass frame=%llu encoder=%llu width=%u height=%u colors=%u samples=%u depth=%u mapped=%u",(unsigned long long)currentFrameId(),
+         (unsigned long long)render->id,render->render_target_width,render->render_target_height,unsigned(render->render_target_count),
+-        unsigned(render->tile_barrier_pso_key.raster_sample_count),unsigned(bool(render->depth.attachment)));
++        unsigned(render->tile_barrier_pso_key.raster_sample_count),unsigned(bool(render->depth.attachment)),unsigned(!base_target && rateMapLayoutPass(render)));
+   }
+   if(encoder_current->type==EncoderType::Render) {
+     auto render=static_cast<RenderEncoderData *>(encoder_current);
+-    if(render->rate_map_target) {
++    {
+       // Same conditions as the mapped-position pass at encode time. Automatic
+       // base foveation restores ordinary layout itself.
+       const bool mapped=!base_target && rateMapLayoutPass(render);
+-      render->rate_map_target->rate_map_layout=mapped ? render->rate_map_positions : WMT::Reference<WMT::Buffer>();
+-      render->rate_map_target=nullptr;
++      for(auto &target:render->rate_map_targets) if(target) {
++        target->rate_map_layout=mapped ? render->rate_map_positions : WMT::Reference<WMT::Buffer>();
++        target=nullptr;
++      }
+     }
+     if(render->rate_map_depth_target) {
+       // Depth and stencil share the texture. A mapped pass leaves it in mapped
+@@ -1352,7 +1391,9 @@
+       encoder.setVertexBuffer(gpu_buffer_, 0, SM50_BINDING_INDEX_ARGUMENT_TABLE);
+       if (data->use_emulated_so)
+         encoder.setVertexBuffer(gpu_buffer_, 0, SM50_BINDING_INDEX_STREAM_OUTPUT0);
+-      if(position_mode) encoder.setFragmentBuffer(mapped_position ? WMT::Buffer(data->rate_map_positions) : WMT::Buffer(dummy_cbuffer_),0,SM50_BINDING_INDEX_RATE_MAP_POSITION);
++      // Cost breakdown only (valid at rate 1.0): bit 0 skips position translation, bit 1 read translation.
++      static const unsigned long warp_debug=std::strtoul(env::getEnvVar("DXMT_STAY_WARPED_DEBUG").c_str(),nullptr,10);
++      if(position_mode) encoder.setFragmentBuffer(mapped_position && !(warp_debug&1) ? WMT::Buffer(data->rate_map_positions) : WMT::Buffer(dummy_cbuffer_),0,SM50_BINDING_INDEX_RATE_MAP_POSITION);
+       if(position_mode) encoder.setFragmentBuffer(data->rate_map_read ? WMT::Buffer(data->rate_map_read) : WMT::Buffer(dummy_cbuffer_),0,SM50_BINDING_INDEX_RATE_MAP_READ);
+       encoder.setFragmentBuffer(gpu_buffer_, 0, SM50_BINDING_INDEX_CONSTANT_BUFFER);
+       encoder.setFragmentBuffer(gpu_buffer_, 0, SM50_BINDING_INDEX_ARGUMENT_TABLE);
+@@ -1454,6 +1495,12 @@
+       encoder.encodeCommands((const wmtcmd_compute_nop *)&setcmd);
+       setcmd.index = SM50_BINDING_INDEX_ARGUMENT_TABLE;
+       encoder.encodeCommands((const wmtcmd_compute_nop *)&setcmd);
++      static const bool compute_read_mode=env::getEnvVar("DXMT_RATE_MAP_POSITION")=="1";
++      if(compute_read_mode) {
++        setcmd.buffer = data->rate_map_read ? WMT::Buffer(data->rate_map_read) : WMT::Buffer(dummy_cbuffer_);
++        setcmd.index = SM50_BINDING_INDEX_RATE_MAP_READ;
++        encoder.encodeCommands((const wmtcmd_compute_nop *)&setcmd);
++      }
+       encoder.encodeCommands(&data->cmd_head);
+       data->fence_update.forEach([&](auto id) { encoder.updateFence(fence_pool_[id]); });
+       encoder.endEncoding();
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -193,7 +193,9 @@
+   WMT::Reference<WMT::Buffer> rate_map_positions;
+   WMTSize rate_map_logical_size={};
+   // Stay-warped experiment: the single colour target, and the layout of mapped textures this pass reads.
+-  Rc<Texture> rate_map_target, rate_map_depth_target;
++  std::array<Rc<Texture>, 8> rate_map_targets;
++  Rc<Texture> rate_map_depth_target;
++  bool rate_map_excluded = false;
+   WMT::Reference<WMT::Buffer> rate_map_read;
+   std::array<RenderEncoderColorAttachmentData, 8> colors;
+   RenderEncoderDepthAttachmentData depth;
+@@ -224,6 +226,7 @@
+ };
+ 
+ struct ComputeEncoderData : EncoderData {
++  WMT::Reference<WMT::Buffer> rate_map_read;
+   WMT::Reference<WMT::Buffer> base_foveation_forward;
+   WMT::Reference<WMT::ComputePipelineState> base_foveation_pipeline;
+ 
+@@ -729,6 +732,8 @@
+   WMTSize rate_map_logical_size={};
+ 
+   TBDRAuditStats tbdr_audit;
++  bool stay_warped_ready = false;
++  void prepareStayWarped();
+   WMT::Reference<WMT::Object> base_foveation_map;
+   WMT::Reference<WMT::Buffer> base_foveation_forward, base_foveation_inverse;
+   WMT::Reference<WMT::ComputePipelineState> base_foveation_pipeline;
+--- a/src/dxmt/dxmt_texture.hpp
++++ b/src/dxmt/dxmt_texture.hpp
+@@ -286,6 +286,8 @@
+   WMT::Reference<WMT::Object> rasterization_rate_map;
+   // Set while the contents are in a rate map's physical layout (DXMT_RATE_MAP_READ).
+   WMT::Reference<WMT::Buffer> rate_map_layout;
++  // Imported native storage (an OpenXR swapchain image): something outside DXMT reads it.
++  bool external_storage = false;
+   TextureViewKey fullView;
+ 
+   Rc<TextureAllocation> allocate(Flags<TextureAllocationFlag> flags);
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -66,7 +66,7 @@
+   @synchronized((id)map) {
+     id<MTLBuffer> buffer=objc_getAssociatedObject((id)map,&cache_key);
+     if(!buffer) {
+-      buffer=[map.device newBufferWithLength:(4+physical.width+physical.height+logical.width+logical.height+2)*sizeof(float) options:MTLResourceStorageModeShared];
++      buffer=[map.device newBufferWithLength:(4+physical.width+physical.height+2*(logical.width+logical.height)+2)*sizeof(float) options:MTLResourceStorageModeShared];
+       if(!buffer) return STATUS_SUCCESS;
+       float *values=buffer.contents;
+       values[0]=physical.width;values[1]=physical.height;values[2]=logical.width;values[3]=logical.height;
+@@ -82,6 +82,17 @@
+       forward+=logical.width+1;
+       for(NSUInteger i=0;i<=logical.height;++i)
+         forward[i]=[map mapScreenToPhysicalCoordinates:MTLCoordinate2DMake(.5f,i) forLayer:0].y;
++      // Integer loads: the physical texel holding each logical pixel centre, per axis.
++      float *texel=forward+logical.height+1;
++      for(NSUInteger i=0;i<logical.width;++i) {
++        float p=[map mapScreenToPhysicalCoordinates:MTLCoordinate2DMake(i+.5f,.5f) forLayer:0].x;
++        texel[i]=fminf(fmaxf(floorf(p),0),physical.width-1);
++      }
++      texel+=logical.width;
++      for(NSUInteger i=0;i<logical.height;++i) {
++        float p=[map mapScreenToPhysicalCoordinates:MTLCoordinate2DMake(.5f,i+.5f) forLayer:0].y;
++        texel[i]=fminf(fmaxf(floorf(p),0),physical.height-1);
++      }
+       objc_setAssociatedObject((id)map,&cache_key,(id)buffer,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+       [buffer release];
+     }
+@@ -92,6 +103,29 @@
+ 
+ // Bounded fixed-centre prototype; reuse the existing map/position transport.
+ static NTSTATUS
++_MTLDevice_newStereoRateMap(void *args) {
++  struct unixcall_stereo_rate_map *p=args;
++  p->ret=0;
++  @autoreleasepool {
++    id<MTLDevice> device=(id<MTLDevice>)p->device;
++    if(!p->width || !p->height || p->width>16384 || p->height>16384 || p->rate_percent<10 || p->rate_percent>100 ||
++        ![device supportsRasterizationRateMapWithLayerCount:1]) return STATUS_SUCCESS;
++    float outer=p->rate_percent/100.f;
++    // Sixteen columns: eight per eye, the middle two of each at full rate. Eight rows.
++    MTLRasterizationRateLayerDescriptor *layer=[[MTLRasterizationRateLayerDescriptor alloc]
++        initWithSampleCount:MTLSizeMake(16,8,1)];
++    for(unsigned i=0;i<16;++i) layer.horizontal[i]=@(((i&7)==3 || (i&7)==4)?1.f:outer);
++    for(unsigned i=0;i<8;++i) layer.vertical[i]=@((i==3 || i==4)?1.f:outer);
++    MTLRasterizationRateMapDescriptor *desc=[MTLRasterizationRateMapDescriptor
++        rasterizationRateMapDescriptorWithScreenSize:MTLSizeMake(p->width,p->height,1) layer:layer];
++    id<MTLRasterizationRateMap> map=[device newRasterizationRateMapWithDescriptor:desc];
++    [layer release];
++    p->ret=(obj_handle_t)map;
++  }
++  return STATUS_SUCCESS;
++}
++
++static NTSTATUS
+ _MTLDevice_newBaseFoveation(void *args) {
+   struct unixcall_base_foveation *p=args;
+   p->result=(struct WMTBaseFoveation){0};
+@@ -3872,6 +3906,7 @@
+     &_MTLDevice_retainRasterizationRateMap,
+     &_MTLDevice_rateMapInversePositions,
+     &_MTLDevice_newBaseFoveation,
++    &_MTLDevice_newStereoRateMap,
+ };
+ 
+ #ifndef DXMT_NATIVE
+@@ -4034,5 +4069,6 @@
+     &_MTLDevice_retainRasterizationRateMap,
+     &_MTLDevice_rateMapInversePositions,
+     &_MTLDevice_newBaseFoveation,
++    &_MTLDevice_newStereoRateMap,
+ };
+ #endif
+--- a/src/winemetal/winemetal.h
++++ b/src/winemetal/winemetal.h
+@@ -2188,4 +2188,8 @@
+ WINEMETAL_API void MTLDevice_newBaseFoveation(obj_handle_t device, uint32_t width, uint32_t height,
+     obj_handle_t pipeline, struct WMTBaseFoveation *result);
+ 
++// Stay-warped experiment: fixed map for a double-wide stereo target, one full-rate
++// region centred in each half. rate_percent is the peripheral rate per axis. +1 ownership.
++WINEMETAL_API obj_handle_t MTLDevice_newStereoRateMap(obj_handle_t device, uint32_t width, uint32_t height, uint32_t rate_percent);
++
+ #endif
+--- a/src/winemetal/winemetal_thunks.c
++++ b/src/winemetal/winemetal_thunks.c
+@@ -1457,3 +1457,11 @@
+   params.device=device;params.width=width;params.height=height;params.pipeline=pipeline;
+   UNIX_CALL(157,&params); *result=params.result;
+ }
++
++WINEMETAL_API obj_handle_t
++MTLDevice_newStereoRateMap(obj_handle_t device, uint32_t width, uint32_t height, uint32_t rate_percent) {
++  struct unixcall_stereo_rate_map params={0};
++  params.device=device;params.width=width;params.height=height;params.rate_percent=rate_percent;
++  UNIX_CALL(158,&params);
++  return params.ret;
++}
+--- a/src/winemetal/winemetal_thunks.h
++++ b/src/winemetal/winemetal_thunks.h
+@@ -473,6 +473,11 @@
+   uint32_t width, height;
+   struct WMTBaseFoveation result;
+ };
++
++struct unixcall_stereo_rate_map {
++  obj_handle_t device, ret;
++  uint32_t width, height, rate_percent;
++};
+ #pragma pack(pop)
+ 
+ #endif

@@ -1,0 +1,104 @@
+Subject: [experimental] Stay-warped passes on two-layer eye targets
+
+Unity's OpenXR plugin renders both eyes as the two layers of one multisampled
+texture (single-pass instanced) and draws the resolved layers into a two-layer
+swapchain. Under DXMT_STAY_WARPED a pass with up to two render-target layers
+is now mapped (Metal applies the one-layer map to each layer), 8x MSAA is
+accepted alongside 1x, 2x and 4x, and Sample, SampleLevel and Load on 2D array
+textures (multisampled too: Unity resolves 8x MSAA with Load) are translated
+like those on 2D textures, so the draw into the swapchain un-warps.
+DXMT_STAY_WARPED_LAYERS=1 restores the one-layer rule.
+
+The read flag moves to bit 9 so cached variants from earlier translations are
+not reused. DXMT_DEBUG_DUMP_SLICE picks the layer the diagnostic frame dump
+writes.
+
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -815,19 +815,21 @@
+ static bool
+ rateMapLayoutPass(const RenderEncoderData *data) {
+   static const bool attachment_probe=env::getEnvVar("DXMT_RATE_MAP_ATTACHMENT_PROBE")=="1";
++  // The automatic stereo profile also maps multi-target and two-layer (one per eye)
++  // passes and declines swapchain passes.
++  static const bool stay_warped=!env::getEnvVar("DXMT_STAY_WARPED").empty();
++  static const unsigned max_layers=[]{auto v=env::getEnvVar("DXMT_STAY_WARPED_LAYERS");return v.empty()?2u:unsigned(std::strtoul(v.c_str(),nullptr,10));}();
+   const bool attachment_supported=(!data->depth.attachment && !data->stencil.attachment &&
+       data->tile_barrier_pso_key.raster_sample_count==1) ||
+       (attachment_probe && data->depth.attachment &&
+        ((!data->stencil.attachment && data->depth.attachment->allocation->descriptor->pixelFormat()==WMTPixelFormatDepth32Float) ||
+         (data->depth.attachment==data->stencil.attachment && data->depth.attachment->allocation->descriptor->pixelFormat()==WMTPixelFormatDepth32Float_Stencil8)) &&
+        (data->tile_barrier_pso_key.raster_sample_count==1 || data->tile_barrier_pso_key.raster_sample_count==2 ||
+-        data->tile_barrier_pso_key.raster_sample_count==4));
+-  // The automatic stereo profile also maps multi-target passes and declines swapchain passes.
+-  static const bool stay_warped=!env::getEnvVar("DXMT_STAY_WARPED").empty();
++        data->tile_barrier_pso_key.raster_sample_count==4 || (stay_warped && max_layers>1 && data->tile_barrier_pso_key.raster_sample_count==8)));
+   if(data->rate_map_excluded) return false;
+   return data->rate_map_positions &&
+       (data->render_target_count==1 || (stay_warped && data->render_target_count>1) || (attachment_probe && data->render_target_count==0 && data->depth.attachment)) &&
+-      attachment_supported && data->render_target_array_length<=1 &&
++      attachment_supported && data->render_target_array_length<=(stay_warped ? max_layers : 1) &&
+       data->render_target_width==data->rate_map_logical_size.width && data->render_target_height==data->rate_map_logical_size.height;
+ }
+ 
+--- a/src/d3d11/d3d11_context_imm.cpp
++++ b/src/d3d11/d3d11_context_imm.cpp
+@@ -762,10 +762,12 @@
+     D3D11_TEXTURE2D_DESC desc={};source->GetDesc(&desc);
+     const bool bgra=desc.Format==DXGI_FORMAT_B8G8R8A8_UNORM || desc.Format==DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+     if(!bgra && desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM && desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) return;
++    static const unsigned dump_slice=unsigned(std::strtoul(env::getEnvVar("DXMT_DEBUG_DUMP_SLICE").c_str(),nullptr,10));
++    const unsigned dump_subresource=dump_slice<desc.ArraySize ? dump_slice*desc.MipLevels : 0;
+     desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;desc.MiscFlags=0;desc.MipLevels=desc.ArraySize=1;
+     Com<ID3D11Texture2D> staging;
+     if(FAILED(m_parent->CreateTexture2D(&desc,nullptr,&staging))) return;
+-    CopySubresourceRegion(staging.ptr(),0,0,0,0,source.ptr(),0,nullptr);
++    CopySubresourceRegion(staging.ptr(),0,0,0,0,source.ptr(),dump_subresource,nullptr);
+     D3D11_MAPPED_SUBRESOURCE mapped={};
+     if(FAILED(Map(staging.ptr(),0,D3D11_MAP_READ,0,&mapped))) return;
+     if(auto file=std::fopen(path.c_str(),"wb")) {
+--- a/src/airconv/nt/dxbc_converter_base.cpp
++++ b/src/airconv/nt/dxbc_converter_base.cpp
+@@ -1439,6 +1439,13 @@
+     Address = RateMapTexel(Address, Tex->Metadata, OwnPixel, Tex->RateMapMode);
+     break;
+   }
++  case Texture::texture2d_array:
++  case Texture::depth2d_array:
++  case Texture::texture2d_ms_array:
++  case Texture::depth_2d_ms_array:
++    // Two-layer eye targets share one map (Unity's MSAA resolve loads these).
++    Address = RateMapTexel(Address, Tex->Metadata, false, Tex->RateMapMode);
++    break;
+   default:
+     break;
+   }
+@@ -1724,6 +1731,8 @@
+   case Texture::depth2d_array:
+   case Texture::texture2d_array:
+     Coord = LoadOperand(sample.src_address, kMaskVecXY);
++    // Two-layer eye targets share one map: every layer has the same layout.
++    Coord = RateMapCoord(Coord, Tex->Metadata, Tex->RateMapMode);
+     ArrayIndex = LoadOperand(sample.src_address, kMaskComponentZ);
+     ArrayIndex = ClampArrayIndex(ArrayIndex, Tex->Metadata);
+     break;
+@@ -1790,6 +1799,8 @@
+   case Texture::depth2d_array:
+   case Texture::texture2d_array:
+     Coord = LoadOperand(sample.src_address, kMaskVecXY);
++    // Two-layer eye targets share one map: every layer has the same layout.
++    Coord = RateMapCoord(Coord, Tex->Metadata, Tex->RateMapMode);
+     ArrayIndex = LoadOperand(sample.src_address, kMaskComponentZ);
+     ArrayIndex = ClampArrayIndex(ArrayIndex, Tex->Metadata);
+     break;
+--- a/src/airconv/airconv_public.h
++++ b/src/airconv/airconv_public.h
+@@ -242,7 +242,7 @@
+   SM50_SHADER_FLAG_DEFUSE_FMA = 1 << 1,
+   SM50_SHADER_FLAG_RATE_MAP_POSITION = 1 << 2,
+   // Separate bit so variants cached before read translation are never reused.
+-  SM50_SHADER_FLAG_RATE_MAP_READ = 1 << 6, // bits 3 to 5 were earlier prototypes
++  SM50_SHADER_FLAG_RATE_MAP_READ = 1 << 9, // bits 3 to 8 were earlier versions (6: no array reads)
+ };
+ 
+ struct SM50_SHADER_COMMON_DATA {

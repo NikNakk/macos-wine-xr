@@ -1,0 +1,80 @@
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -4879,6 +4879,21 @@
+     InitializeGraphicsPipelineDesc<IndexedDraw>(pipelineDesc);
+ 
+     device->CreateGraphicsPipeline(&pipelineDesc, &pipeline);
++    if (tbdrAuditEnabled() && tbdrAuditDetail()) {
++      auto vs = pipelineDesc.VertexShader ? pipelineDesc.VertexShader->sha1().string() : "none";
++      auto ps = pipelineDesc.PixelShader ? pipelineDesc.PixelShader->sha1().string() : "none";
++      D3D11_DEPTH_STENCIL_DESC depth = {};
++      (state_.OutputMerger.DepthStencilState ? state_.OutputMerger.DepthStencilState : default_depth_stencil_state)->GetDesc(&depth);
++      EmitST([vs, ps, depth, colors=pipelineDesc.NumColorAttachments, samples=pipelineDesc.SampleCount,
++              format=pipelineDesc.DepthStencilFormat, sample_mask=pipelineDesc.SampleMask](ArgumentEncodingContext& enc) {
++        if (enc.tbdr_audit.active && tbdrAuditDetailRow())
++          tbdrAuditLog("pipeline encoder=%llu frame=%llu vs=%s ps=%s colors=%u samples=%u depth_format=%u depth_enable=%u depth_write=%u depth_func=%u stencil_enable=%u stencil_write=%u sample_mask=%u",
++            (unsigned long long)enc.currentRenderEncoder()->id, (unsigned long long)enc.currentFrameId(),
++            vs.c_str(), ps.c_str(), colors, samples, unsigned(format), unsigned(depth.DepthEnable),
++            unsigned(depth.DepthWriteMask), unsigned(depth.DepthFunc), unsigned(depth.StencilEnable),
++            unsigned(depth.StencilWriteMask), sample_mask);
++      });
++    }
+     EmitST([pso = std::move(pipeline)](ArgumentEncodingContext& enc) {
+       MTL_COMPILED_GRAPHICS_PIPELINE GraphicsPipeline{};
+       pso->GetPipeline(&GraphicsPipeline); // may block
+--- a/src/d3d11/d3d11_pipeline_cache.cpp
++++ b/src/d3d11/d3d11_pipeline_cache.cpp
+@@ -10,6 +10,7 @@
+ #include "../d3d10/d3d10_shader.hpp"
+ #include "../d3d10/d3d10_input_layout.hpp"
+ #include <cstring>
++#include "dxmt_tbdr_audit.hpp"
+ #include <shared_mutex>
+ 
+ namespace dxmt {
+@@ -207,6 +208,7 @@
+ 
+   std::unordered_map<MTL_GRAPHICS_PIPELINE_DESC, std::unique_ptr<MTLCompiledGraphicsPipeline>> pipelines_;
+   dxmt::mutex mutex_;
++  uint64_t dumped_bytes_ = 0; // diagnostic budget, protected by mutex_shares
+ 
+   std::unordered_map<MTL_GRAPHICS_PIPELINE_DESC, std::unique_ptr<MTLCompiledGeometryPipeline>> pipelines_gs_;
+   dxmt::mutex mutex_gs_;
+@@ -247,6 +249,19 @@
+       shader->bytecode_length = BytecodeLength;
+       memcpy(shader->bytecode, pBytecode, BytecodeLength);
+ #endif
++      // Explicit private diagnostic only: retain original DXBC without changing shaders.
++      static const auto dump_dir = env::getEnvVar("DXMT_TBDR_SHADER_DUMP");
++      if (tbdrAuditEnabled() && !dump_dir.empty() && BytecodeLength <= 1024 * 1024 &&
++          dumped_bytes_ + BytecodeLength <= 64 * 1024 * 1024) {
++        auto path = dump_dir + "/" + sha1.string() + ".dxbc";
++        if (auto file = std::fopen(path.c_str(), "wb")) {
++          auto bytes = std::fwrite(pBytecode, 1, BytecodeLength, file);
++          std::fclose(file);
++          dumped_bytes_ += bytes;
++          tbdrAuditLog("shader_dump sha1=%s bytes=%u written=%llu", sha1.string().c_str(),
++                       BytecodeLength, (unsigned long long)bytes);
++        }
++      }
+       return shaders_.emplace(sha1, std::move(shader)).first->second.get();
+     }
+   }
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -359,8 +359,13 @@
+         } else if (srv.texture.ptr()) {
+           assert(arg.Flags & MTL_SM50_SHADER_ARGUMENT_TEXTURE_MINLOD_CLAMP);
+           auto viewIdChecked = srv.texture->checkViewUseArray(srv.viewId, arg.Flags & MTL_SM50_SHADER_ARGUMENT_TEXTURE_ARRAY);
+-          encoded_buffer[arg.StructurePtrOffset] =
+-              access<stage>(srv.texture, viewIdChecked, ResourceAccess::Read).gpuResourceID;
++          auto &bound_view = access<stage>(srv.texture, viewIdChecked, ResourceAccess::Read);
++          encoded_buffer[arg.StructurePtrOffset] = bound_view.gpuResourceID;
++          if (tbdr_audit.active && stage == PipelineStage::Pixel && tbdrAuditDetailRow())
++            tbdrAuditLog("srv encoder=%llu frame=%llu stage=%u slot=%u resource=%p allocation=%p native=%llx view=%u",
++              (unsigned long long)currentRenderEncoder()->id, (unsigned long long)currentFrameId(),
++              unsigned(stage), unsigned(arg.SM50BindingSlot), srv.texture.ptr(), bound_view.allocation,
++              (unsigned long long)bound_view.texture.handle, unsigned(viewIdChecked));
+           encoded_buffer[arg.StructurePtrOffset + 1] = TextureMetadata(srv.texture->arrayLength(viewIdChecked), 0);
+           makeResident<stage, kind>(srv.texture.ptr(), viewIdChecked);
+         } else {

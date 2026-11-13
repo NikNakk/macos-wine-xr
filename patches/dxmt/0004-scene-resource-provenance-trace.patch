@@ -1,0 +1,99 @@
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -588,6 +588,10 @@
+   if (exposure) {
+     encoder_info->exposure = access(exposure, exposure->fullView, ResourceAccess::Read).texture;
+   }
++  sceneTrace("upscale encoder=%llu input=%llx depth=%llx motion=%llx output=%llx content_width=%u content_height=%u",
++      (unsigned long long)encoder_info->id, (unsigned long long)encoder_info->input.handle,
++      (unsigned long long)encoder_info->depth.handle, (unsigned long long)encoder_info->motion_vector.handle,
++      (unsigned long long)encoder_info->output.handle, props.input_content_width, props.input_content_height);
+   endPass();
+ }
+ 
+@@ -1111,6 +1115,20 @@
+         render_pass_info.visibility_buffer = readbacks.visibility->visibility_result_heap;
+       }
+       auto gpu_buffer_ = data->allocated_argbuf;
++      if (sceneTraceEnabled()) {
++      sceneTrace("render encoder=%llu command_buffer=%llu width=%u height=%u layers=%u colors=%u samples=%u depth=%llx stencil=%llx map=%llx pso=%llx label=%s",
++          (unsigned long long)data->id, (unsigned long long)seqId, data->render_target_width, data->render_target_height,
++          unsigned(data->render_target_array_length), unsigned(data->render_target_count),
++          unsigned(data->tile_barrier_pso_key.raster_sample_count), (unsigned long long)render_pass_info.depth.texture,
++          (unsigned long long)render_pass_info.stencil.texture, (unsigned long long)render_pass_info.rasterization_rate_map,
++          (unsigned long long)data->last_pso.handle, renderLabel(data).c_str());
++      for (unsigned i=0;i<8;++i) if (data->colors[i].attachment)
++        sceneTrace("attachment encoder=%llu slot=%u native=%llx resolve=%llx format=%u level=%u slice=%u load=%u store=%u",
++            (unsigned long long)data->id, i, (unsigned long long)render_pass_info.colors[i].texture,
++            (unsigned long long)render_pass_info.colors[i].resolve_texture,
++            unsigned(data->tile_barrier_pso_key.color_formats[i]), unsigned(data->colors[i].level),
++            unsigned(data->colors[i].slice), unsigned(data->colors[i].load_action), unsigned(data->colors[i].store_action));
++      }
+       auto encoder = cmdbuf.renderCommandEncoder(render_pass_info);
+       if (encoderLabelsEnabled())
+         encoder.setLabel(WMT::String::string(renderLabel(data).c_str(), WMTUTF8StringEncoding));
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -31,6 +31,7 @@
+ #include "dxmt_scaler.hpp"
+ #include "dxmt_statistics.hpp"
+ #include "dxmt_texture.hpp"
++#include "dxmt_scene_trace.hpp"
+ #include "log/log.hpp"
+ #include "rc/util_rc_ptr.hpp"
+ #include "airconv_public.h"
+@@ -379,6 +380,10 @@
+         track<stage>(tracker, flags);
+       }
+     }
++    sceneTrace("access encoder=%llu stage=%u flags=%d resource=%p allocation=%p native=%llx width=%u height=%u format=%u samples=%u layers=%u level=%u slice=%u",
++        (unsigned long long)(encoder_current ? encoder_current->id : 0), unsigned(stage), flags,
++        texture.ptr(), allocation, (unsigned long long)allocation->texture().handle, texture->width(), texture->height(),
++        unsigned(texture->pixelFormat()), texture->sampleCount(), texture->arrayLength(), level, slice);
+     return allocation->texture();
+   }
+ 
+@@ -402,6 +407,10 @@
+         }
+       }
+     }
++    sceneTrace("access encoder=%llu stage=%u flags=%d resource=%p allocation=%p native=%llx width=%u height=%u format=%u samples=%u layers=%u view=%llx",
++        (unsigned long long)(encoder_current ? encoder_current->id : 0), unsigned(stage), flags,
++        texture.ptr(), allocation, (unsigned long long)view.texture.handle, texture->width(), texture->height(),
++        unsigned(texture->pixelFormat()), texture->sampleCount(), texture->arrayLength(), (unsigned long long)viewId);
+     return view;
+   }
+ 
+--- /dev/null
++++ b/src/dxmt/dxmt_scene_trace.hpp
+@@ -0,0 +1,30 @@
++#pragma once
++#include "util_env.hpp"
++#include "log/log.hpp"
++#include <atomic>
++#include <cstdio>
++#include <cstdlib>
++#include <cstdarg>
++namespace dxmt {
++// Diagnostic only. No map selection, resource mutation, flush or GPU wait.
++inline bool sceneTraceEnabled() {
++  static const bool enabled = env::getEnvVar("DXMT_SCENE_TRACE") == "1";
++  return enabled;
++}
++inline void sceneTrace(const char *format, ...) {
++  if (!sceneTraceEnabled()) return;
++  static const unsigned limit = [] {
++    auto value = env::getEnvVar("DXMT_SCENE_TRACE_LIMIT");
++    if (value.empty()) return 50000u;
++    char *end = nullptr; auto n = std::strtoul(value.c_str(), &end, 10);
++    return end && !*end && n > 0 && n <= 1000000 ? unsigned(n) : 50000u;
++  }();
++  static std::atomic<unsigned> count{0};
++  unsigned sequence = count.fetch_add(1, std::memory_order_relaxed);
++  if (sequence > limit) return;
++  if (sequence == limit) { Logger::info("SCENE truncated limit=" + std::to_string(limit)); return; }
++  char row[1536];
++  va_list args; va_start(args, format); std::vsnprintf(row, sizeof(row), format, args); va_end(args);
++  Logger::info(std::string("SCENE ") + row);
++}
++}

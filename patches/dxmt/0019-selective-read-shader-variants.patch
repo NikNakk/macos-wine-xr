@@ -1,0 +1,214 @@
+Subject: [experimental] Omit read translation for passes with no mapped reads
+
+Opt-in DXMT_RATE_MAP_SELECTIVE_READ=1. Retain position translation and the
+full fallback for any mapped read, geometry/tessellation and compute. Decide
+after pass recording/merging; shader and PSO cache keys include the variant.
+
+--- a/src/d3d11/d3d11_shader.hpp
++++ b/src/d3d11/d3d11_shader.hpp
+@@ -104,11 +104,12 @@
+   bool dual_source_blending;
+   bool disable_depth_output;
+   uint32_t unorm_output_reg_mask;
++  bool rate_map_read = true;
+   bool operator==(const this_type &rhs) const {
+     return sample_mask == rhs.sample_mask &&
+            dual_source_blending == rhs.dual_source_blending &&
+            disable_depth_output == rhs.disable_depth_output &&
+-           unorm_output_reg_mask == rhs.unorm_output_reg_mask;
++           unorm_output_reg_mask == rhs.unorm_output_reg_mask && rate_map_read == rhs.rate_map_read;
+   }
+ };
+ 
+--- a/src/d3d11/d3d11_shader.cpp
++++ b/src/d3d11/d3d11_shader.cpp
+@@ -48,12 +48,13 @@
+ class GeneralShaderCompileTask : public CompiledShader {
+ public:
+   GeneralShaderCompileTask(MTLD3D11Device *pDevice, ManagedShader shader,
+-                           Proc &&proc, std::string func_name, const Sha1Digest& variant_digest)
++                           Proc &&proc, std::string func_name, const Sha1Digest& variant_digest,
++                           SM50_SHADER_FLAG flags = getGlobalShaderFlag())
+       : CompiledShader(), proc(std::forward<Proc>(proc)), func_name(func_name), device_(pDevice),
+         shader_(shader), variant_digest_(variant_digest) {
+     sm50_common.type = SM50_SHADER_COMMON;
+     sm50_common.metal_version = (SM50_SHADER_METAL_VERSION)pDevice->GetDXMTDevice().metalVersion();
+-    sm50_common.flags = getGlobalShaderFlag();
++    sm50_common.flags = flags;
+     sm50_common.next = nullptr;
+   }
+ 
+@@ -189,7 +190,10 @@
+ CreateVariantShader(MTLD3D11Device *pDevice, ManagedShader shader,
+                     ShaderVariantPixel variant) {
+   Sha1HashState h;
+-  h.update(getGlobalShaderFlag());
++  auto flags = getGlobalShaderFlag();
++  if (!variant.rate_map_read)
++    flags = SM50_SHADER_FLAG(unsigned(flags) & ~unsigned(SM50_SHADER_FLAG_RATE_MAP_READ));
++  h.update(flags);
+   h.update(variant.sample_mask);
+   h.update(variant.unorm_output_reg_mask);
+   h.update(variant.dual_source_blending);
+@@ -219,7 +223,7 @@
+     return compile_result;
+   };
+   return std::make_unique<GeneralShaderCompileTask<decltype(proc)>>(
+-      pDevice, shader, std::move(proc), func_name, variant_digest);
++      pDevice, shader, std::move(proc), func_name, variant_digest, flags);
+ };
+ 
+ template <>
+--- a/src/d3d11/d3d11_pipeline.hpp
++++ b/src/d3d11/d3d11_pipeline.hpp
+@@ -13,6 +13,7 @@
+   ManagedShader DomainShader;
+   ManagedShader GeometryShader;
+   ManagedShader PixelShader;
++  bool RateMapRead = true;
+   IMTLD3D11BlendState *BlendState;
+   ManagedInputLayout InputLayout;
+   IMTLD3D11StreamOutputLayout *SOLayout;
+@@ -52,6 +53,7 @@
+     dxmt::HashState state;
+     state.add((size_t)v.VertexShader);
+     state.add((size_t)v.PixelShader);
++    state.add(v.RateMapRead);
+     state.add((size_t)v.HullShader);
+     state.add((size_t)v.DomainShader);
+     state.add((size_t)v.GeometryShader);
+@@ -122,7 +124,8 @@
+       }
+     }
+     return (x.VertexShader == y.VertexShader) &&
+-           (x.PixelShader == y.PixelShader) && (x.HullShader == y.HullShader) &&
++           (x.PixelShader == y.PixelShader) && (x.RateMapRead == y.RateMapRead) &&
++           (x.HullShader == y.HullShader) &&
+            (x.DomainShader == y.DomainShader) && 
+            (x.GeometryShader == y.GeometryShader) &&
+            (x.InputLayout == y.InputLayout) &&
+--- a/src/d3d11/d3d11_pipeline.cpp
++++ b/src/d3d11/d3d11_pipeline.cpp
+@@ -38,7 +38,7 @@
+       PixelShader = pDesc->PixelShader->get_shader(ShaderVariantPixel{
+           pDesc->SampleMask, pDesc->BlendState->IsDualSourceBlending(),
+           depth_stencil_format == WMTPixelFormatInvalid,
+-          unorm_output_reg_mask});
++          unorm_output_reg_mask, pDesc->RateMapRead});
+       ps_valid_render_targets = pDesc->PixelShader->reflection().PSValidRenderTargets;
+     } else {
+       PixelShader = nullptr;
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -4926,6 +4926,14 @@
+     InitializeGraphicsPipelineDesc<IndexedDraw>(pipelineDesc);
+ 
+     device->CreateGraphicsPipeline(&pipelineDesc, &pipeline);
++    MTLCompiledGraphicsPipeline *pipeline_no_read = nullptr;
++    static const bool selective_read = env::getEnvVar("DXMT_RATE_MAP_SELECTIVE_READ") == "1" &&
++        env::getEnvVar("DXMT_RATE_MAP_POSITION") == "1" &&
++        env::getEnvVar("DXMT_RATE_MAP_DIAGNOSTIC_SHADER_MASK").empty();
++    if (selective_read && pipelineDesc.PixelShader) {
++      pipelineDesc.RateMapRead = false;
++      device->CreateGraphicsPipeline(&pipelineDesc, &pipeline_no_read);
++    }
+     if (tbdrAuditEnabled() && tbdrAuditDetail()) {
+       auto vs = pipelineDesc.VertexShader ? pipelineDesc.VertexShader->sha1().string() : "none";
+       auto ps = pipelineDesc.PixelShader ? pipelineDesc.PixelShader->sha1().string() : "none";
+@@ -4941,7 +4949,7 @@
+             unsigned(depth.StencilWriteMask), sample_mask);
+       });
+     }
+-    EmitST([pso = std::move(pipeline)](ArgumentEncodingContext& enc) {
++    EmitST([pso = std::move(pipeline), pipeline_no_read](ArgumentEncodingContext& enc) {
+       MTL_COMPILED_GRAPHICS_PIPELINE GraphicsPipeline{};
+       pso->GetPipeline(&GraphicsPipeline); // may block
+       if (!GraphicsPipeline.PipelineState)
+@@ -4950,6 +4958,13 @@
+       cmd.type = WMTRenderCommandSetPSO;
+       cmd.pso = GraphicsPipeline.PipelineState;
+       enc.currentRenderEncoder()->last_pso = GraphicsPipeline.PipelineState;
++      if (pipeline_no_read) {
++        MTL_COMPILED_GRAPHICS_PIPELINE ordinary{};
++        pipeline_no_read->GetPipeline(&ordinary);
++        if (ordinary.PipelineState)
++          enc.currentRenderEncoder()->no_read_pipelines.emplace_back(
++              GraphicsPipeline.PipelineState, ordinary.PipelineState);
++      }
+     });
+ 
+     cmdbuf_state = CommandBufferState::RenderPipelineReady;
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -223,6 +223,8 @@
+   bool use_emulated_so = 0;
+   TileBarrierPSOKey tile_barrier_pso_key = {};
+   WMT::RenderPipelineState last_pso = {};
++  // Pipeline cache owns both handles. Decide after all resource bindings and pass merging.
++  std::vector<std::pair<WMT::RenderPipelineState, WMT::RenderPipelineState>> no_read_pipelines;
+ };
+ 
+ struct ComputeEncoderData : EncoderData {
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -1378,6 +1378,25 @@
+         }
+         if(tbdrAuditDetailRow())tbdrAuditLog("render seq=%llu frame=%llu encoder=%llu label=%s",(unsigned long long)seqId,(unsigned long long)currentFrameId(),(unsigned long long)data->id,renderLabel(data).c_str());
+       }
++      // Whole-pass selection is conservative: one mapped read keeps every translated
++      // shader in the pass. This also handles SRV changes after the first PSO bind.
++      if (!data->no_read_pipelines.empty()) {
++        for (auto cmd = reinterpret_cast<wmtcmd_base *>(&data->cmd_head); cmd;
++             cmd = reinterpret_cast<wmtcmd_base *>(cmd->next.get())) {
++          if (cmd->type != WMTRenderCommandSetPSO) continue;
++          auto set = reinterpret_cast<wmtcmd_render_setpso *>(cmd);
++          for (const auto &pair : data->no_read_pipelines) {
++            if (set->pso != pair.first.handle) continue;
++            if (!data->rate_map_read) {
++              set->pso = pair.second;
++              if (tbdr_audit.active) ++tbdr_audit.read_ordinary;
++            } else if (tbdr_audit.active) {
++              ++tbdr_audit.read_capable;
++            }
++            break;
++          }
++        }
++      }
+       auto encoder = cmdbuf.renderCommandEncoder(render_pass_info);
+       if (encoderLabelsEnabled())
+         encoder.setLabel(WMT::String::string(renderLabel(data).c_str(), WMTUTF8StringEncoding));
+@@ -1860,6 +1879,8 @@
+         r0->cmd_head.next.set(nullptr);
+         r0->cmd_tail = (wmtcmd_base *)&r0->cmd_head;
+       }
++      r1->no_read_pipelines.insert(r1->no_read_pipelines.end(),
++                                  r0->no_read_pipelines.begin(), r0->no_read_pipelines.end());
+       r1->use_tessellation = r0->use_tessellation || r1->use_tessellation;
+       r1->use_geometry = r0->use_geometry || r1->use_geometry;
+       r1->use_emulated_so = r0->use_emulated_so || r1->use_emulated_so;
+--- a/src/dxmt/dxmt_tbdr_audit.hpp
++++ b/src/dxmt/dxmt_tbdr_audit.hpp
+@@ -33,6 +33,7 @@
+  bool active=false;
+  uint64_t render_before=0,clear_before=0,resolve_before=0;
+  uint64_t mapped_render=0;
++ uint64_t read_ordinary=0,read_capable=0;
+  uint64_t render_after=0,clear_after=0,resolve_after=0,compute=0,blit=0,temporal=0,present=0;
+  uint64_t signals=0,waits=0,timestamps=0,fence_waits=0;
+  uint64_t load_proxy=0,store_proxy=0,resolve_proxy=0,shaderwrite_proxy=0,pfv_proxy=0,unknown_formats=0;
+--- a/src/dxmt/dxmt_command_queue.cpp
++++ b/src/dxmt/dxmt_command_queue.cpp
+@@ -280,11 +280,11 @@
+ 
+     if(chunk.audit.active){
+       auto &a=chunk.audit;
+-      tbdrAuditLog("cb queue=%p seq=%llu frame=%llu gpu_start_ns=%llu gpu_end_ns=%llu status=%u init_wait=%u render_before=%llu render_after=%llu clear_before=%llu clear_after=%llu resolve_before=%llu resolve_after=%llu compute=%llu blit=%llu temporal=%llu present=%llu mapped_render=%llu signals=%llu waits=%llu timestamps=%llu fence_waits=%llu load_proxy=%llu store_proxy=%llu resolve_proxy=%llu shaderwrite_proxy=%llu pfv_proxy=%llu unknown_formats=%llu reject_map=%llu reject_layout=%llu reject_argbuf=%llu reject_attachment=%llu reject_action=%llu reject_dependency=%llu blit_ops=%llu texture_copies=%llu buffer_copies=%llu prepare_ms=%.6f encode_ms=%.6f",
++      tbdrAuditLog("cb queue=%p seq=%llu frame=%llu gpu_start_ns=%llu gpu_end_ns=%llu status=%u init_wait=%u render_before=%llu render_after=%llu clear_before=%llu clear_after=%llu resolve_before=%llu resolve_after=%llu compute=%llu blit=%llu temporal=%llu present=%llu mapped_render=%llu read_ordinary=%llu read_capable=%llu signals=%llu waits=%llu timestamps=%llu fence_waits=%llu load_proxy=%llu store_proxy=%llu resolve_proxy=%llu shaderwrite_proxy=%llu pfv_proxy=%llu unknown_formats=%llu reject_map=%llu reject_layout=%llu reject_argbuf=%llu reject_attachment=%llu reject_action=%llu reject_dependency=%llu blit_ops=%llu texture_copies=%llu buffer_copies=%llu prepare_ms=%.6f encode_ms=%.6f",
+         this,(unsigned long long)chunk.chunk_id,(unsigned long long)chunk.frame_,
+         (unsigned long long)chunk.attached_cmdbuf.gpuStartTime(),(unsigned long long)chunk.attached_cmdbuf.gpuEndTime(),
+         unsigned(chunk.attached_cmdbuf.status()),unsigned(chunk.resource_initializer_event_id!=0),
+-        a.render_before,a.render_after,a.clear_before,a.clear_after,a.resolve_before,a.resolve_after,a.compute,a.blit,a.temporal,a.present,a.mapped_render,
++        a.render_before,a.render_after,a.clear_before,a.clear_after,a.resolve_before,a.resolve_after,a.compute,a.blit,a.temporal,a.present,a.mapped_render,a.read_ordinary,a.read_capable,
+         a.signals,a.waits,a.timestamps,a.fence_waits,a.load_proxy,a.store_proxy,a.resolve_proxy,a.shaderwrite_proxy,a.pfv_proxy,a.unknown_formats,
+         a.merge_map,a.merge_layout,a.merge_argbuf,a.merge_attachment,a.merge_action,a.merge_dependency,a.blit_ops,a.texture_copies,a.buffer_copies,a.prepare_ms,a.encode_ms);
+     }

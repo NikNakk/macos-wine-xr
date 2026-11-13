@@ -1,0 +1,141 @@
+Subject: [diagnostic] Per-pass GPU timing
+
+DXMT_PASS_TIMING=1 attaches Metal stage-boundary timestamp counters to every
+render pass and prints, every five seconds, the vertex and fragment GPU time
+summed per pass shape (size, layers, samples, formats, load/store actions,
+whether a rate map is bound). Compute and blit passes are not sampled. Off by
+default; no effect on rendering.
+
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -603,6 +603,120 @@
+   return STATUS_SUCCESS;
+ }
+ 
++
++// Diagnostic (DXMT_PASS_TIMING=1): GPU time of every render pass, from Metal's stage-boundary
++// timestamp counters, summed per pass shape and printed to stderr every five seconds as
++// "PASS_TIMING <label> n=<passes> vertex_ms=<sum> fragment_ms=<sum>". Fragment time covers
++// tile load, shading and store. Compute and blit passes are not sampled.
++#define PASS_TIMING_MAX_PASSES 256
++#define PASS_TIMING_MAX_LABELS 256
++struct pass_timing_cb {
++  id<MTLCounterSampleBuffer> buffer;
++  unsigned count;
++  char labels[PASS_TIMING_MAX_PASSES][72];
++};
++static struct { char label[72]; double vertex, fragment; unsigned long n; } pass_timing_rows[PASS_TIMING_MAX_LABELS];
++static unsigned pass_timing_row_count;
++static double pass_timing_cb_span, pass_timing_last_print;
++static unsigned long pass_timing_cbs;
++static NSMutableArray *pass_timing_pool;
++static NSObject *pass_timing_lock;
++static char pass_timing_key;
++
++static int
++pass_timing_enabled(void) {
++  static int enabled = -1;
++  if (enabled < 0) { const char *v = getenv("DXMT_PASS_TIMING"); enabled = v && v[0] == '1'; }
++  return enabled;
++}
++
++static void
++pass_timing_finish(struct pass_timing_cb *state, id<MTLCommandBuffer> cmdbuf) {
++  NSData *data = state->count ? [state->buffer resolveCounterRange:NSMakeRange(0, state->count * 4)] : nil;
++  const MTLCounterResultTimestamp *ts = data.bytes;
++  @synchronized(pass_timing_lock) {
++    for (unsigned i = 0; ts && i < state->count; i++) {
++      const MTLCounterResultTimestamp *s = ts + i * 4;
++      if (s[0].timestamp == MTLCounterErrorValue || s[1].timestamp == MTLCounterErrorValue ||
++          s[2].timestamp == MTLCounterErrorValue || s[3].timestamp == MTLCounterErrorValue) continue;
++      unsigned row = 0;
++      while (row < pass_timing_row_count && strcmp(pass_timing_rows[row].label, state->labels[i])) row++;
++      if (row == PASS_TIMING_MAX_LABELS) continue;
++      if (row == pass_timing_row_count) { strcpy(pass_timing_rows[row].label, state->labels[i]); pass_timing_row_count++; }
++      pass_timing_rows[row].vertex += (double)(s[1].timestamp - s[0].timestamp) / 1e6;
++      pass_timing_rows[row].fragment += (double)(s[3].timestamp - s[2].timestamp) / 1e6;
++      pass_timing_rows[row].n++;
++    }
++    pass_timing_cb_span += (cmdbuf.GPUEndTime - cmdbuf.GPUStartTime) * 1e3;
++    pass_timing_cbs++;
++    [pass_timing_pool addObject:state->buffer];
++    double now = CFAbsoluteTimeGetCurrent();
++    if (!pass_timing_last_print) pass_timing_last_print = now;
++    if (now - pass_timing_last_print >= 5.0) {
++      fprintf(stderr, "PASS_TIMING_INTERVAL seconds=%.2f command_buffers=%lu cb_span_ms=%.1f\n",
++              now - pass_timing_last_print, pass_timing_cbs, pass_timing_cb_span);
++      for (unsigned row = 0; row < pass_timing_row_count; row++)
++        fprintf(stderr, "PASS_TIMING %s n=%lu vertex_ms=%.2f fragment_ms=%.2f\n", pass_timing_rows[row].label,
++                pass_timing_rows[row].n, pass_timing_rows[row].vertex, pass_timing_rows[row].fragment);
++      pass_timing_row_count = 0; pass_timing_cb_span = 0; pass_timing_cbs = 0; pass_timing_last_print = now;
++      memset(pass_timing_rows, 0, sizeof(pass_timing_rows));
++    }
++  }
++  [state->buffer release];
++  free(state);
++}
++
++static void
++pass_timing_attach(id<MTLCommandBuffer> cmdbuf, MTLRenderPassDescriptor *descriptor, const struct WMTRenderPassInfo *info) {
++  static dispatch_once_t once;
++  static id<MTLCounterSet> counter_set;
++  dispatch_once(&once, ^{
++    pass_timing_lock = [NSObject new]; pass_timing_pool = [NSMutableArray new];
++    id<MTLDevice> device = cmdbuf.device;
++    if ([device supportsCounterSampling:MTLCounterSamplingPointAtStageBoundary])
++      for (id<MTLCounterSet> set in device.counterSets)
++        if ([set.name isEqualToString:MTLCommonCounterSetTimestamp]) counter_set = [set retain];
++    fprintf(stderr, "PASS_TIMING %s\n", counter_set ? "enabled" : "unavailable: no stage-boundary timestamp counters");
++  });
++  if (!counter_set) return;
++  NSValue *value = objc_getAssociatedObject(cmdbuf, &pass_timing_key);
++  struct pass_timing_cb *state = value.pointerValue;
++  if (!state) {
++    state = calloc(1, sizeof(*state));
++    @synchronized(pass_timing_lock) {
++      if (pass_timing_pool.count) { state->buffer = [pass_timing_pool.lastObject retain]; [pass_timing_pool removeLastObject]; }
++    }
++    if (!state->buffer) {
++      MTLCounterSampleBufferDescriptor *d = [MTLCounterSampleBufferDescriptor new];
++      d.counterSet = counter_set; d.storageMode = MTLStorageModeShared; d.sampleCount = PASS_TIMING_MAX_PASSES * 4;
++      state->buffer = [cmdbuf.device newCounterSampleBufferWithDescriptor:d error:nil];
++      [d release];
++    }
++    if (!state->buffer) { free(state); return; }
++    objc_setAssociatedObject(cmdbuf, &pass_timing_key, [NSValue valueWithPointer:state], OBJC_ASSOCIATION_RETAIN);
++    [cmdbuf addCompletedHandler:^(id<MTLCommandBuffer> done) { pass_timing_finish(state, done); }];
++  }
++  if (state->count == PASS_TIMING_MAX_PASSES) return;
++  unsigned colors = 0;
++  id<MTLTexture> first = nil;
++  for (unsigned i = 0; i < 8; i++)
++    if (info->colors[i].texture) { colors++; if (!first) first = (id<MTLTexture>)info->colors[i].texture; }
++  id<MTLTexture> depth = (id<MTLTexture>)(info->depth.texture ? info->depth.texture : info->stencil.texture);
++  id<MTLTexture> shape = first ? first : depth;
++  snprintf(state->labels[state->count], sizeof(state->labels[0]), "%lux%lu layers=%u s%lu colors=%u fmt=%lu load=%d store=%d depth=%lu dload=%d dstore=%d mapped=%d",
++           (unsigned long)shape.width, (unsigned long)shape.height, (unsigned)info->render_target_array_length,
++           (unsigned long)shape.sampleCount, colors, (unsigned long)first.pixelFormat,
++           first ? (int)info->colors[0].load_action : -1, first ? (int)info->colors[0].store_action : -1,
++           (unsigned long)depth.pixelFormat, depth ? (int)info->depth.load_action : -1, depth ? (int)info->depth.store_action : -1,
++           info->rasterization_rate_map != 0);
++  MTLRenderPassSampleBufferAttachmentDescriptor *a = descriptor.sampleBufferAttachments[0];
++  unsigned base = state->count * 4;
++  a.sampleBuffer = state->buffer;
++  a.startOfVertexSampleIndex = base; a.endOfVertexSampleIndex = base + 1;
++  a.startOfFragmentSampleIndex = base + 2; a.endOfFragmentSampleIndex = base + 3;
++  state->count++;
++}
++
+ static NTSTATUS
+ _MTLCommandBuffer_renderCommandEncoder(void *obj) {
+   struct unixcall_generic_obj_uint64_obj_ret *params = obj;
+@@ -657,6 +771,9 @@
+     descriptor.tileHeight = info->tile_height;
+   }
+ 
++  if (pass_timing_enabled())
++    pass_timing_attach((id<MTLCommandBuffer>)params->handle, descriptor, info);
++
+   params->ret = (obj_handle_t)[(id<MTLCommandBuffer>)params->handle renderCommandEncoderWithDescriptor:descriptor];
+ 
+   [descriptor release];

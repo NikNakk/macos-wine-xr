@@ -1,0 +1,149 @@
+diff --git a/include/dxmt_native_interop.h b/include/dxmt_native_interop.h
+--- a/include/dxmt_native_interop.h
++++ b/include/dxmt_native_interop.h
+@@ -83,6 +83,15 @@
+ struct IDXMTNativeContext1 : public IUnknown {
+   virtual HRESULT STDMETHODCALLTYPE SetRasterizationRateMap(UINT64 map) = 0;
+ };
++/* Explicit per-resource binding. Immediate context only; DEFAULT, single-mip,
++ * single-sample, non-array colour RTs. The caller uses a compatible single
++ * colour render pass without depth. The binding does not apply to other RTs,
++ * and follows the resource through view changes. Null map removes it. */
++static const GUID DXMT_IID_NATIVE_CONTEXT2 = {
++    0x43564649, 0xb3b8, 0x4ee3, {0x8a, 0xdd, 0x2c, 0x86, 0x77, 0x9b, 0x3a, 0x50}};
++struct IDXMTNativeContext2 : public IUnknown {
++  virtual HRESULT STDMETHODCALLTYPE SetRenderTargetRasterizationRateMap(ID3D11Texture2D *target, UINT64 map) = 0;
++};
+ struct IDXMTNativeDevice : public IUnknown {
+   virtual HRESULT STDMETHODCALLTYPE ImportSharedTexture(
+       const char *bootstrap_name, const D3D11_TEXTURE2D_DESC *desc,
+diff --git a/src/winemetal/winemetal.h b/src/winemetal/winemetal.h
+--- a/src/winemetal/winemetal.h
++++ b/src/winemetal/winemetal.h
+@@ -2179,5 +2179,6 @@
+ );
+ 
+ WINEMETAL_API obj_handle_t MTLDevice_retainRasterizationRateMap(obj_handle_t device, obj_handle_t map);
++WINEMETAL_API obj_handle_t MTLDevice_retainRasterizationRateMapForSize(obj_handle_t device, obj_handle_t map, uint32_t width, uint32_t height);
+ 
+ #endif
+diff --git a/src/winemetal/winemetal_thunks.c b/src/winemetal/winemetal_thunks.c
+--- a/src/winemetal/winemetal_thunks.c
++++ b/src/winemetal/winemetal_thunks.c
+@@ -1428,3 +1428,15 @@
+   UNIX_CALL(155, &params);
+   return params.ret;
+ }
++
++WINEMETAL_API obj_handle_t
++MTLDevice_retainRasterizationRateMapForSize(obj_handle_t device, obj_handle_t map, uint32_t width, uint32_t height) {
++  if (!device || !map) return 0;
++  struct WMTSize size = {width, height, 1};
++  struct unixcall_mtldevice_retainobject params = {0};
++  params.device = device;
++  params.object = map;
++  WMT_MEMPTR_SET(params.info, &size);
++  UNIX_CALL(155, &params);
++  return params.ret;
++}
+diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -38,6 +38,13 @@
+       ![object respondsToSelector:@selector(device)]) return STATUS_SUCCESS;
+   id<MTLRasterizationRateMap> map = object;
+   if (map.device != (id<MTLDevice>)params->device || map.layerCount != 1) return STATUS_SUCCESS;
++  if (params->info.ptr) {
++    const struct WMTSize *size = params->info.ptr;
++    MTLSize logical = map.screenSize;
++    MTLSize physical = [map physicalSizeForLayer:0];
++    if (logical.width != size->width || logical.height != size->height ||
++        physical.width > size->width || physical.height > size->height) return STATUS_SUCCESS;
++  }
+   params->ret = (obj_handle_t)[map retain];
+   return STATUS_SUCCESS;
+ }
+diff --git a/src/d3d11/d3d11_context_imm.cpp b/src/d3d11/d3d11_context_imm.cpp
+--- a/src/d3d11/d3d11_context_imm.cpp
++++ b/src/d3d11/d3d11_context_imm.cpp
+@@ -73,7 +73,7 @@
+   return {dynamic->immediateName().ptr(), dynamic->immediateSuballocation()};
+ }
+ 
+-class MTLD3D11ImmediateContext : public ImmediateContextBase, public IDXMTNativeContext1 {
++class MTLD3D11ImmediateContext : public ImmediateContextBase, public IDXMTNativeContext1, public IDXMTNativeContext2 {
+ public:
+   MTLD3D11ImmediateContext(MTLD3D11Device *pDevice, CommandQueue &cmd_queue) :
+       ImmediateContextBase(pDevice, ctx_state, pDevice->mutex),
+@@ -96,6 +96,11 @@
+ 
+     *ppvObject = nullptr;
+ 
++    if (riid == DXMT_IID_NATIVE_CONTEXT2) {
++      *ppvObject = static_cast<IDXMTNativeContext2 *>(this);
++      AddRef();
++      return S_OK;
++    }
+     if (riid == DXMT_IID_NATIVE_CONTEXT1) {
+       *ppvObject = static_cast<IDXMTNativeContext1 *>(this);
+       AddRef();
+@@ -140,6 +145,33 @@
+     InvalidateCurrentPass(true);
+     EmitST([map = std::move(retained)](ArgumentEncodingContext &enc) mutable {
+       enc.rasterization_rate_map = std::move(map);
++    });
++    return S_OK;
++  }
++
++  HRESULT STDMETHODCALLTYPE SetRenderTargetRasterizationRateMap(ID3D11Texture2D *target, UINT64 map) override {
++    if (!target) return E_INVALIDARG;
++    std::lock_guard<d3d11_device_mutex> lock(mutex);
++    ID3D11Device *owner = nullptr;
++    target->GetDevice(&owner);
++    bool own = owner == static_cast<ID3D11Device *>(m_parent);
++    if (owner) owner->Release();
++    if (!own) return E_INVALIDARG;
++    D3D11_TEXTURE2D_DESC desc;
++    target->GetDesc(&desc);
++    if (desc.Usage != D3D11_USAGE_DEFAULT || desc.ArraySize != 1 || desc.MipLevels != 1 ||
++        desc.SampleDesc.Count != 1 || !(desc.BindFlags & D3D11_BIND_RENDER_TARGET)) return E_INVALIDARG;
++    auto texture = GetTexture(target);
++    if (!texture) return E_INVALIDARG;
++    WMT::Reference<WMT::Object> retained;
++    if (map) {
++      auto handle = MTLDevice_retainRasterizationRateMapForSize(m_parent->GetMTLDevice().handle, map, desc.Width, desc.Height);
++      if (!handle) return E_INVALIDARG;
++      retained = WMT::Reference<WMT::Object>(handle);
++    }
++    InvalidateCurrentPass(true);
++    EmitST([texture = std::move(texture), map = std::move(retained)](ArgumentEncodingContext &enc) mutable {
++      texture->rasterization_rate_map = std::move(map);
+     });
+     return S_OK;
+   }
+diff --git a/src/dxmt/dxmt_texture.hpp b/src/dxmt/dxmt_texture.hpp
+--- a/src/dxmt/dxmt_texture.hpp
++++ b/src/dxmt/dxmt_texture.hpp
+@@ -282,6 +282,8 @@
+     return info_.mipmap_level_count;
+   }
+ 
++  // Encode-thread-only state. Render passes retain immutable snapshots.
++  WMT::Reference<WMT::Object> rasterization_rate_map;
+   TextureViewKey fullView;
+ 
+   Rc<TextureAllocation> allocate(Flags<TextureAllocationFlag> flags);
+diff --git a/src/d3d11/d3d11_context_impl.cpp b/src/d3d11/d3d11_context_impl.cpp
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -4536,6 +4536,10 @@
+           }
+           auto &color = info.colors[rtv.RenderTargetIndex];
+           color.attachment = ctx.access<PipelineStage::Pixel>(rtv.Texture, rtv.viewId, ResourceAccess::ReadWrite);
++          // Opt-in direct-to-image path: only this tagged resource receives
++          // the map. Shadow/UI/unrelated targets remain ordinary render passes.
++          if (rtvs.size() == 1 && !dsv.Texture && rtv.Texture->rasterization_rate_map)
++            info.rasterization_rate_map = rtv.Texture->rasterization_rate_map;
+           color.depth_plane = rtv.DepthPlane;
+           color.load_action = WMTLoadActionLoad;
+           color.store_action = WMTStoreActionStore;

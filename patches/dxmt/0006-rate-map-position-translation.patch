@@ -1,0 +1,324 @@
+--- a/src/airconv/airconv_public.h
++++ b/src/airconv/airconv_public.h
+@@ -31,6 +31,7 @@
+   /* For multiple stages in the same shader function */
+   SM50_BINDING_INDEX_CONSTANT_BUFFER2 = 6,
+   SM50_BINDING_INDEX_ARGUMENT_TABLE2 = 7,
++  SM50_BINDING_INDEX_RATE_MAP_POSITION = 8,
+ 
+   SM50_BINDING_INDEX_ROOT_ARGUMENTS = 0,
+   SM50_BINDING_INDEX_STATIC_SAMPLERS = 1,
+@@ -237,6 +238,7 @@
+ enum SM50_SHADER_FLAG {
+   SM50_SHADER_FLAG_SAMPLE_NAN_TO_ZERO = 1 << 0,
+   SM50_SHADER_FLAG_DEFUSE_FMA = 1 << 1,
++  SM50_SHADER_FLAG_RATE_MAP_POSITION = 1 << 2,
+ };
+ 
+ struct SM50_SHADER_COMMON_DATA {
+--- a/src/airconv/dxbc_converter.cpp
++++ b/src/airconv/dxbc_converter.cpp
+@@ -364,6 +364,12 @@
+ 
+   {
+     SignatureContext sig_ctx(prologue, epilogue, func_signature, resource_map);
++    if(shader_flags & SM50_SHADER_FLAG_RATE_MAP_POSITION) {
++      sig_ctx.rate_map_position_argument=func_signature.DefineInput(air::ArgumentBindingBuffer{
++          .buffer_size={}, .location_index=SM50_BINDING_INDEX_RATE_MAP_POSITION, .array_size=0,
++          .memory_access=air::MemoryAccess::read, .address_space=air::AddressSpace::constant,
++          .type=air::MSLFloat{}, .arg_name="rate_map_inverse_positions", .raster_order_group={}});
++    }
+     sig_ctx.dual_source_blending = pso_dual_source_blending;
+     sig_ctx.disable_depth_output = pso_disable_depth_output;
+     sig_ctx.pull_mode_reg_mask = shader_info->pull_mode_reg_mask;
+--- a/src/airconv/dxbc_converter.hpp
++++ b/src/airconv/dxbc_converter.hpp
+@@ -260,7 +260,7 @@
+ 
+ IREffect init_input_reg(
+   uint32_t with_fnarg_at, uint32_t to_reg, uint32_t mask,
+-  bool fix_w_component = false
++  bool fix_w_component = false, uint32_t rate_map_argument = ~0u
+ );
+ 
+ IREffect init_input_reg_with_interpolation(
+@@ -331,6 +331,7 @@
+   bool skip_vertex_output;
+   uint32_t pull_mode_reg_mask;
+   uint32_t unorm_output_reg_mask;
++  uint32_t rate_map_position_argument=~0u;
+   // it is considered optional (as a hint)
+   air::MTLPixelFormat pixel_formats[8];
+ 
+--- a/src/airconv/dxbc_converter_basicblock.cpp
++++ b/src/airconv/dxbc_converter_basicblock.cpp
+@@ -206,7 +206,7 @@
+ 
+ IREffect init_input_reg(
+   uint32_t with_fnarg_at, uint32_t to_reg, uint32_t mask,
+-  bool fix_w_component
++  bool fix_w_component, uint32_t rate_map_argument
+ ) {
+   // no it doesn't work like this
+   // regular input can be masked like .zw
+@@ -214,6 +214,40 @@
+   // FIXME: it's buggy as hell
+   return make_effect_bind([=](context ctx) {
+     pvalue arg = ctx.function->getArg(with_fnarg_at);
++    // Optional translation-side correction. Original DXBC remains unchanged.
++    // The zero-header binding is identity for ordinary/unmapped render passes.
++    if(rate_map_argument!=~0u && fix_w_component) {
++      auto &b=ctx.builder;
++      auto lut=ctx.function->getArg(rate_map_argument);
++      auto load=[&](llvm::Value *index) { return b.CreateLoad(ctx.types._float,b.CreateGEP(ctx.types._float,lut,index)); };
++      auto width=load(b.getInt32(0));
++      auto original_block=b.GetInsertBlock();
++      auto mapped=llvm::BasicBlock::Create(ctx.llvm,"rate_map_position",ctx.function);
++      auto join=llvm::BasicBlock::Create(ctx.llvm,"rate_map_position_join",ctx.function);
++      b.CreateCondBr(b.CreateFCmpOGT(width,llvm::ConstantFP::get(ctx.types._float,0)),mapped,join);
++      b.SetInsertPoint(mapped);
++      auto mapped_arg=arg;
++      for(unsigned axis=0;axis<2;++axis) {
++        auto dimension=axis ? load(b.getInt32(1)) : width;
++        auto raw=b.CreateFSub(b.CreateExtractElement(arg,axis),llvm::ConstantFP::get(ctx.types._float,.5));
++        auto last=b.CreateFSub(dimension,llvm::ConstantFP::get(ctx.types._float,1));
++        auto lower=b.CreateSelect(b.CreateFCmpOLT(raw,llvm::ConstantFP::get(ctx.types._float,0)),llvm::ConstantFP::get(ctx.types._float,0),raw);
++        auto clamped=b.CreateSelect(b.CreateFCmpOGT(lower,last),last,lower);
++        auto i=b.CreateFPToUI(clamped,ctx.types._int);
++        auto next=b.CreateSelect(b.CreateICmpULT(i,b.CreateFPToUI(last,ctx.types._int)),b.CreateAdd(i,b.getInt32(1)),i);
++        llvm::Value *base=b.getInt32(4);
++        if(axis) base=b.CreateAdd(base,b.CreateFPToUI(width,ctx.types._int));
++        auto a=load(b.CreateAdd(base,i)), z=load(b.CreateAdd(base,next));
++        auto fraction=b.CreateFSub(clamped,b.CreateUIToFP(i,ctx.types._float));
++        auto logical=b.CreateFAdd(a,b.CreateFMul(b.CreateFSub(z,a),fraction));
++        mapped_arg=b.CreateInsertElement(mapped_arg,logical,axis);
++      }
++      b.CreateBr(join);b.SetInsertPoint(join);
++      auto phi=b.CreatePHI(arg->getType(),2);
++      phi->addIncoming(arg,original_block);phi->addIncoming(mapped_arg,mapped);
++      arg=phi;
++    }
++
+     auto const_index =
+       llvm::ConstantInt::get(ctx.llvm, llvm::APInt{32, to_reg, false});
+     if (arg->getType()->getScalarType()->isIntegerTy()) {
+--- a/src/airconv/dxbc_signature.cpp
++++ b/src/airconv/dxbc_signature.cpp
+@@ -393,7 +393,8 @@
+     }
+     signature_handlers.push_back([=](SignatureContext &ctx) {
+       ctx.prologue << init_input_reg(
+-        assigned_index, reg, mask, siv == D3D10_SB_NAME_POSITION
++        assigned_index, reg, mask, siv == D3D10_SB_NAME_POSITION,
++        siv == D3D10_SB_NAME_POSITION ? ctx.rate_map_position_argument : ~0u
+       );
+     });
+     max_input_register = std::max(reg + 1, max_input_register);
+--- a/src/d3d11/d3d11_context_imm.cpp
++++ b/src/d3d11/d3d11_context_imm.cpp
+@@ -142,15 +142,24 @@
+       if (!handle) return E_INVALIDARG;
+       retained = WMT::Reference<WMT::Object>(handle);
+     }
++    WMT::Reference<WMT::Buffer> positions;
++    WMTSize logical={};
++    if(map && env::getEnvVar("DXMT_RATE_MAP_POSITION")=="1") {
++      auto buffer=MTLDevice_rateMapInversePositions(m_parent->GetMTLDevice().handle,map,&logical);
++      if(!buffer) return E_INVALIDARG;
++      positions=WMT::Reference<WMT::Buffer>(buffer);
++    }
+     InvalidateCurrentPass(true);
+-    EmitST([map = std::move(retained)](ArgumentEncodingContext &enc) mutable {
++    EmitST([map = std::move(retained),positions=std::move(positions),logical](ArgumentEncodingContext &enc) mutable {
+       enc.rasterization_rate_map = std::move(map);
++      enc.rate_map_positions=std::move(positions);enc.rate_map_logical_size=logical;
+     });
+     return S_OK;
+   }
+ 
+   HRESULT STDMETHODCALLTYPE SetRenderTargetRasterizationRateMap(ID3D11Texture2D *target, UINT64 map) override {
+     if (!target) return E_INVALIDARG;
++    if(map && env::getEnvVar("DXMT_RATE_MAP_POSITION")=="1") return E_NOTIMPL;
+     std::lock_guard<d3d11_device_mutex> lock(mutex);
+     ID3D11Device *owner = nullptr;
+     target->GetDevice(&owner);
+--- a/src/d3d11/d3d11_shader.cpp
++++ b/src/d3d11/d3d11_shader.cpp
+@@ -5,6 +5,7 @@
+ #include "d3d11_input_layout.hpp"
+ #include "sha1/sha1_util.hpp"
+ #include <mutex>
++#include "util_env.hpp"
+ 
+ namespace dxmt {
+ 
+@@ -14,6 +15,8 @@
+   static std::once_flag get_shader_flag_once;
+   std::call_once(get_shader_flag_once, []() {
+     shader_flag = {};
++    if (env::getEnvVar("DXMT_RATE_MAP_POSITION")=="1")
++      shader_flag |= SM50_SHADER_FLAG_RATE_MAP_POSITION;
+     if (Config::getInstance().getOption<bool>("d3d11.sampleNaNToZero", false))
+       shader_flag |= SM50_SHADER_FLAG_SAMPLE_NAN_TO_ZERO;
+     if (Config::getInstance().getOption<bool>("d3d11.defuseFma", false))
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -643,6 +643,8 @@
+   encoder_info->type = EncoderType::Render;
+   if (rasterization_rate_map)
+     encoder_info->rasterization_rate_map = rasterization_rate_map;
++  encoder_info->rate_map_positions=rate_map_positions;
++  encoder_info->rate_map_logical_size=rate_map_logical_size;
+   encoder_info->encoder_id_vertex = nextEncoderId();
+   encoder_info->fence_wait_vertex = {};
+   encoder_info->fence_update_vertex = {encoder_info->encoder_id_vertex};
+@@ -1129,6 +1131,12 @@
+             unsigned(data->tile_barrier_pso_key.color_formats[i]), unsigned(data->colors[i].level),
+             unsigned(data->colors[i].slice), unsigned(data->colors[i].load_action), unsigned(data->colors[i].store_action));
+       }
++      static const bool position_mode=env::getEnvVar("DXMT_RATE_MAP_POSITION")=="1";
++      const bool mapped_position=position_mode && data->rate_map_positions &&
++          data->render_target_count==1 && !data->depth.attachment && !data->stencil.attachment &&
++          data->tile_barrier_pso_key.raster_sample_count==1 && data->render_target_array_length<=1 &&
++          data->render_target_width==data->rate_map_logical_size.width && data->render_target_height==data->rate_map_logical_size.height;
++      if(position_mode && !mapped_position) render_pass_info.rasterization_rate_map=0;
+       auto encoder = cmdbuf.renderCommandEncoder(render_pass_info);
+       if (encoderLabelsEnabled())
+         encoder.setLabel(WMT::String::string(renderLabel(data).c_str(), WMTUTF8StringEncoding));
+@@ -1142,6 +1150,7 @@
+       encoder.setVertexBuffer(gpu_buffer_, 0, SM50_BINDING_INDEX_ARGUMENT_TABLE);
+       if (data->use_emulated_so)
+         encoder.setVertexBuffer(gpu_buffer_, 0, SM50_BINDING_INDEX_STREAM_OUTPUT0);
++      if(position_mode) encoder.setFragmentBuffer(mapped_position ? WMT::Buffer(data->rate_map_positions) : WMT::Buffer(dummy_cbuffer_),0,SM50_BINDING_INDEX_RATE_MAP_POSITION);
+       encoder.setFragmentBuffer(gpu_buffer_, 0, SM50_BINDING_INDEX_CONSTANT_BUFFER);
+       encoder.setFragmentBuffer(gpu_buffer_, 0, SM50_BINDING_INDEX_ARGUMENT_TABLE);
+       if (data->use_geometry || data->use_tessellation) {
+@@ -1661,6 +1670,7 @@
+   // Different maps change physical pixel layout and must never merge.
+   if (r0->rasterization_rate_map.handle != r1->rasterization_rate_map.handle)
+     return false;
++  if(r0->rate_map_positions.handle!=r1->rate_map_positions.handle) return false;
+   // FIXME: it can be different?
+   if (r0->render_target_count != r1->render_target_count)
+     return false;
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -186,6 +186,8 @@
+ 
+ struct RenderEncoderData : EncoderData {
+   WMT::Reference<WMT::Object> rasterization_rate_map;
++  WMT::Reference<WMT::Buffer> rate_map_positions;
++  WMTSize rate_map_logical_size={};
+   std::array<RenderEncoderColorAttachmentData, 8> colors;
+   RenderEncoderDepthAttachmentData depth;
+   RenderEncoderStencilAttachmentData stencil;
+@@ -701,6 +703,8 @@
+ 
+   // Encode-thread state. Each render pass retains its own immutable snapshot.
+   WMT::Reference<WMT::Object> rasterization_rate_map;
++  WMT::Reference<WMT::Buffer> rate_map_positions;
++  WMTSize rate_map_logical_size={};
+ 
+   RenderEncoderData *startRenderPass(
+       uint8_t dsv_planar_flags, uint8_t dsv_readonly_flags, uint8_t render_target_count, uint64_t argument_buffer_size
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -4,6 +4,7 @@
+ #import <ColorSync/ColorSync.h>
+ #import <CoreFoundation/CFRunLoop.h>
+ #import <Metal/Metal.h>
++#import <objc/runtime.h>
+ #import <MetalFX/MetalFX.h>
+ #import <QuartzCore/QuartzCore.h>
+ #include "objc/objc-runtime.h"
+@@ -46,6 +47,37 @@
+         physical.width > size->width || physical.height > size->height) return STATUS_SUCCESS;
+   }
+   params->ret = (obj_handle_t)[map retain];
++  return STATUS_SUCCESS;
++}
++
++// Immutable single-layer map owns its cached inverse-coordinate buffer.
++static NTSTATUS
++_MTLDevice_rateMapInversePositions(void *args) {
++  struct unixcall_rate_map_inverse_positions *p=args;
++  p->ret=0;
++  id<MTLRasterizationRateMap> map=(id<MTLRasterizationRateMap>)p->map;
++  if(!map || ![map respondsToSelector:@selector(screenSize)] || map.device!=(id<MTLDevice>)p->device || map.layerCount!=1)
++    return STATUS_SUCCESS;
++  MTLSize logical=map.screenSize, physical=[map physicalSizeForLayer:0];
++  if(!physical.width || !physical.height || physical.width>16384 || physical.height>16384) return STATUS_SUCCESS;
++  p->logical_size=(struct WMTSize){logical.width,logical.height,1};
++  static char cache_key;
++  @synchronized((id)map) {
++    id<MTLBuffer> buffer=objc_getAssociatedObject((id)map,&cache_key);
++    if(!buffer) {
++      buffer=[map.device newBufferWithLength:(4+physical.width+physical.height)*sizeof(float) options:MTLResourceStorageModeShared];
++      if(!buffer) return STATUS_SUCCESS;
++      float *values=buffer.contents;
++      values[0]=physical.width;values[1]=physical.height;values[2]=logical.width;values[3]=logical.height;
++      for(NSUInteger i=0;i<physical.width;++i)
++        values[4+i]=[map mapPhysicalToScreenCoordinates:MTLCoordinate2DMake(i+.5f,.5f) forLayer:0].x;
++      for(NSUInteger i=0;i<physical.height;++i)
++        values[4+physical.width+i]=[map mapPhysicalToScreenCoordinates:MTLCoordinate2DMake(.5f,i+.5f) forLayer:0].y;
++      objc_setAssociatedObject((id)map,&cache_key,(id)buffer,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
++      [buffer release];
++    }
++    p->ret=(obj_handle_t)[buffer retain];
++  }
+   return STATUS_SUCCESS;
+ }
+ 
+@@ -3774,6 +3806,7 @@
+     &_WMTHostRemoteLayer,
+     &_WMTSetRemoteLayerFrame,
+     &_MTLDevice_retainRasterizationRateMap,
++    &_MTLDevice_rateMapInversePositions,
+ };
+ 
+ #ifndef DXMT_NATIVE
+@@ -3934,5 +3967,6 @@
+     &_WMTHostRemoteLayer,
+     &_WMTSetRemoteLayerFrame,
+     &_MTLDevice_retainRasterizationRateMap,
++    &_MTLDevice_rateMapInversePositions,
+ };
+ #endif
+--- a/src/winemetal/winemetal.h
++++ b/src/winemetal/winemetal.h
+@@ -2181,4 +2181,6 @@
+ WINEMETAL_API obj_handle_t MTLDevice_retainRasterizationRateMap(obj_handle_t device, obj_handle_t map);
+ WINEMETAL_API obj_handle_t MTLDevice_retainRasterizationRateMapForSize(obj_handle_t device, obj_handle_t map, uint32_t width, uint32_t height);
+ 
++WINEMETAL_API obj_handle_t MTLDevice_rateMapInversePositions(obj_handle_t device, obj_handle_t map, struct WMTSize *logical_size);
++
+ #endif
+--- a/src/winemetal/winemetal_thunks.c
++++ b/src/winemetal/winemetal_thunks.c
+@@ -1440,3 +1440,12 @@
+   UNIX_CALL(155, &params);
+   return params.ret;
+ }
++
++WINEMETAL_API obj_handle_t
++MTLDevice_rateMapInversePositions(obj_handle_t device, obj_handle_t map, struct WMTSize *logical_size) {
++  struct unixcall_rate_map_inverse_positions params = {0};
++  params.device=device; params.map=map;
++  UNIX_CALL(156,&params);
++  if(logical_size) *logical_size=params.logical_size;
++  return params.ret;
++}
+--- a/src/winemetal/winemetal_thunks.h
++++ b/src/winemetal/winemetal_thunks.h
+@@ -463,6 +463,11 @@
+   obj_handle_t ret;
+ };
+ 
++struct unixcall_rate_map_inverse_positions {
++  obj_handle_t device, map, ret;
++  struct WMTSize logical_size;
++};
++
+ #pragma pack(pop)
+ 
+ #endif

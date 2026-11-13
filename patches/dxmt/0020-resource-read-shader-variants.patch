@@ -1,0 +1,603 @@
+Subject: [experimental] Specialize pixel texture reads per draw and SRV slot
+
+Opt-in DXMT_RATE_MAP_RESOURCE_READ=1. Capture actual translated metadata bits
+after binding updates; specialize known D3D11 slots, retaining dynamic fallback
+for unknown binding ranges and original pipelines on failure or variant limits.
+
+--- a/src/airconv/airconv_public.h
++++ b/src/airconv/airconv_public.h
+@@ -206,6 +206,7 @@
+   SM50_SHADER_PSO_TESSELLATOR = 7,
+   SM50_SHADER_ROOT_SIGNATURE = 8,
+   SM50_SHADER_ROOT_SIGNATURE2 = 9,
++  SM50_SHADER_RATE_MAP_READ_MASK = 10,
+   SM50_SHADER_ARGUMENT_TYPE_MAX = 0xffffffff,
+ };
+ 
+@@ -260,6 +261,13 @@
+   uint32_t unorm_output_reg_mask;
+   /** MTLPixelFormat */
+   uint32_t pixel_formats[8];
++};
++
++// Pixel shader specialization: bits identify SRV slots actually translated at a draw.
++struct SM50_SHADER_RATE_MAP_READ_MASK_DATA {
++  void *next;
++  enum SM50_SHADER_COMPILATION_ARGUMENT_TYPE type;
++  uint32_t slots[4];
+ };
+ 
+ struct SM50_IA_INPUT_ELEMENT {
+--- a/src/airconv/nt/dxbc_binding_map.hpp
++++ b/src/airconv/nt/dxbc_binding_map.hpp
+@@ -24,6 +24,7 @@
+   llvm::air::Texture::ResourceKind ResourceKindLogical;
+   llvm::air::Texture::MemoryAccess MemoryAccess;
+   llvm::air::Texture::SampleType SampleType;
++  uint32_t SM50Slot = ~0u;
+ 
+ };
+ 
+--- a/src/airconv/dxbc_binding_sm50.cpp
++++ b/src/airconv/dxbc_binding_sm50.cpp
+@@ -69,7 +69,8 @@
+     auto MemoryAccess =
+         Iter->second.sampled ? Texture::MemoryAccess::access_sample : Texture::MemoryAccess::access_read;
+ 
+-    return TextureDescirptor{Handle, Metadata, false, ResourceKind, ResourceKindLogical, MemoryAccess, SampleType};
++    return TextureDescirptor{Handle, Metadata, false, ResourceKind, ResourceKindLogical, MemoryAccess, SampleType,
++        Iter->second.range.space == 0 && Iter->second.range.size == 1 ? Iter->second.range.lower_bound : ~0u};
+   }
+ 
+   virtual llvm::Optional<TextureDescirptor>
+--- a/src/airconv/dxbc_converter.hpp
++++ b/src/airconv/dxbc_converter.hpp
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <cstdint>
++#include <array>
+ #include <map>
+ #include <optional>
+ #include <string>
+@@ -199,6 +200,7 @@
+   // Pixel stage with rate-map position translation: SV_Position before translation.
+   llvm::Value *rate_map_raw_position = nullptr;
+   uint32_t rate_map_position_reg = ~0u;
++  uint32_t rate_map_pruned_ops = 0, rate_map_forced_ops = 0;
+ 
+   llvm::AllocaInst *cmp_exch_temp = nullptr;
+ 
+@@ -237,6 +239,8 @@
+   SM50_SHADER_METAL_VERSION metal_version;
+   // Pixel stage only: forward tables of the map whose layout sampled targets use.
+   uint32_t rate_map_read_argument = ~0u;
++  bool rate_map_read_specialized = false;
++  std::array<uint32_t, 4> rate_map_read_slots = {~0u, ~0u, ~0u, ~0u};
+ };
+ 
+ template <typename S> IRValue make_irvalue(S &&fs) {
+--- a/src/airconv/dxbc_converter.cpp
++++ b/src/airconv/dxbc_converter.cpp
+@@ -359,6 +359,8 @@
+     return llvm::ConstantAggregateZero::get(retTy);
+   });
+ 
++  SM50_SHADER_RATE_MAP_READ_MASK_DATA *read_mask = nullptr;
++  args_get_data<SM50_SHADER_RATE_MAP_READ_MASK, SM50_SHADER_RATE_MAP_READ_MASK_DATA>(pArgs, &read_mask);
+   io_binding_map resource_map;
+   air::AirType types(context);
+   uint32_t rate_map_read_argument = ~0u;
+@@ -461,6 +463,10 @@
+       .rate_map_read_argument = rate_map_read_argument,
+   };
+ 
++  if (read_mask) {
++    ctx.rate_map_read_specialized = true;
++    std::copy_n(read_mask->slots, 4, ctx.rate_map_read_slots.begin());
++  }
+   if (auto err = prologue.build(ctx).takeError()) {
+     return err;
+   }
+@@ -485,6 +491,9 @@
+   module.getOrInsertNamedMetadata("air.fragment")
+     ->addOperand(function_metadata);
+ 
++  if (read_mask)
++    llvm::errs() << "RATE_MAP_MASK_COMPILE name=" << name << " pruned=" << resource_map.rate_map_pruned_ops
++                 << " forced=" << resource_map.rate_map_forced_ops << "\n";
+   return llvm::Error::success();
+ };
+ 
+--- a/src/airconv/nt/dxbc_converter_base.hpp
++++ b/src/airconv/nt/dxbc_converter_base.hpp
+@@ -51,6 +51,7 @@
+   llvm::Value *Metadata;
+   Swizzle Swizzle;
+   bool GlobalCoherent;
++  int RateMapMode = -1; // -1 dynamic, 0 ordinary, 1 translated SRV
+ };
+ 
+ struct BufferResourceHandle {
+@@ -466,13 +467,13 @@
+   /* Reads of render targets left in rasterization-rate-map layout */
+   llvm::Value *RateMapMapped(llvm::Value *Metadata);
+   llvm::Value *RateMapPhysical(llvm::Value *Logical, bool Normalized);
+-  llvm::Value *RateMapBranch(llvm::Value *Original, llvm::Value *Metadata, bool Normalized, bool OwnPixel = false);
++  llvm::Value *RateMapBranch(llvm::Value *Original, llvm::Value *Metadata, bool Normalized, bool OwnPixel = false, int Mode = -1);
+   llvm::Value *RateMapTexelTable(llvm::Value *Address);
+   // A temp register known to hold int(SV_Position.xy) within the current block.
+   uint32_t pixel_coord_temp = ~0u;
+   void ResetBlockState() { pixel_coord_temp = ~0u; }
+-  llvm::Value *RateMapTexel(llvm::Value *Address, llvm::Value *Metadata, bool OwnPixel = false);
+-  llvm::Value *RateMapCoord(llvm::Value *Coord, llvm::Value *Metadata);
++  llvm::Value *RateMapTexel(llvm::Value *Address, llvm::Value *Metadata, bool OwnPixel = false, int Mode = -1);
++  llvm::Value *RateMapCoord(llvm::Value *Coord, llvm::Value *Metadata, int Mode = -1);
+ 
+   llvm::Value *
+   DecodeRawBufferByteLength(llvm::Value *Metadata) {
+--- a/src/airconv/nt/dxbc_converter_base.cpp
++++ b/src/airconv/nt/dxbc_converter_base.cpp
+@@ -432,9 +432,12 @@
+   texture.memory_access = descriptor->MemoryAccess;
+   texture.sample_type = descriptor->SampleType;
+ 
++  int mode = -1;
++  if (ctx.rate_map_read_specialized && descriptor->SM50Slot < 128)
++    mode = (ctx.rate_map_read_slots[descriptor->SM50Slot / 32] >> (descriptor->SM50Slot % 32)) & 1;
+   return llvm::Optional<TextureResourceHandle>(
+       {texture, descriptor->ResourceKindLogical, descriptor->ResourceHandle, descriptor->Metadata, SrcOp.read_swizzle,
+-       descriptor->GlobalCoherent && SupportsMemoryCoherency()}
++       descriptor->GlobalCoherent && SupportsMemoryCoherency(), mode}
+   );
+ }
+ 
+@@ -1433,7 +1436,7 @@
+     auto Temp = std::get_if<SrcOperandTemp>(&load.src_address);
+     const bool OwnPixel = Temp && Temp->regid == pixel_coord_temp && Temp->phase == ~0u && Temp->_.swizzle.x == 0 &&
+                           Temp->_.swizzle.y == 1 && !Temp->_.abs && !Temp->_.neg && Offset->isNullValue();
+-    Address = RateMapTexel(Address, Tex->Metadata, OwnPixel);
++    Address = RateMapTexel(Address, Tex->Metadata, OwnPixel, Tex->RateMapMode);
+     break;
+   }
+   default:
+@@ -1630,8 +1633,11 @@
+ // pass's map (second metadata bit), the untranslated position already is the
+ // physical texel, so neither table is consulted.
+ llvm::Value *
+-Converter::RateMapBranch(llvm::Value *Original, llvm::Value *Metadata, bool Normalized, bool OwnPixel) {
+-  auto Mapped = RateMapMapped(Metadata);
++Converter::RateMapBranch(llvm::Value *Original, llvm::Value *Metadata, bool Normalized, bool OwnPixel, int Mode) {
++  if (ctx.rate_map_read_argument == ~0u) return Original;
++  if (Mode == 0) { ++res.rate_map_pruned_ops; return Original; }
++  if (Mode == 1) ++res.rate_map_forced_ops;
++  auto Mapped = Mode == 1 ? ir.getTrue() : RateMapMapped(Metadata);
+   if (!Mapped)
+     return Original;
+   if (OwnPixel && res.rate_map_raw_position) {
+@@ -1657,13 +1663,13 @@
+ }
+ 
+ llvm::Value *
+-Converter::RateMapTexel(llvm::Value *Address, llvm::Value *Metadata, bool OwnPixel) {
+-  return RateMapBranch(Address, Metadata, false, OwnPixel);
++Converter::RateMapTexel(llvm::Value *Address, llvm::Value *Metadata, bool OwnPixel, int Mode) {
++  return RateMapBranch(Address, Metadata, false, OwnPixel, Mode);
+ }
+ 
+ llvm::Value *
+-Converter::RateMapCoord(llvm::Value *Coord, llvm::Value *Metadata) {
+-  return RateMapBranch(Coord, Metadata, true);
++Converter::RateMapCoord(llvm::Value *Coord, llvm::Value *Metadata, int Mode) {
++  return RateMapBranch(Coord, Metadata, true, false, Mode);
+ }
+ 
+ llvm::Value *
+@@ -1713,7 +1719,7 @@
+   case Texture::depth2d:
+   case Texture::texture2d:
+     Coord = LoadOperand(sample.src_address, kMaskVecXY);
+-    Coord = RateMapCoord(Coord, Tex->Metadata);
++    Coord = RateMapCoord(Coord, Tex->Metadata, Tex->RateMapMode);
+     break;
+   case Texture::depth2d_array:
+   case Texture::texture2d_array:
+@@ -1779,7 +1785,7 @@
+   case Texture::depth2d:
+   case Texture::texture2d:
+     Coord = LoadOperand(sample.src_address, kMaskVecXY);
+-    Coord = RateMapCoord(Coord, Tex->Metadata);
++    Coord = RateMapCoord(Coord, Tex->Metadata, Tex->RateMapMode);
+     break;
+   case Texture::depth2d_array:
+   case Texture::texture2d_array:
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -2283,6 +2283,12 @@
+   uint32_t elements;
+ };
+ 
++struct SM50_SHADER_RATE_MAP_READ_MASK_DATA32 {
++  uint32_t next;
++  enum SM50_SHADER_COMPILATION_ARGUMENT_TYPE type;
++  uint32_t slots[4];
++};
++
+ struct SM50_SHADER_COMMON_DATA32 {
+   uint32_t next;
+   enum SM50_SHADER_COMPILATION_ARGUMENT_TYPE type;
+@@ -2370,6 +2376,16 @@
+       data->strides[2] = src->strides[2];
+       data->strides[3] = src->strides[3];
+       data->elements = UInt32ToPtr(src->elements);
++      break;
++    }
++    case SM50_SHADER_RATE_MAP_READ_MASK: {
++      struct SM50_SHADER_RATE_MAP_READ_MASK_DATA32 *src = (void *)args32;
++      struct SM50_SHADER_RATE_MAP_READ_MASK_DATA *data = malloc(sizeof(*data));
++      last_arg->next = data;
++      last_arg = (void *)data;
++      data->next = NULL;
++      data->type = src->type;
++      memcpy(data->slots, src->slots, sizeof(data->slots));
+       break;
+     }
+     case SM50_SHADER_COMMON: {
+--- a/src/d3d11/d3d11_shader.hpp
++++ b/src/d3d11/d3d11_shader.hpp
+@@ -8,6 +8,7 @@
+ #include "sha1/sha1_util.hpp"
+ #include "log/log.hpp"
+ #include <variant>
++#include <array>
+ 
+ struct MTL_COMPILED_SHADER {
+   /**
+@@ -105,11 +106,13 @@
+   bool disable_depth_output;
+   uint32_t unorm_output_reg_mask;
+   bool rate_map_read = true;
++  std::array<uint32_t, 4> read_slots = {~0u, ~0u, ~0u, ~0u};
+   bool operator==(const this_type &rhs) const {
+     return sample_mask == rhs.sample_mask &&
+            dual_source_blending == rhs.dual_source_blending &&
+            disable_depth_output == rhs.disable_depth_output &&
+-           unorm_output_reg_mask == rhs.unorm_output_reg_mask && rate_map_read == rhs.rate_map_read;
++           unorm_output_reg_mask == rhs.unorm_output_reg_mask && rate_map_read == rhs.rate_map_read &&
++           read_slots == rhs.read_slots;
+   }
+ };
+ 
+--- a/src/d3d11/d3d11_shader.cpp
++++ b/src/d3d11/d3d11_shader.cpp
+@@ -198,6 +198,12 @@
+   h.update(variant.unorm_output_reg_mask);
+   h.update(variant.dual_source_blending);
+   h.update(variant.disable_depth_output);
++  const bool read_masked = variant.rate_map_read &&
++      variant.read_slots != std::array<uint32_t, 4>{~0u, ~0u, ~0u, ~0u};
++  if (read_masked) {
++    h.update(uint32_t{0x52534d31}); // Specialization epoch, distinct from historical full variants.
++    for (auto word : variant.read_slots) h.update(word);
++  }
+   auto variant_digest = h.final();
+   std::string func_name = "ps_" + shader->sha1().string().substr(0, 8) + "_" + variant_digest.string();
+ 
+@@ -205,6 +211,13 @@
+     SM50_SHADER_PSO_PIXEL_SHADER_DATA data;
+     data.type = SM50_SHADER_PSO_PIXEL_SHADER;
+     data.next = common;
++    SM50_SHADER_RATE_MAP_READ_MASK_DATA mask{};
++    if (read_masked) {
++      mask.type = SM50_SHADER_RATE_MAP_READ_MASK;
++      mask.next = common;
++      std::copy(variant.read_slots.begin(), variant.read_slots.end(), mask.slots);
++      data.next = &mask;
++    }
+     data.sample_mask = variant.sample_mask;
+     data.dual_source_blending = variant.dual_source_blending;
+     data.disable_depth_output = variant.disable_depth_output;
+--- a/src/d3d11/d3d11_pipeline.hpp
++++ b/src/d3d11/d3d11_pipeline.hpp
+@@ -14,6 +14,7 @@
+   ManagedShader GeometryShader;
+   ManagedShader PixelShader;
+   bool RateMapRead = true;
++  std::array<uint32_t, 4> ReadSlots = {~0u, ~0u, ~0u, ~0u};
+   IMTLD3D11BlendState *BlendState;
+   ManagedInputLayout InputLayout;
+   IMTLD3D11StreamOutputLayout *SOLayout;
+@@ -54,6 +55,7 @@
+     state.add((size_t)v.VertexShader);
+     state.add((size_t)v.PixelShader);
+     state.add(v.RateMapRead);
++    for (auto word : v.ReadSlots) state.add(word);
+     state.add((size_t)v.HullShader);
+     state.add((size_t)v.DomainShader);
+     state.add((size_t)v.GeometryShader);
+@@ -124,7 +126,7 @@
+       }
+     }
+     return (x.VertexShader == y.VertexShader) &&
+-           (x.PixelShader == y.PixelShader) && (x.RateMapRead == y.RateMapRead) &&
++           (x.PixelShader == y.PixelShader) && (x.RateMapRead == y.RateMapRead) && (x.ReadSlots == y.ReadSlots) &&
+            (x.HullShader == y.HullShader) &&
+            (x.DomainShader == y.DomainShader) && 
+            (x.GeometryShader == y.GeometryShader) &&
+@@ -149,6 +151,10 @@
+   NOTE: the current thread is blocked if it's not ready
+    */
+   virtual void GetPipeline(MTL_COMPILED_GRAPHICS_PIPELINE *pGraphicsPipeline) = 0;
++  virtual void GetReadMaskPipeline(const std::array<uint32_t, 4> &, MTL_COMPILED_GRAPHICS_PIPELINE *out,
++                                   uint32_t *kept, uint32_t *pruned) {
++    *out = {}; *kept = *pruned = 0;
++  }
+ };
+ 
+ class MTLCompiledComputePipeline : public ThreadpoolWork {
+--- a/src/d3d11/d3d11_pipeline.cpp
++++ b/src/d3d11/d3d11_pipeline.cpp
+@@ -5,6 +5,8 @@
+ #include "d3d11_shader.hpp"
+ #include "log/log.hpp"
+ #include <atomic>
++#include <bit>
++#include <mutex>
+ 
+ namespace dxmt {
+ 
+@@ -18,7 +20,7 @@
+         topology_class(pDesc->TopologyClass), device_(pDevice),
+         pBlendState(pDesc->BlendState),
+         RasterizationEnabled(pDesc->RasterizationEnabled),
+-        SampleCount(pDesc->SampleCount) {
++        SampleCount(pDesc->SampleCount), original_desc_(*pDesc) {
+     uint32_t unorm_output_reg_mask = 0;
+     for (unsigned i = 0; i < num_rtvs; i++) {
+       rtv_formats[i] = pDesc->ColorAttachmentFormats[i];
+@@ -38,7 +40,7 @@
+       PixelShader = pDesc->PixelShader->get_shader(ShaderVariantPixel{
+           pDesc->SampleMask, pDesc->BlendState->IsDualSourceBlending(),
+           depth_stencil_format == WMTPixelFormatInvalid,
+-          unorm_output_reg_mask, pDesc->RateMapRead});
++          unorm_output_reg_mask, pDesc->RateMapRead, pDesc->ReadSlots});
+       ps_valid_render_targets = pDesc->PixelShader->reflection().PSValidRenderTargets;
+     } else {
+       PixelShader = nullptr;
+@@ -49,6 +51,39 @@
+   void GetPipeline(MTL_COMPILED_GRAPHICS_PIPELINE *pPipeline) final {
+     ready_.wait(false, std::memory_order_acquire);
+     *pPipeline = {state_};
++  }
++
++  void GetReadMaskPipeline(const std::array<uint32_t, 4> &requested,
++                           MTL_COMPILED_GRAPHICS_PIPELINE *out, uint32_t *kept, uint32_t *pruned) override {
++    *out = {}; *kept = *pruned = 0;
++    if (!original_desc_.PixelShader || original_desc_.SOLayout) return;
++    std::array<uint32_t, 4> used{};
++    auto shader = original_desc_.PixelShader;
++    for (uint32_t i = 0; i < shader->reflection().NumArguments; ++i) {
++      const auto &arg = shader->arguments_info()[i];
++      if (arg.Type != SM50BindingType::SRV || !(arg.Flags & MTL_SM50_SHADER_ARGUMENT_TEXTURE)) continue;
++      if (arg.SM50BindingSlot >= 128) return;
++      used[arg.SM50BindingSlot / 32] |= 1u << (arg.SM50BindingSlot % 32);
++    }
++    auto mask = used;
++    for (unsigned i = 0; i < 4; ++i) {
++      mask[i] &= requested[i];
++      *kept += std::popcount(mask[i]);
++      *pruned += std::popcount(used[i] & ~mask[i]);
++    }
++    {
++      std::lock_guard<std::mutex> lock(mask_mutex_);
++      if (std::find(read_masks_.begin(), read_masks_.end(), mask) == read_masks_.end()) {
++        if (read_masks_.size() >= 32) return;
++        read_masks_.push_back(mask);
++      }
++    }
++    auto desc = original_desc_;
++    desc.ReadSlots = mask;
++    desc.RateMapRead = true; // Unknown binding ranges must retain their dynamic fallback, even for mask zero.
++    MTLCompiledGraphicsPipeline *variant = nullptr;
++    device_->CreateGraphicsPipeline(&desc, &variant);
++    if (variant) variant->GetPipeline(out);
+   }
+ 
+   ThreadpoolWork *RunThreadpoolWork() {
+@@ -129,6 +164,10 @@
+   WMT::Reference<WMT::RenderPipelineState> state_;
+   bool RasterizationEnabled;
+   UINT SampleCount;
++  // Same device-cache ownership as the original managed shaders and blend state.
++  MTL_GRAPHICS_PIPELINE_DESC original_desc_;
++  std::mutex mask_mutex_;
++  std::vector<std::array<uint32_t, 4>> read_masks_;
+ };
+ 
+ std::unique_ptr<MTLCompiledGraphicsPipeline>
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -37,6 +37,7 @@
+ #include "rc/util_rc_ptr.hpp"
+ #include "airconv_public.h"
+ #include <cassert>
++#include <functional>
+ 
+ #define DXMT_IMPLEMENT_ME __builtin_unreachable();
+ #define DXMT_UNREACHABLE __builtin_unreachable();
+@@ -185,6 +186,15 @@
+   uint8_t clear_stencil;
+ };
+ 
++struct ResourceReadPipeline {
++  WMT::RenderPipelineState pipeline = {};
++  uint32_t kept = 0, pruned = 0;
++};
++using ResourceReadFactory = std::function<ResourceReadPipeline(const std::array<uint32_t, 4> &)>;
++struct ResourceReadStats {
++  uint64_t draws = 0, kept = 0, pruned = 0, mixed = 0, fallback = 0;
++};
++
+ struct RenderEncoderData : EncoderData {
+   Rc<Texture> base_foveation_target;
+   uint64_t base_foveation_view=0;
+@@ -197,6 +207,10 @@
+   Rc<Texture> rate_map_depth_target;
+   bool rate_map_excluded = false;
+   WMT::Reference<WMT::Buffer> rate_map_read;
++  std::array<uint32_t, 4> current_read_slots = {};
++  ResourceReadFactory resource_read_factory;
++  WMT::RenderPipelineState resource_read_full_pso = {};
++  ResourceReadStats resource_read_stats;
+   std::array<RenderEncoderColorAttachmentData, 8> colors;
+   RenderEncoderDepthAttachmentData depth;
+   RenderEncoderStencilAttachmentData stencil;
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -337,6 +337,11 @@
+       break;
+     }
+     case SM50BindingType::SRV: {
++      if constexpr (stage == PipelineStage::Pixel) {
++        static const bool resource_mask_enabled = env::getEnvVar("DXMT_RATE_MAP_RESOURCE_READ") == "1";
++        if (resource_mask_enabled && arg.SM50BindingSlot < 128)
++          currentRenderEncoder()->current_read_slots[arg.SM50BindingSlot / 32] &= ~(1u << (arg.SM50BindingSlot % 32));
++      }
+       auto slot = 128 * unsigned(stage) + arg.SM50BindingSlot;
+       auto &srv = resview_[slot];
+ 
+@@ -392,6 +397,11 @@
+               sceneTrace("rate_map_read encoder=%llu stage=%u slot=%u translated=%u", (unsigned long long)encoder_current->id,
+                          unsigned(stage), unsigned(arg.SM50BindingSlot), unsigned(array_length >> 31));
+           }
++          if constexpr (stage == PipelineStage::Pixel) {
++            static const bool resource_mask_enabled = env::getEnvVar("DXMT_RATE_MAP_RESOURCE_READ") == "1";
++            if (resource_mask_enabled && arg.SM50BindingSlot < 128 && (array_length & 0x80000000u))
++              currentRenderEncoder()->current_read_slots[arg.SM50BindingSlot / 32] |= 1u << (arg.SM50BindingSlot % 32);
++          }
+           encoded_buffer[arg.StructurePtrOffset + 1] = TextureMetadata(array_length, 0);
+           if (layoutAuditFrame(currentFrameId()))
+             layoutAudit("bind frame=%llu encoder=%llu stage=%u kind=srv slot=%u resource=%p layout=%u translated=%u", (unsigned long long)currentFrameId(),
+@@ -1397,6 +1407,14 @@
+           }
+         }
+       }
++      if (tbdr_audit.active) {
++        const auto &s = data->resource_read_stats;
++        tbdr_audit.read_mask_draws += s.draws;
++        tbdr_audit.read_mask_kept += s.kept;
++        tbdr_audit.read_mask_pruned += s.pruned;
++        tbdr_audit.read_mask_mixed += s.mixed;
++        tbdr_audit.read_mask_fallback += s.fallback;
++      }
+       auto encoder = cmdbuf.renderCommandEncoder(render_pass_info);
+       if (encoderLabelsEnabled())
+         encoder.setLabel(WMT::String::string(renderLabel(data).c_str(), WMTUTF8StringEncoding));
+@@ -1879,6 +1897,11 @@
+         r0->cmd_head.next.set(nullptr);
+         r0->cmd_tail = (wmtcmd_base *)&r0->cmd_head;
+       }
++      r1->resource_read_stats.draws += r0->resource_read_stats.draws;
++      r1->resource_read_stats.kept += r0->resource_read_stats.kept;
++      r1->resource_read_stats.pruned += r0->resource_read_stats.pruned;
++      r1->resource_read_stats.mixed += r0->resource_read_stats.mixed;
++      r1->resource_read_stats.fallback += r0->resource_read_stats.fallback;
+       r1->no_read_pipelines.insert(r1->no_read_pipelines.end(),
+                                   r0->no_read_pipelines.begin(), r0->no_read_pipelines.end());
+       r1->use_tessellation = r0->use_tessellation || r1->use_tessellation;
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -4930,7 +4930,7 @@
+     static const bool selective_read = env::getEnvVar("DXMT_RATE_MAP_SELECTIVE_READ") == "1" &&
+         env::getEnvVar("DXMT_RATE_MAP_POSITION") == "1" &&
+         env::getEnvVar("DXMT_RATE_MAP_DIAGNOSTIC_SHADER_MASK").empty();
+-    if (selective_read && pipelineDesc.PixelShader) {
++    if (selective_read && env::getEnvVar("DXMT_RATE_MAP_RESOURCE_READ") != "1" && pipelineDesc.PixelShader) {
+       pipelineDesc.RateMapRead = false;
+       device->CreateGraphicsPipeline(&pipelineDesc, &pipeline_no_read);
+     }
+@@ -4949,7 +4949,11 @@
+             unsigned(depth.StencilWriteMask), sample_mask);
+       });
+     }
+-    EmitST([pso = std::move(pipeline), pipeline_no_read](ArgumentEncodingContext& enc) {
++    const bool resource_read = env::getEnvVar("DXMT_RATE_MAP_RESOURCE_READ") == "1" &&
++        env::getEnvVar("DXMT_RATE_MAP_POSITION") == "1" &&
++        env::getEnvVar("DXMT_RATE_MAP_DIAGNOSTIC_SHADER_MASK").empty() &&
++        pipelineDesc.PixelShader && !pipelineDesc.SOLayout;
++    EmitST([pso = std::move(pipeline), pipeline_no_read, resource_read](ArgumentEncodingContext& enc) {
+       MTL_COMPILED_GRAPHICS_PIPELINE GraphicsPipeline{};
+       pso->GetPipeline(&GraphicsPipeline); // may block
+       if (!GraphicsPipeline.PipelineState)
+@@ -4958,6 +4962,16 @@
+       cmd.type = WMTRenderCommandSetPSO;
+       cmd.pso = GraphicsPipeline.PipelineState;
+       enc.currentRenderEncoder()->last_pso = GraphicsPipeline.PipelineState;
++      enc.currentRenderEncoder()->resource_read_factory = {};
++      enc.currentRenderEncoder()->resource_read_full_pso = GraphicsPipeline.PipelineState;
++      if (resource_read) {
++        enc.currentRenderEncoder()->resource_read_factory = [pso](const std::array<uint32_t, 4> &mask) {
++          MTL_COMPILED_GRAPHICS_PIPELINE selected{};
++          uint32_t kept = 0, pruned = 0;
++          pso->GetReadMaskPipeline(mask, &selected, &kept, &pruned);
++          return ResourceReadPipeline{selected.PipelineState, kept, pruned};
++        };
++      }
+       if (pipeline_no_read) {
+         MTL_COMPILED_GRAPHICS_PIPELINE ordinary{};
+         pipeline_no_read->GetPipeline(&ordinary);
+@@ -5089,6 +5103,28 @@
+     } else {
+       UploadShaderStageResourceBinding<PipelineStage::Vertex, PipelineKind::Ordinary>();
+       UploadShaderStageResourceBinding<PipelineStage::Pixel, PipelineKind::Ordinary>();
++    }
++    // Snapshot after the current draw's actual binding metadata is encoded.
++    // Include a PSO command even when only SRVs changed and the original PSO stayed ready.
++    static const bool resource_mask_enabled = env::getEnvVar("DXMT_RATE_MAP_RESOURCE_READ") == "1";
++    if (resource_mask_enabled && status == DrawCallStatus::Ordinary) {
++      EmitST([](ArgumentEncodingContext &enc) {
++        auto render = enc.currentRenderEncoder();
++        if (!render->resource_read_factory) return;
++        // Resolve while recording, under the same device-cache lifetime as normal PSO binds.
++        auto selected = render->resource_read_factory(render->current_read_slots);
++        auto &cmd = enc.encodeRenderCommand<wmtcmd_render_setpso>();
++        cmd.type = WMTRenderCommandSetPSO;
++        cmd.pso = selected.pipeline ? selected.pipeline : render->resource_read_full_pso;
++        render->last_pso = WMT::RenderPipelineState(cmd.pso); // Tile-barrier recovery uses this draw's pipeline.
++        auto &stats = render->resource_read_stats;
++        if (selected.pipeline) {
++          ++stats.draws;
++          stats.kept += selected.kept;
++          stats.pruned += selected.pruned;
++          stats.mixed += selected.kept != 0 && selected.pruned != 0;
++        } else ++stats.fallback;
++      });
+     }
+     // Bounded diagnostic snapshots every PreDraw, including state-only changes.
+     static const bool draw_state_audit = env::getEnvVar("DXMT_TBDR_DRAW_STATE") == "1";
+--- a/src/dxmt/dxmt_tbdr_audit.hpp
++++ b/src/dxmt/dxmt_tbdr_audit.hpp
+@@ -34,6 +34,7 @@
+  uint64_t render_before=0,clear_before=0,resolve_before=0;
+  uint64_t mapped_render=0;
+  uint64_t read_ordinary=0,read_capable=0;
++ uint64_t read_mask_draws=0,read_mask_kept=0,read_mask_pruned=0,read_mask_mixed=0,read_mask_fallback=0;
+  uint64_t render_after=0,clear_after=0,resolve_after=0,compute=0,blit=0,temporal=0,present=0;
+  uint64_t signals=0,waits=0,timestamps=0,fence_waits=0;
+  uint64_t load_proxy=0,store_proxy=0,resolve_proxy=0,shaderwrite_proxy=0,pfv_proxy=0,unknown_formats=0;
+--- a/src/dxmt/dxmt_command_queue.cpp
++++ b/src/dxmt/dxmt_command_queue.cpp
+@@ -280,11 +280,11 @@
+ 
+     if(chunk.audit.active){
+       auto &a=chunk.audit;
+-      tbdrAuditLog("cb queue=%p seq=%llu frame=%llu gpu_start_ns=%llu gpu_end_ns=%llu status=%u init_wait=%u render_before=%llu render_after=%llu clear_before=%llu clear_after=%llu resolve_before=%llu resolve_after=%llu compute=%llu blit=%llu temporal=%llu present=%llu mapped_render=%llu read_ordinary=%llu read_capable=%llu signals=%llu waits=%llu timestamps=%llu fence_waits=%llu load_proxy=%llu store_proxy=%llu resolve_proxy=%llu shaderwrite_proxy=%llu pfv_proxy=%llu unknown_formats=%llu reject_map=%llu reject_layout=%llu reject_argbuf=%llu reject_attachment=%llu reject_action=%llu reject_dependency=%llu blit_ops=%llu texture_copies=%llu buffer_copies=%llu prepare_ms=%.6f encode_ms=%.6f",
++      tbdrAuditLog("cb queue=%p seq=%llu frame=%llu gpu_start_ns=%llu gpu_end_ns=%llu status=%u init_wait=%u render_before=%llu render_after=%llu clear_before=%llu clear_after=%llu resolve_before=%llu resolve_after=%llu compute=%llu blit=%llu temporal=%llu present=%llu mapped_render=%llu read_ordinary=%llu read_capable=%llu read_mask_draws=%llu read_mask_kept=%llu read_mask_pruned=%llu read_mask_mixed=%llu read_mask_fallback=%llu signals=%llu waits=%llu timestamps=%llu fence_waits=%llu load_proxy=%llu store_proxy=%llu resolve_proxy=%llu shaderwrite_proxy=%llu pfv_proxy=%llu unknown_formats=%llu reject_map=%llu reject_layout=%llu reject_argbuf=%llu reject_attachment=%llu reject_action=%llu reject_dependency=%llu blit_ops=%llu texture_copies=%llu buffer_copies=%llu prepare_ms=%.6f encode_ms=%.6f",
+         this,(unsigned long long)chunk.chunk_id,(unsigned long long)chunk.frame_,
+         (unsigned long long)chunk.attached_cmdbuf.gpuStartTime(),(unsigned long long)chunk.attached_cmdbuf.gpuEndTime(),
+         unsigned(chunk.attached_cmdbuf.status()),unsigned(chunk.resource_initializer_event_id!=0),
+-        a.render_before,a.render_after,a.clear_before,a.clear_after,a.resolve_before,a.resolve_after,a.compute,a.blit,a.temporal,a.present,a.mapped_render,a.read_ordinary,a.read_capable,
++        a.render_before,a.render_after,a.clear_before,a.clear_after,a.resolve_before,a.resolve_after,a.compute,a.blit,a.temporal,a.present,a.mapped_render,a.read_ordinary,a.read_capable,a.read_mask_draws,a.read_mask_kept,a.read_mask_pruned,a.read_mask_mixed,a.read_mask_fallback,
+         a.signals,a.waits,a.timestamps,a.fence_waits,a.load_proxy,a.store_proxy,a.resolve_proxy,a.shaderwrite_proxy,a.pfv_proxy,a.unknown_formats,
+         a.merge_map,a.merge_layout,a.merge_argbuf,a.merge_attachment,a.merge_action,a.merge_dependency,a.blit_ops,a.texture_copies,a.buffer_copies,a.prepare_ms,a.encode_ms);
+     }

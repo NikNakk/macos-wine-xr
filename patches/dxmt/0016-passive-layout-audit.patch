@@ -1,0 +1,119 @@
+From: Nick Kennedy <local-experiment>
+Subject: [PRIVATE 16/16] passive layout audit of texture accesses by encoder kind
+
+DXMT_LAYOUT_AUDIT=1 with DXMT_LAYOUT_AUDIT_START_FRAME / _FRAME_COUNT (default 1200 / 2).
+Logging only: no queries, encoders, flushes or waits.
+
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -3351,6 +3351,8 @@
+       auto ArgumentTableQwords = reflection->ArgumentTableQwords;
+       auto offset = PreAllocateArgumentBuffer(ArgumentTableQwords << 3, 32);
+       EmitST([=, arg = managed_shader->arguments_info()](ArgumentEncodingContext &enc) {
++        if (layoutAuditFrame(enc.currentFrameId()))
++          enc.layoutAuditShader(unsigned(stage), managed_shader->sha1().string().c_str());
+         enc.encodeShaderResources<stage, kind>(reflection, arg, offset);
+       });
+       ShaderStage.Samplers.clear_dirty();
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -381,6 +381,9 @@
+                          unsigned(arg.SM50BindingSlot), unsigned(array_length >> 31));
+           }
+           encoded_buffer[arg.StructurePtrOffset + 1] = TextureMetadata(array_length, 0);
++          if (layoutAuditFrame(currentFrameId()))
++            layoutAudit("bind frame=%llu encoder=%llu stage=%u kind=srv slot=%u resource=%p", (unsigned long long)currentFrameId(),
++                        (unsigned long long)(encoder_current ? encoder_current->id : 0), unsigned(stage), unsigned(arg.SM50BindingSlot), srv.texture.ptr());
+           makeResident<stage, kind>(srv.texture.ptr(), viewIdChecked);
+         } else {
+           encoded_buffer[arg.StructurePtrOffset] = 0;
+@@ -420,6 +423,9 @@
+           auto viewIdChecked = uav.texture->checkViewUseArray(uav.viewId, arg.Flags & MTL_SM50_SHADER_ARGUMENT_TEXTURE_ARRAY);
+           encoded_buffer[arg.StructurePtrOffset] = access<stage>(uav.texture, viewIdChecked, access_flags).gpuResourceID;
+           encoded_buffer[arg.StructurePtrOffset + 1] = TextureMetadata(uav.texture->arrayLength(viewIdChecked), 0);
++          if (layoutAuditFrame(currentFrameId()))
++            layoutAudit("bind frame=%llu encoder=%llu stage=%u kind=uav slot=%u resource=%p", (unsigned long long)currentFrameId(),
++                        (unsigned long long)(encoder_current ? encoder_current->id : 0), unsigned(stage), unsigned(arg.SM50BindingSlot), uav.texture.ptr());
+           makeResident<stage, kind>(uav.texture.ptr(), viewIdChecked, read, write);
+         } else {
+           encoded_buffer[arg.StructurePtrOffset] = 0;
+@@ -806,6 +812,12 @@
+         render->rate_map_logical_size=base_foveation_size;
+       }
+     }
++  }
++  if(encoder_current->type==EncoderType::Render && layoutAuditFrame(currentFrameId())) {
++    auto render=static_cast<RenderEncoderData *>(encoder_current);
++    layoutAudit("pass frame=%llu encoder=%llu width=%u height=%u colors=%u samples=%u depth=%u",(unsigned long long)currentFrameId(),
++        (unsigned long long)render->id,render->render_target_width,render->render_target_height,unsigned(render->render_target_count),
++        unsigned(render->tile_barrier_pso_key.raster_sample_count),unsigned(bool(render->depth.attachment)));
+   }
+   if(encoder_current->type==EncoderType::Render) {
+     auto render=static_cast<RenderEncoderData *>(encoder_current);
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -396,6 +396,12 @@
+         (unsigned long long)(encoder_current ? encoder_current->id : 0), unsigned(stage), flags,
+         texture.ptr(), allocation, (unsigned long long)allocation->texture().handle, texture->width(), texture->height(),
+         unsigned(texture->pixelFormat()), texture->sampleCount(), texture->arrayLength(), level, slice);
++    if (layoutAuditFrame(currentFrameId()))
++      layoutAudit("access frame=%llu encoder=%llu type=%u stage=%u flags=%d resource=%p width=%u height=%u format=%u samples=%u layers=%u mips=%u",
++          (unsigned long long)currentFrameId(), (unsigned long long)(encoder_current ? encoder_current->id : 0),
++          unsigned(encoder_current ? encoder_current->type : EncoderType::Null), unsigned(stage), flags, texture.ptr(),
++          texture->width(), texture->height(), unsigned(texture->pixelFormat()), texture->sampleCount(),
++          texture->arrayLength(), texture->miplevelCount());
+     return allocation->texture();
+   }
+ 
+@@ -423,6 +429,12 @@
+         (unsigned long long)(encoder_current ? encoder_current->id : 0), unsigned(stage), flags,
+         texture.ptr(), allocation, (unsigned long long)view.texture.handle, texture->width(), texture->height(),
+         unsigned(texture->pixelFormat()), texture->sampleCount(), texture->arrayLength(), (unsigned long long)viewId);
++    if (layoutAuditFrame(currentFrameId()))
++      layoutAudit("access frame=%llu encoder=%llu type=%u stage=%u flags=%d resource=%p width=%u height=%u format=%u samples=%u layers=%u mips=%u",
++          (unsigned long long)currentFrameId(), (unsigned long long)(encoder_current ? encoder_current->id : 0),
++          unsigned(encoder_current ? encoder_current->type : EncoderType::Null), unsigned(stage), flags, texture.ptr(),
++          texture->width(), texture->height(), unsigned(texture->pixelFormat()), texture->sampleCount(),
++          texture->arrayLength(), texture->miplevelCount());
+     return view;
+   }
+ 
+@@ -809,6 +821,11 @@
+   uint64_t currentSeqId() {return seq_id_;}
+ 
+   uint64_t currentFrameId() {return frame_id_;}
++  // Precedes the bind rows of one shader's argument table.
++  void layoutAuditShader(unsigned stage, const char *sha1) {
++    layoutAudit("shader frame=%llu encoder=%llu stage=%u sha1=%s", (unsigned long long)frame_id_,
++                (unsigned long long)(encoder_current ? encoder_current->id : 0), stage, sha1);
++  }
+ 
+   CommandQueue& queue() { return queue_;}
+ 
+--- a/src/dxmt/dxmt_scene_trace.hpp
++++ b/src/dxmt/dxmt_scene_trace.hpp
+@@ -27,4 +27,24 @@
+   va_list args; va_start(args, format); std::vsnprintf(row, sizeof(row), format, args); va_end(args);
+   Logger::info(std::string("SCENE ") + row);
+ }
++// Passive layout audit: every texture access in a window of Present frames,
++// with the encoder kind, so readers outside pixel shaders can be found.
++inline bool layoutAuditFrame(uint64_t frame) {
++  static const bool enabled = env::getEnvVar("DXMT_LAYOUT_AUDIT") == "1";
++  if (!enabled) return false;
++  static const auto number = [](const char *name, unsigned long fallback) {
++    auto value = env::getEnvVar(name);
++    if (value.empty()) return fallback;
++    char *end = nullptr; auto n = std::strtoul(value.c_str(), &end, 10);
++    return end && !*end ? n : fallback;
++  };
++  static const unsigned long start = number("DXMT_LAYOUT_AUDIT_START_FRAME", 1200);
++  static const unsigned long count = number("DXMT_LAYOUT_AUDIT_FRAME_COUNT", 2);
++  return frame >= start && frame < start + count;
++}
++inline void layoutAudit(const char *format, ...) {
++  char row[1024];
++  va_list args; va_start(args, format); std::vsnprintf(row, sizeof(row), format, args); va_end(args);
++  Logger::info(std::string("LAYOUT ") + row);
++}
+ }
