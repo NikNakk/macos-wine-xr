@@ -74,9 +74,11 @@ XrResult wine_xrCreateSession(XrInstance instance, const XrSessionCreateInfo *in
         return result;
     }
 }
+static void gaze_forget_session(wine_XrSession *session);
 XrResult wine_xrDestroySession(XrSession session)
 {
     wine_XrSession *wrapper = wine_session_from_handle(session);
+    gaze_forget_session(wrapper); // its foveation profile dies with the runtime session
     XrResult result = g_xr_host_instance_dispatch_table.p_xrDestroySession(wrapper->host_session);
     if (XR_SUCCEEDED(result)) @autoreleasepool {
         [(id)wrapper->metal_queue release]; [(id)wrapper->metal_event release];
@@ -241,11 +243,22 @@ XrResult wine_xrReleaseSwapchainImage(XrSwapchain swapchain, const XrSwapchainIm
 // (2 holds it straight ahead, for timing a profile).
 #include <math.h>
 static struct {
-    wine_XrSession *session; XrFoveationProfileFB profile; int eye_tracked, configured, force_fixed, test;
+    wine_XrSession *session; XrSession host_session; XrFoveationProfileFB profile;
+    int eye_tracked, configured, force_fixed, test;
     float outer, core, edge, step, yaw, pitch; int have_gaze, mode; unsigned invalid_calls, built; uint64_t calls;
     NSMutableDictionary *maps; uint64_t current; int valid_logged;
     uint32_t logged_width, logged_height; int32_t logged_extent;
 } gaze;
+// A session's profile belongs to its runtime session. NMS (through xrizer) destroys its first
+// session and creates another, which can reuse the wrapper's address: the state must not
+// outlive the session, or every update names a destroyed profile (XR_ERROR_HANDLE_INVALID).
+static void gaze_forget_session(wine_XrSession *session)
+{
+    if (gaze.session != session) return;
+    if (gaze.profile) g_xr_host_instance_dispatch_table.p_xrDestroyFoveationProfileFB(gaze.profile);
+    @autoreleasepool { [gaze.maps release]; }
+    memset(&gaze, 0, sizeof(gaze));
+}
 static float gaze_rate(float delta, float core, float edge, float outer)
 {
     float t = (fabsf(delta) - core) / fmaxf(edge - core, .01f);
@@ -355,10 +368,13 @@ int32_t mw_gaze_foveation_call(void *args)
     if (!session->instance->gaze_foveation || !device || !p->width || !p->height ||
         ![device supportsRasterizationRateMapWithLayerCount:1]) return 0;
     @autoreleasepool {
-        if (gaze.session != session) {
+        if (gaze.session != session || gaze.host_session != session->host_session) {
+            if (gaze.profile && gaze.host_session == session->host_session)
+                g_xr_host_instance_dispatch_table.p_xrDestroyFoveationProfileFB(gaze.profile);
             [gaze.maps release];
             memset(&gaze, 0, sizeof(gaze));
-            gaze.session = session; gaze.maps = [NSMutableDictionary new];
+            gaze.session = session; gaze.host_session = session->host_session;
+            gaze.maps = [NSMutableDictionary new];
             gaze.outer = .3f; gaze.core = 12.f; gaze.edge = 27.f; gaze.step = 2.f;
             sscanf(getenv("MWXR_GAZE_FOVEATION"), "%f,%f,%f,%f", &gaze.outer, &gaze.core, &gaze.edge, &gaze.step);
             gaze.outer = fminf(1.f, fmaxf(.1f, gaze.outer)); gaze.step = fminf(10.f, fmaxf(.25f, gaze.step));
