@@ -321,6 +321,30 @@ index 029563d..2b566af 100644
           mtl_end_command_buffer(cmd->metal.cmd_buf);
           cmd->metal.head = cmd->metal.cmd_buf;
           cmd->metal.cmd_buf = kk_cmd_pool_get_cmd_buf(kk_cmd_buffer_pool(cmd));
+diff --git a/src/kosmickrisp/vulkan/kk_cmd_buffer.h b/src/kosmickrisp/vulkan/kk_cmd_buffer.h
+index 312e7c2..036c7c1 100644
+--- a/src/kosmickrisp/vulkan/kk_cmd_buffer.h
++++ b/src/kosmickrisp/vulkan/kk_cmd_buffer.h
+@@ -300,6 +300,8 @@ struct kk_cmd_buffer {
+    void *drawable;
+    bool wsi_signal_only;
+    struct util_dynarray wsi_direct_images;
++   /* KK_PASS_TIMING=1: GPU timestamps at encoder boundaries (struct kk_pass_timing). */
++   void *pass_timing;
+    mtl_argument_table *argument_table;
+    bool no_stitch;
+ 
+@@ -482,4 +484,10 @@ void kk_cmd_write(struct kk_cmd_buffer *cmd, struct libkk_imm_write write);
+ 
+ void kk_cmd_buffer_set_label(struct kk_cmd_buffer *cb, const char *label);
+ 
++/* KK_PASS_TIMING=1 (diagnostic): per-encoder GPU time, summed by pass shape and
++ * logged every five seconds per presented frame. */
++void kk_pass_timing_end_cmdbuf(struct kk_cmd_buffer *cmd);
++void kk_pass_timing_frame(void);
++void kk_pass_timing_free(struct kk_cmd_buffer *cmd);
++
+ #endif
 diff --git a/src/kosmickrisp/vulkan/kk_queue.c b/src/kosmickrisp/vulkan/kk_queue.c
 index 0288bfa..6413f0b 100644
 --- a/src/kosmickrisp/vulkan/kk_queue.c
@@ -334,36 +358,3 @@ index 0288bfa..6413f0b 100644
     if (!debug_get_bool_option("KK_QUEUE_TIMING", false))
        return;
  
---- a/src/kosmickrisp/vulkan/kk_cmd_buffer.h
-+++ b/src/kosmickrisp/vulkan/kk_cmd_buffer.h
-@@ -110,6 +110,10 @@
-    /* Resolve in the render pass even though it does not cover the whole
-     * framebuffer or is a depth/stencil resolve. */
-    bool resolve_in_pass;
-+
-+   /* Implicit foveation: the application's resolve target, replaced for the pass
-+    * by the source's hidden foveated image. */
-+   struct kk_image_view *implicit_dst;
- };
- 
- struct kk_rendering_state {
-@@ -296,6 +300,8 @@
-    void *drawable;
-    bool wsi_signal_only;
-    struct util_dynarray wsi_direct_images;
-+   /* KK_PASS_TIMING=1: GPU timestamps at encoder boundaries (struct kk_pass_timing). */
-+   void *pass_timing;
-    mtl_argument_table *argument_table;
-    bool no_stitch;
- 
-@@ -478,4 +484,10 @@
- 
- void kk_cmd_buffer_set_label(struct kk_cmd_buffer *cb, const char *label);
- 
-+/* KK_PASS_TIMING=1 (diagnostic): per-encoder GPU time, summed by pass shape and
-+ * logged every five seconds per presented frame. */
-+void kk_pass_timing_end_cmdbuf(struct kk_cmd_buffer *cmd);
-+void kk_pass_timing_frame(void);
-+void kk_pass_timing_free(struct kk_cmd_buffer *cmd);
-+
- #endif
