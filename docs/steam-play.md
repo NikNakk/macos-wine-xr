@@ -366,7 +366,9 @@ How the switch was made:
 - `prefixes-wow64`'s games (Assetto Corsa, Braid, The Turing Test) and its template moved
   into `~/Windows/prefixes`; `prefixes-wow64` is now a link to it, and the Steam Cloud
   `pfx` links name `prefixes`. Every game prefix was upgraded on 2026-11-14 and its
-  backup removed after checking it; the rig prefix's backup is kept in
+  backup removed once each installed game had started from it (Hyperbolica, RAGER, No
+  Man's Sky, Google Earth VR, EXD, The Talos Principle VR, Assetto Corsa, Braid as before,
+  The Turing Test; Mr. Robot's prefix has no game installed); the rig prefix's backup is kept in
   `~/Windows/prefixes/.backups` until Half-Life: Alyx has run in a headset.
 - A prefix made by a 64-bit-only runtime gets its 32-bit side the first time it is used
   (`game-prefix.zsh ensure`, or `game-prefix.zsh upgrade PREFIX` for any prefix): an APFS
