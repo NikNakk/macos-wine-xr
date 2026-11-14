@@ -632,5 +632,11 @@ is not why the headset run is slower than on 2026-11-11: both setups are now wel
 what the same simulator gave on 2026-11-12 (59.6-62.6 ms), so the machine itself was
 slower that afternoon (9 GB of swap in use; other causes not visible without admin
 rights). Repeat the simulator pair after a restart before comparing absolute numbers
-with older runs. The private copies are no longer needed for comparison; their game,
-prefix and Wine folders can go, keeping their cited run folders and `exd-depth/wine`.
+with older runs.
+
+The private copies' `game`, `prefix` and `wine` folders were removed afterwards
+(2026-11-14), except `exd-depth/wine` (depth checks 8 and 9); their run folders stay where
+the docs cite them. That freed 1.4 GB: the four game folders were identical to Steam's
+install and shared its blocks (APFS clones), so they cost almost nothing on their own.
+`MWXR_EXD_EXPERIMENT_ROOT` no longer has a complete private copy to point at.
+`tools/capture_private_exd_metal_trace.py` uses the same paths as the scripts.
