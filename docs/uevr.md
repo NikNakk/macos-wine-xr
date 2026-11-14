@@ -90,7 +90,7 @@ the release's `.sha256`).
   whose `OutputWindow` is `GetDesktopWindow()`. Windows allows that. Under Wine the
   desktop window belongs to explorer, and DXMT refused it ("cross-process swapchain not
   supported yet"), so UEVR logged `Failed to create D3D11 device` every 10 s and never
-  hooked. `CreateSwapChain` (`~/Code/dxmt-d3d10fix`, `src/d3d11/d3d11_swapchain.cpp`)
+  hooked. `CreateSwapChain` (`~/Code/dxmt`, `src/d3d11/d3d11_swapchain.cpp`)
   now builds such a swapchain on a hidden 1×1 window of the calling process. It has the
   same class and vtable as the game's swapchain and is never presented.
 - **wineopenxr: more than one composition layer.** `xrEndFrame` took at most one

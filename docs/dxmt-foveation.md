@@ -102,7 +102,7 @@ Logs, source hashes and the build revision are in
 
 ## Reproduce
 
-Base: the existing clean `~/Code/dxmt-d3d10fix` revision
+Base: the existing clean `~/Code/dxmt` revision
 `4c3a2f5ea661bd258c14cf8ccb6924791cc75a77`. Work in a private source copy;
 leave the installed DXMT/Wine runtimes untouched. Copy the populated
 `include/native/directx` and `external/nvapi` submodules too. Apply the patch
@@ -129,8 +129,8 @@ If the component is still absent, run this after Meson setup and before Ninja:
 python3 tools/reuse_dxmt_shader_cache.py \
   --source build-in-process/dxmt-foveation-source \
   --build build-in-process/dxmt-foveation-build \
-  --cache-source "$HOME/Code/dxmt-d3d10fix" \
-  --cache-build "$HOME/Code/dxmt-d3d10fix/build"
+  --cache-source "$HOME/Code/dxmt" \
+  --cache-build "$HOME/Code/dxmt/build"
 ```
 
 Clone a Wine runtime to `build-in-process/wine-foveation`, then overlay the
