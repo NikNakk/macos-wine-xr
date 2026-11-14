@@ -555,9 +555,48 @@ frame is synchronised.
   xrizer ignores ("unknown profile playstation_vr2_sense"). It presents Oculus Touch
   instead, and the game's prompts show warning triangles.
 
+### Spectator window (2026-11-14)
+
+NMS presents its desktop (spectator) window through KosmicKrisp every frame. With FIFO,
+each present can wait for the Mac display's refresh and hold up the VR frame. Measured
+on the same save in the simulator with a fixed map:
+- FIFO: about 12.6 frames/s and 40 ms of GPU per frame.
+- Immediate: about 15.2 frames/s and 35 ms.
+
+That is 20% more frames. `scripts/steam-play-game-settings.zsh` now sets
+`MESA_VK_WSI_PRESENT_MODE=immediate` for NMS and Talos (the window may tear);
+`MWXR_SPECTATOR_VSYNC=1` in the Launch Options keeps FIFO. NMS has no setting to turn
+the window off.
+
+### A moving gaze breaks the single-sample route (2026-11-14)
+
+With gaze now reaching KosmicKrisp in the headset, NMS showed hard-edged rectangles and
+stretched content that moved with the eyes, with compaction off. The simulator reproduces
+it with the synthetic sweeping gaze (`BRIDGE=test`); with a held gaze it does not. Two
+faults, both invisible while the map never changes:
+
+- **Parameters updated out of GPU order.** Each foveated image has one rate-parameter
+  buffer. When a pass draws it with a new map and no compute encoder is open,
+  `kk_fdm_publish` overwrites that buffer from the CPU when the pass is recorded. Work
+  recorded earlier but not yet run then reads the image's old layout through the new
+  map.
+- **Loads across a map change.** An image drawn under one map and later loaded by a pass
+  under another (within a frame, or from the previous frame) has its old content drawn
+  over in the new layout.
+
+Latching new profiles only at frame boundaries (a present, or the bridge's
+`kk_implicit_fdm_frame_boundary` when the eye image is released) is in place, but
+does not fix either. A real fix needs:
+- every image to keep the map it was drawn with, updated in GPU order;
+- a pass that loads an image drawn under another map to use that map, or to convert
+  the image first.
+
+Until then `MWXR_FOVEATION=fixed` is the working mode for Vulkan games.
+
 ## Next
 
-1. Talos and NMS in the headset with real gaze.
+1. Moving-gaze maps for the single-sample route: per-image maps in GPU order, and loads
+   across a map change (above). Fixed foveation until then.
 2. NMS's own graphics settings against its read-write compute pass (clouds or
    volumetrics, from the look of it).
 3. Find why compaction of NMS's two 16×16 compute shaders on its 25% targets leaves

@@ -12,7 +12,7 @@ KEYS = ('MWXR_CLIENT_COMPOSITOR', 'MWXR_VIEWPORT_SCALE_PERCENTAGE',
         'MWXR_VULKAN', 'MWXR_KK_ROOT', 'KK_IMPLICIT_FDM', 'MWXR_KK_FOVEATION', 'MESA_KK_EXPERIMENTAL',
         'MWXR_XRIZER_ROOT', 'MWXR_WOW64', 'KK_IMPLICIT_SINGLE', 'KK_IMPLICIT_SCALED',
         'KK_IMPLICIT_STORAGE', 'KK_IMPLICIT_COMPACT', 'KK_IMPLICIT_HALF', 'KK_PASS_TIMING',
-        'MWXR_KK_PASS_TIMING', 'GAME_EXE', 'STEAM_COMPAT_INSTALL_PATH', 'MWXR_OPENGL')
+        'MWXR_KK_PASS_TIMING', 'MESA_VK_WSI_PRESENT_MODE', 'MWXR_SPECTATOR_VSYNC', 'GAME_EXE', 'STEAM_COMPAT_INSTALL_PATH', 'MWXR_OPENGL')
 GAME_SETTINGS = SCRIPT.parent / 'steam-play-game-settings.zsh'
 
 
@@ -135,6 +135,19 @@ class OpenXRLaunchSettingsTests(unittest.TestCase):
                 text=True).stdout.strip()
         self.assertEqual(timing('275850', MWXR_KK_PASS_TIMING='1'), '1')
         self.assertEqual(timing('275850'), 'unset')
+
+    def test_spectator_window_presents_immediately(self):
+        def mode(appid, **values):
+            env = {k: v for k, v in os.environ.items() if k not in KEYS}
+            env.update(values)
+            return subprocess.run(['zsh', '-ec',
+                'source "$1" "$2"; print -r -- "${MESA_VK_WSI_PRESENT_MODE-unset}"',
+                'test', str(GAME_SETTINGS), appid], env=env, capture_output=True,
+                text=True).stdout.strip()
+        self.assertEqual(mode('275850'), 'immediate')
+        self.assertEqual(mode('552440'), 'immediate')
+        self.assertEqual(mode('275850', MWXR_SPECTATOR_VSYNC='1'), 'unset')
+        self.assertEqual(mode('546560'), 'unset')
 
 
 if __name__ == '__main__':
