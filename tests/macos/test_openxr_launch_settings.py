@@ -105,11 +105,12 @@ class OpenXRLaunchSettingsTests(unittest.TestCase):
     def test_vulkan_games_select_kosmickrisp(self):
         for appid in ('552440', '275850'):
             with self.subTest(appid=appid):
-                self.assertEqual(self.game(appid).stdout.strip(),
-                                 'kosmickrisp vulkan-wine vulkan-xrizer zink-fov')
-        # Foveation keeps the Vulkan runtime rather than the DXMT foveation one.
-        self.assertEqual(self.game('552440', MWXR_FOVEATION='gaze').stdout.strip(),
-                         'kosmickrisp vulkan-wine vulkan-xrizer zink-fov')
+                # The rig's unified runtime (no runtime of their own: "${MWXR_IN_PROCESS_WINE:t}" is empty)
+                self.assertEqual(self.game(appid).stdout.split(),
+                                 ['kosmickrisp', 'vulkan-xrizer', 'zink-fov'])
+        # Foveation keeps the Vulkan setup rather than the DXMT foveation runtime.
+        self.assertEqual(self.game('552440', MWXR_FOVEATION='gaze').stdout.split(),
+                         ['kosmickrisp', 'vulkan-xrizer', 'zink-fov'])
         self.assertEqual(self.game('552440', MWXR_VULKAN='off').stdout.split(), ['unset'])
         self.assertEqual(self.game('546560').stdout.split(), ['unset'])
 

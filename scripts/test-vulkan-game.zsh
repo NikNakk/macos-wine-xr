@@ -29,7 +29,7 @@ unset XR_RUNTIME_JSON XRT_MACOS_METAL_IPC_SERVICE_NAME XDG_RUNTIME_DIR IPC_IGNOR
 unset MWXR_OPENGL KK_IMPLICIT_FDM
 export MWXR_FOVEATION=${MWXR_FOVEATION:-off}; unset MWXR_GAZE_FOVEATION
 export MWXR_IN_PROCESS_PREFIX=$HOME/Windows/prefix
-export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-${repo}/build-in-process/vulkan-wine}
+export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-$HOME/Code/wine-crossover/runtime-unified}
 export MWXR_XRIZER_ROOT=${MWXR_XRIZER_ROOT:-${repo}/build-in-process/vulkan-xrizer}
 export MWXR_NATIVE_RUNTIME_JSON=$HOME/Code/alyx-native/build/monado-system-x86_64/openxr_monado-dev.json
 source "${repo}/scripts/steam-play-game-settings.zsh" "${appid}"

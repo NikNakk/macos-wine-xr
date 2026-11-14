@@ -282,11 +282,10 @@ pass them to the game. A literal `%command%`, as Linux Steam uses, is dropped, s
 | --- | --- |
 | `MWXR_ALYX=native` | Half-Life: Alyx starts its native ARM64 build (below) |
 | `MWXR_ALYX_OPTIMIZED=1` | with it, the native launcher's `--optimized` xrizer build |
-| `MWXR_WOW64=1` or `0` | the WoW64 or 64-bit runtime, whatever the game's exes are |
 | `MWXR_UEVR=1` | inject UEVR into an Unreal Engine game once its window is up ([uevr.md](uevr.md)) |
 
-Tested by calling the tool as Steam does; macOS Steam passing Launch Options to the tool
-is not confirmed yet.
+macOS Steam passes them: `steam-play.log` shows `launch option MWXR_FOVEATION=gaze` and
+`MWXR_KK_PASS_TIMING=1` from No Man's Sky's Launch Options (2026-11-13).
 
 ## Native Half-Life: Alyx
 
@@ -304,17 +303,56 @@ started from Steam.
 
 ## WoW64
 
-`scripts/steam-play-game-settings.zsh` gives a game the WoW64 runtime
-(`runtime-wow64`) and its own prefix root (`~/Windows/prefixes-wow64`) when any of its
-Windows executables is 32-bit: the exe Steam starts, or any Windows launch entry in
-Valve's app info found in the install folder (`tools/steam_play/game_arch.py`, about
-0.13 s). Checking every entry gives the setup call, which has no exe, the same answer as
-the launch, so both use the same prefix. On 2026-10-28: Assetto Corsa and Mr. Robot
-32-bit; Hyperbolica, Audio Trip and Half-Life: Alyx 64-bit. Outside Steam Play Assetto
-Corsa still uses WoW64 by app ID. `MWXR_WOW64` overrides the choice for a launch; the
-setup call before it still follows the exes. The WoW64 runtime has no 32-bit
-`winemetal.dll`, so a 32-bit Direct3D game would render with Wine's own Direct3D, not
-DXMT; 32-bit launchers like Assetto Corsa's are what it is for so far.
+Every game runs on one Wine runtime, `~/Code/wine-crossover/runtime-unified`, built with
+both architectures (`--enable-archs=i386,x86_64`), in one prefix root,
+`~/Windows/prefixes`. A 64-bit program runs in it as a plain 64-bit process, as in a
+64-bit-only Wine; 32-bit programs (launchers such as Assetto Corsa's, Windows Steam) run
+through Wine's WoW64. There is no per-game choice. 32-bit Direct3D still renders with
+Wine's own Direct3D, not DXMT (there is no 32-bit DXMT).
+
+Until 2026-11-14 a game with any 32-bit Windows executable got a separate runtime
+(`runtime-wow64`) and prefix root (`~/Windows/prefixes-wow64`), chosen per game by
+`tools/steam_play/game_arch.py` or `MWXR_WOW64`, and the two runtimes had drifted apart:
+only the 64-bit one had the Metal-objects changes (Zink, the Vulkan bridge) and the
+wininet locking fix; only the WoW64 one had d3dx11 file loading and DualSense XInput and
+rumble. The unified runtime is a WoW64 build of `sources/wine`, which carries all of
+`patches/crossover` and the kernelbase fiber fix (`patches/wine/0001`, until then only in
+the private `vulkan-wine`), with the production DXMT, winemetal and both architectures'
+lsteamclient on top. `build-in-process/wine-foveation-unified` is the same with the
+foveation DXMT, replacing `wine-foveation` and `wine-foveation-wow64`. Its `wine.inf`
+is the same file as the old runtimes', given `runtime-wow64`'s time, so prefixes made with
+the WoW64 runtime need no update.
+
+How the switch was made:
+
+- The rig wrappers (`~/Windows/run-windows-game.zsh`, `run-alyx-xrizer.zsh`) default to
+  `runtime-unified`; their previous versions are `*.before-unify-20261114`. Half-Life:
+  Alyx's Windows-Steam and macOS-Steam routes both use it: the lsteamclient redirect is
+  on only with `MWXR_LSTEAMCLIENT=1`.
+- `prefixes-wow64`'s games (Assetto Corsa, Braid, The Turing Test) and its template moved
+  into `~/Windows/prefixes`; `prefixes-wow64` is now a link to it, and the Steam Cloud
+  `pfx` links name `prefixes`. The old 64-bit template and a duplicate Turing Test prefix
+  are in `~/Windows/prefixes/.backups`.
+- A prefix made by a 64-bit-only runtime gets its 32-bit side the first time it is used
+  (`game-prefix.zsh ensure`, or `game-prefix.zsh upgrade PREFIX` for any prefix): an APFS
+  clone goes to `<root>/.backups/<name>-before-wow64-<time>`, then `wineboot -u` runs
+  with Wine Mono and Gecko off. The rig prefix (`~/Windows/prefix`) was upgraded this way.
+- `game-prefix.zsh` also runs Wine's prefix update itself when the runtime's `wine.inf`
+  is newer than the prefix's `.update-timestamp` (which ends in `\r\n`). Left to Wine, the
+  update starts with the game and offers Wine Mono in a dialog the launch never shows:
+  `winepath` waited on it for good. In Assetto Corsa's prefix (Microsoft .NET 4.8) the
+  update hangs in the 32-bit `mscoree.dll` registration even with it disabled (setupapi
+  loads it by path), so the update is stopped after `MWXR_PREFIX_UPDATE_TIMEOUT` seconds
+  (default 300); Wine has already recorded it, so the launch goes on.
+
+Checked on 2026-11-14 with APFS clones of each prefix (`build-in-process/unify-test`),
+Monado's simulated HMD, each started as the Steam Play tool starts it and stopped after
+the time shown: Hyperbolica (64-bit D3D11, prefix upgraded to WoW64; 75 s), No Man's Sky
+(Vulkan on KosmicKrisp; 90 s), Google Earth VR (OpenGL on Zink; 60 s), Assetto Corsa's
+32-bit .NET launcher (70 s) and The Turing Test with UEVR (70 s) were all still running.
+Braid (32-bit) exits after start on the unified runtime and on the old `runtime-wow64`
+alike. Half-Life: Alyx, in the upgraded rig prefix, created its OpenXR session and
+swapchains. Not compared: frame times in a headset.
 Tests: `python3 tests/macos/test_steam_play_game_settings.py`.
 
 ## Steam Cloud

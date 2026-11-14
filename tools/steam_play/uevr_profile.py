@@ -106,13 +106,26 @@ def install_folder(appid):
     sys.exit(f'app {appid} is not installed in macOS Steam')
 
 
+def windows_executables(appid, install_path):
+    """The game's Windows launch entries in Valve's app info, under its install folder."""
+    import steam_games
+    info = steam_games.read_appinfo().get(appid) or {}
+    launch = (info.get('config', {}) or {}).get('launch', {}) or {}
+    for entry in launch.values() if isinstance(launch, dict) else []:
+        oslist = str((entry.get('config', {}) or {}).get('oslist', ''))
+        if oslist and 'windows' not in oslist.split(','):
+            continue
+        path = str(entry.get('executable', '')).replace('\\', '/')
+        if path:
+            yield Path(install_path) / path
+
+
 def exe_stem(appid, exe=None):
     """UEVR's folder name: the game process's file name without .exe."""
     if exe:
         return Path(exe.replace('\\', '/')).stem
-    import game_arch
     folder = install_folder(appid)
-    entries = [p for p in game_arch.windows_executables(appid, folder) if p.is_file()]
+    entries = [p for p in windows_executables(appid, folder) if p.is_file()]
     if not entries:
         sys.exit(f'app {appid}: no Windows launch entry found in {folder}; give --exe')
     exe = entries[0]

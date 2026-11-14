@@ -102,7 +102,7 @@ the release's `.sha256`).
 ## Results, 2026-11-14
 
 The Turing Test (499520; monolithic UE4 `TheTuringTest.exe`), Monado's simulated HMD,
-64-bit runtime with the patched DXMT (`MWXR_WOW64=0`, see below):
+64-bit runtime with the patched DXMT (`MWXR_WOW64=0`, before the runtimes were unified):
 
 - Injection: both DLLs loaded into the game. UEVR hooked D3D11 `Present` and
   `ResizeBuffers` through the stand-in swapchain, found GEngine, `UGameEngine::Tick`
@@ -126,12 +126,12 @@ Launch Option (the runner was called as the Steam Play tool calls it).
 
 ## Limits
 
-- **Runtimes with their own DXMT.** The DXMT change is installed in `runtime`,
-  `runtime-lsteamclient` and `runtime-wow64` (2026-11-14; the previous DLL is beside
-  it as `d3d11.dll.pre-desktop-swapchain`). The foveation runtimes
-  (`build-in-process/wine-foveation*`, used with `MWXR_FOVEATION`) and the foveation
-  gates (`gaze-gate`, `vk-fov-gate`) carry their own DXMT and wineopenxr builds without
-  these changes, so UEVR does not hook there yet.
+- **Runtimes with their own DXMT.** The DXMT change is in the unified runtime
+  (`runtime-unified`, and in `runtime`, `runtime-lsteamclient` and `runtime-wow64` with
+  the previous DLL beside it as `d3d11.dll.pre-desktop-swapchain`). The foveation runtime
+  (`build-in-process/wine-foveation-unified`, used with `MWXR_FOVEATION`) and the
+  foveation gates (`gaze-gate`, `vk-fov-gate`) carry their own DXMT and wineopenxr builds
+  without these changes, so UEVR does not hook there yet.
 - Only D3D11 games. UEVR's D3D12 hook fails at its dummy device (no D3D12 here).
 - UEVR's .NET frontend is not used: settings are changed in the in-game menu, and
   community profiles are added with `uevr_profile.py import`, not the frontend's
