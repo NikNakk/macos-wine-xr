@@ -218,6 +218,40 @@ after a restart through Steam Play.app Steam logged `Mapping AppID 57300 to tool
 button; the button restarted Steam in the same process (pid unchanged, Steam Play gate
 opened again) and the page showed the choice with no note.
 
+### macos-wine-xr's options
+
+While a game uses the macos-wine-xr tool, the page shows its options under the tool
+dropdown: **UEVR** (Off, On with OpenXR, On with OpenVR through xrizer; [uevr.md](uevr.md))
+and **Foveated rendering** (Off, Fixed, Gaze; [foveation.md](foveation.md)), with an
+**Open UEVR settings folder** button while UEVR is on. They are hidden for a game set to
+its macOS build.
+
+The options have no store of their own: each one is `MWXR_` words in the game's Launch
+Options (the General page), which the tool already exports for a launch (Launch Options,
+below). The page reads them with `SteamClient.Apps.RegisterForAppDetails` and writes them
+with `SteamClient.Apps.SetAppLaunchOptions`, the calls the General page uses, so the two
+pages always agree and there is no precedence to explain: a choice writes or removes its
+words (new ones go first), and an edit on the General page shows on this page at once. Only
+the words an option owns change (`MWXR_UEVR`, `MWXR_UEVR_RUNTIME`, `MWXR_FOVEATION`); game
+arguments, `%command%` and other `MWXR_` words (`MWXR_UEVR_DELAY`, `MWXR_KK_PASS_TIMING`)
+stay as they are. A value the page has no choice for, such as `MWXR_FOVEATION=gaze:0.6`, is
+shown and kept as "Custom". "Off" removes the words, so a per-game default in
+`steam-play-game-settings.zsh` still applies; none of these options has one yet.
+
+The controls are `src/macos/steam_ui_options.js`, installed in the payload and served to
+the page as `/mwxr/options.js`. The patch of `sp.js` adds one element after the tool
+dropdown's description, which loads that script into the interface's shared context once
+and calls `globalThis.mwxrOptions(element, answer)`; the answer to `/mwxr/compat/<appid>.json`
+carries `mwxr_appid`. `/mwxr/uevr-folder/<appid>.json` opens the game's UEVR folder in Finder
+(made if new; `uevr_profile.py folder`). Tests:
+`python3 tests/macos/test_steam_ui_options.py` (the Launch Options editing, in Node).
+
+On 2026-11-14 (client 1794536281), on The Turing Test's page: choosing UEVR On (OpenXR)
+wrote `MWXR_UEVR=1` to its Launch Options; setting them to `MWXR_UEVR=1
+MWXR_UEVR_RUNTIME=openvr MWXR_FOVEATION=gaze:0.6 -novid` as the General page does showed
+On (OpenVR) and "Custom: gaze:0.6" on the page; the folder button opened
+`~/Windows/uevr/profiles/TheTuringTest`. The Launch Options were set back to empty.
+
 Keep Steam Play.app in the Dock, not the running Steam. Once started, the client
 registers with macOS as Valve's app (`com.valvesoftware.steam`, the bundle in
 `Steam.AppBundle`), so it shows its own Dock icon; keeping that one in the Dock would
