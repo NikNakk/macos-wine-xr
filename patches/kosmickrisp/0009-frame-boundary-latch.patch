@@ -1,0 +1,77 @@
+diff --git a/src/kosmickrisp/vulkan/kk_fdm.c b/src/kosmickrisp/vulkan/kk_fdm.c
+index df11e63..713598d 100644
+--- a/src/kosmickrisp/vulkan/kk_fdm.c
++++ b/src/kosmickrisp/vulkan/kk_fdm.c
+@@ -477,6 +477,25 @@ kk_implicit_fill(struct kk_image *density, uint32_t width, uint32_t height, uint
+    density->fdm.version++;
+ }
+ 
++static uint64_t kk_implicit_last_present_ns;
++static bool kk_implicit_frame_boundary;
++
++/* Called at every present (kk_queue.c), and by the OpenXR layer when the application
++ * releases its eye image (kk_implicit_fdm_frame_boundary): the next pass may take a new
++ * profile. */
++void
++kk_implicit_fdm_present(void)
++{
++   kk_implicit_last_present_ns = os_time_get_nano();
++   kk_implicit_frame_boundary = true;
++}
++
++PUBLIC void
++kk_implicit_fdm_frame_boundary(void)
++{
++   kk_implicit_fdm_present();
++}
++
+ /* The driver-made density map for a target of this size. `new_frame`: the pass does
+  * not load the target, so a new profile cannot leave it in two layouts. Called with
+  * kk_fdm_lock held. */
+@@ -486,8 +505,17 @@ kk_implicit_density(struct kk_device *dev, const struct kk_image *image, bool ne
+    const uint32_t eyes = kk_implicit_eyes(image);
+    if (!eyes || !kk_implicit.pending.serial)
+       return NULL;
++   /* A new profile is taken only at the first pass after a present that does not load its
++    * target. Taken at any such pass, it changed the map in the middle of a frame: later
++    * passes loading targets drawn earlier in the frame rendered them in the new layout
++    * over content in the old one (NMS with a moving gaze: hard-edged rectangles). An
++    * application that never presents keeps the old rule. */
++   const bool presents = kk_implicit_last_present_ns &&
++                         os_time_get_nano() - kk_implicit_last_present_ns < 200000000ull;
++   const bool boundary = presents ? kk_implicit_frame_boundary : true;
+    if (kk_implicit.latched.serial != kk_implicit.pending.serial &&
+-       (new_frame || !kk_implicit.latched.serial)) {
++       ((new_frame && boundary) || !kk_implicit.latched.serial)) {
++      kk_implicit_frame_boundary = false;
+       kk_implicit.latched = kk_implicit.pending;
+       for (uint32_t i = 0; i < kk_implicit.target_count; i++)
+          kk_implicit_fill(kk_implicit.targets[i].density, kk_implicit.targets[i].width,
+diff --git a/src/kosmickrisp/vulkan/kk_fdm.h b/src/kosmickrisp/vulkan/kk_fdm.h
+index 1b21b07..621127b 100644
+--- a/src/kosmickrisp/vulkan/kk_fdm.h
++++ b/src/kosmickrisp/vulkan/kk_fdm.h
+@@ -66,6 +66,11 @@ bool kk_implicit_storage_enabled(void);
+ bool kk_implicit_compact_enabled(void);
+ /* KK_IMPLICIT_COMPACT_FILE: re-read the run-time switches (called at presents). */
+ void kk_fdm_runtime_poll(void);
++/* A present happened: implicit foveation may switch to a new profile at the next pass. */
++void kk_implicit_fdm_present(void);
++/* The OpenXR layer's frame boundary (the eye image released), for applications that do
++ * not present. */
++PUBLIC void kk_implicit_fdm_frame_boundary(void);
+ struct kk_shader;
+ /* Rate parameters to remap the dispatch with, shrinking the group counts to the
+  * physical size, or 0 to run it as recorded. */
+diff --git a/src/kosmickrisp/vulkan/kk_queue.c b/src/kosmickrisp/vulkan/kk_queue.c
+index ebb44bc..49cc926 100644
+--- a/src/kosmickrisp/vulkan/kk_queue.c
++++ b/src/kosmickrisp/vulkan/kk_queue.c
+@@ -86,6 +86,7 @@ kk_queue_add_timing_handler(mtl_commit_options *options, uint32_t count,
+       kk_pass_timing_frame();
+       kk_fdm_runtime_poll();
+       kk_vrs_frame();
++      kk_implicit_fdm_present();
+    }
+    if (!debug_get_bool_option("KK_QUEUE_TIMING", false))
+       return;

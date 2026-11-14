@@ -209,10 +209,15 @@ static void capture_release(id<MTLCommandQueue> queue, id<MTLTexture> texture)
     fprintf(stderr, "wineopenxr: captured %lux%lu x%lu to %s (eye-%d-*)\n", (unsigned long)w, (unsigned long)h,
             (unsigned long)layers, dir, taken);
 }
+// KosmicKrisp's frame boundary (found with its profile entry point): a released eye image
+// ends the application's frame, so implicit foveation may take a new gaze map from the
+// next frame's first pass, never in the middle of one.
+static void (*kk_frame_boundary)(void);
 XrResult wine_xrReleaseSwapchainImage(XrSwapchain swapchain, const XrSwapchainImageReleaseInfo *info)
 {
     wine_XrSwapchain *wrapper = wine_swapchain_from_handle(swapchain);
     wine_XrSession *session = wrapper->session;
+    if (kk_frame_boundary) kk_frame_boundary();
     @autoreleasepool {
         id<MTLCommandBuffer> buffer = [(id<MTLCommandQueue>)session->metal_queue commandBuffer];
         // D3D11 signals the event from DXMT; Vulkan from the application's queue (a timeline
@@ -293,7 +298,10 @@ static void gaze_push_kosmickrisp(const struct mw_gaze_foveation_params *p, floa
             const char *name = _dyld_get_image_name(i);
             if (!name || !strstr(name, "libvulkan_kosmickrisp")) continue;
             void *handle = dlopen(name, RTLD_LAZY | RTLD_NOLOAD);
-            if (handle) set_profile = (set_profile_fn)dlsym(handle, "kk_implicit_fdm_set_profile");
+            if (handle) {
+                set_profile = (set_profile_fn)dlsym(handle, "kk_implicit_fdm_set_profile");
+                kk_frame_boundary = (void (*)(void))dlsym(handle, "kk_implicit_fdm_frame_boundary");
+            }
         }
         if (!set_profile) {
             if (attempts == 1) fprintf(stderr, "wineopenxr: KosmicKrisp foveation: driver not loaded yet\n");
