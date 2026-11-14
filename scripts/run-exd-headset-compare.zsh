@@ -1,8 +1,9 @@
 #!/bin/zsh
 # Copyright 2026, Nick Kennedy
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# One timed EXD run on the installed PS VR2 service, using the private EXD
-# copy (patched DXMT with the NGX per-eye fix) under build-in-process/exd-ngx.
+# One timed EXD run on the installed PS VR2 service: Steam's EXD in the experiment prefix
+# with the foveation runtime (scripts/exd-paths.zsh; MWXR_EXD_EXPERIMENT_ROOT for an old
+# private copy). Each run records the Steam build ID of the game in settings.txt.
 # Usage: run-exd-headset-compare.zsh CONFIG [SECONDS]
 #   msaa2       upscaler off, 2x MSAA (the TBDR audit baseline)
 #   msaa0       upscaler off, MSAA off (0; a value of 1 gives 4x MSAA)
@@ -15,13 +16,12 @@
 set -euo pipefail
 unsetopt BG_NICE
 repo=${0:A:h:h}
-# MWXR_EXD_EXPERIMENT_ROOT: another prepared copy (as scripts/run-exd-scene-trace.zsh).
-root=${MWXR_EXD_EXPERIMENT_ROOT:-${repo}/build-in-process/exd-ngx}
+source "${repo}/scripts/exd-paths.zsh"
 config=${1:?config: msaa2, msaa0, msaa4, dlss, dlss-msaa0 or dlss-nofix}
 seconds=${2:-90}
-saves=${root}/prefix/drive_c/users/crossover/AppData/Local/EXD/Saved/SaveGames
+saves=${exd_prefix}/drive_c/users/crossover/AppData/Local/EXD/Saved/SaveGames
 save=${saves}/GameSettings.sav
-[[ -f ${save}.before-ngx && -x ${root}/wine/bin/wine ]] || { print -u2 'prepared private EXD copy missing'; exit 2; }
+[[ -f ${save}.before-ngx ]] || { print -u2 "no settings templates in ${saves} (GameSettings.sav.before-ngx)"; exit 2; }
 # The save as Codex left it (DLSS Quality, upscaler 1, MSAA 2) is the DLSS template.
 [[ -f ${save}.dlss ]] || cp "${save}" "${save}.dlss"
 [[ -f ${save}.before-headset ]] || cp "${save}" "${save}.before-headset"
@@ -37,11 +37,11 @@ case ${config} in
  *) print -u2 "unknown config ${config}"; exit 2 ;;
 esac
 # MWXR_EXD_TAG names the run directory, after the config and viewport scale.
-out=${root}/headset-$(date +%Y%m%d-%H%M%S)-${config}${MWXR_VIEWPORT_SCALE_PERCENTAGE:+-s${MWXR_VIEWPORT_SCALE_PERCENTAGE}}${MWXR_EXD_TAG:+-${MWXR_EXD_TAG}}${MWXR_EXD_DETAIL_FRAME:+-detail}
+out=${exd_runs}/headset-$(date +%Y%m%d-%H%M%S)-${config}${MWXR_VIEWPORT_SCALE_PERCENTAGE:+-s${MWXR_VIEWPORT_SCALE_PERCENTAGE}}${MWXR_EXD_TAG:+-${MWXR_EXD_TAG}}${MWXR_EXD_DETAIL_FRAME:+-detail}
 mkdir -p "${out}/game" "${out}/timing"
 cp "${save}" "${out}/save-before.sav"
 # MWXR_EXD_LOW=1: volumetric fog off and every scalability group except textures at Low.
-ini=${root}/prefix/drive_c/users/crossover/AppData/Local/EXD/Saved/Config/WindowsNoEditor/GameUserSettings.ini
+ini=${exd_prefix}/drive_c/users/crossover/AppData/Local/EXD/Saved/Config/WindowsNoEditor/GameUserSettings.ini
 cp "${ini}" "${out}/GameUserSettings-before.ini"
 if [[ -n ${MWXR_EXD_LOW:-} ]]; then
  edits+=(FogQuality=0 r.VolumetricFog=0)
@@ -67,6 +67,7 @@ open(path, 'w', newline='').write(text[:i] + ''.join(c + nl for c in cvars) + te
 PY2
 fi
 python3 -I "${repo}/tools/exd_settings.py" "${template}" "${save}" "${edits[@]}" > "${out}/settings.txt"
+print -r -- "game ${exd_game} (Steam build ${exd_build:-unknown}), prefix ${exd_prefix}, wine ${exd_wine}" >> "${out}/settings.txt"
 grep '^sg\.' "${ini}" >> "${out}/settings.txt"
 sed -n '/^\[SystemSettings\]/,$p' "${engine}" >> "${out}/settings.txt"
 
@@ -107,7 +108,7 @@ fi
 export MWXR_NATIVE_RUNTIME_JSON=${MWXR_EXD_RUNTIME_JSON:-$HOME/Code/alyx-native/build/monado-system-x86_64/openxr_monado-dev.json}
 # MWXR_EXD_BUILD: bridge build directory under build-in-process (default foveation-gate).
 export MWXR_IN_PROCESS_BUILD=${repo}/build-in-process/${MWXR_EXD_BUILD:-foveation-gate}
-export MWXR_IN_PROCESS_PREFIX=${root}/prefix MWXR_IN_PROCESS_WINE=${root}/wine
+export MWXR_IN_PROCESS_PREFIX=${exd_prefix} MWXR_IN_PROCESS_WINE=${exd_wine}
 export MWXR_CLIENT_COMPOSITOR=0 MTL_DEBUG_LAYER=0
 export GAME_LOG_DIR=${out}/game DXMT_LOG_PATH="Z:${out//\//\\}\\game"
 export DXMT_ENABLE_NVEXT=1 DXMT_NGX_CHEEKY=0 DXMT_NGX_SUBRECTS=${subrects}
@@ -132,7 +133,7 @@ env | grep -E '^(MWXR|DXMT|XRT|OXR|MTL)_' | sort > "${out}/env.txt"
 child=''
 cleanup() {
  [[ -n ${child} ]] && kill -TERM ${child} 2>/dev/null || true
- WINEPREFIX=${root}/prefix "${root}/wine/bin/wineserver" -k 2>/dev/null || true
+ WINEPREFIX=${exd_prefix} "${exd_wine}/bin/wineserver" -k 2>/dev/null || true
  [[ -n ${child} ]] && wait ${child} 2>/dev/null || true
  cp "${out}/save-before.sav" "${save}"
  cp "${out}/GameUserSettings-before.ini" "${ini}"

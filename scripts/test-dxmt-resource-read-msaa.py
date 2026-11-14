@@ -4,13 +4,13 @@
 """Per-resource read specialisation on the stay-warped MSAA/HDR/stencil chain:
 six cases (2x/4x MSAA, rates 1, 0.5, 0.75) must keep the centre exact and prune ordinary slots.
 
-Requires the private runtime and prefix under build-in-process/exd-warp with DXMT
-patches 0001-0020, and the rebuilt probes. Usage: scripts/test-dxmt-resource-read-msaa.py [OUTPUT_DIRECTORY]
+Requires the foveation runtime (build-in-process/wine-foveation-unified, DXMT patches
+0001-0025), the test prefix build-in-process/prefix-warp, and the rebuilt probes. Usage: scripts/test-dxmt-resource-read-msaa.py [OUTPUT_DIRECTORY]
 """
 from pathlib import Path
 import os,subprocess,shutil,json,re,sys
 r=Path(__file__).resolve().parent.parent;b=r/'build-in-process';out=Path(sys.argv[1]) if len(sys.argv)>1 else b/'resource-read-msaa-validation';out.mkdir(parents=True,exist_ok=True)
-root=b/'depth-foveation-probe';prefix=b/'exd-warp/prefix';wine=b/'exd-warp/wine';shutil.copy2(root/'x86_64-windows/wine_depth_foveation_probe.dll',prefix/'drive_c/windows/system32/wine_depth_foveation_probe.dll')
+root=b/'depth-foveation-probe';prefix=b/'prefix-warp';wine=b/'wine-foveation-unified';shutil.copy2(root/'x86_64-windows/wine_depth_foveation_probe.dll',prefix/'drive_c/windows/system32/wine_depth_foveation_probe.dll')
 env={k:v for k,v in os.environ.items() if not k.startswith(('DXMT_','MWXR_','MTL_'))};env.update(WINEPREFIX=str(prefix),WINEARCH='win64',WINEDEBUG='-all',WINESERVER=str(wine/'bin/wineserver'),WINEDLLPATH=str(root),DYLD_FALLBACK_LIBRARY_PATH=str(wine/'lib/wine/x86_64-unix')+':'+str(wine/'lib'),MTL_DEBUG_LAYER='1',DXMT_RATE_MAP_POSITION='1',DXMT_RATE_MAP_READ='1',DXMT_RATE_MAP_ATTACHMENT_PROBE='1',DXMT_RATE_MAP_RESOURCE_READ='1',DXMT_TBDR_AUDIT='1')
 results=[]
 for samples in [2,4]:
