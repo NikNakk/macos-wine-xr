@@ -22,13 +22,19 @@ it and sets the DXMT and wineopenxr variables;
 
 ## What it uses
 
-- **Wine runtime**: `build-in-process/wine-foveation` (and `-wow64` for games with
-  a 32-bit executable), copies of `runtime-lsteamclient` and `runtime-wow64` with
-  DXMT built from patches 0001–0023 (the 0022 files are kept in
-  `build-in-process/dxmt-0022-backup`). They carry `share/mwxr-foveation-dxmt`; a
-  launch with `MWXR_FOVEATION` refuses a runtime without it. The ordinary
-  runtimes are unchanged. `MWXR_IN_PROCESS_WINE` still overrides the choice.
-- **wineopenxr**: `build-in-process/gaze-gate` (`MWXR_FOVEATION_BUILD` overrides).
+- **Wine runtime**: `build-in-process/wine-foveation-unified`, a copy of the unified
+  WoW64 runtime (`runtime-unified`, [steam-play.md](steam-play.md#wow64)) with DXMT
+  built from patches 0001–0025 in `build-in-process/dxmt-warp-source`
+  (`dxmt-warp-build`; the 0022 files are kept in `build-in-process/dxmt-0022-backup`,
+  the files before 0025 beside the new ones as `*.pre-0025`). It replaced
+  `wine-foveation` and `wine-foveation-wow64` on 2026-11-14. It carries
+  `share/mwxr-foveation-dxmt`; a launch with `MWXR_FOVEATION` refuses a runtime without
+  it. The ordinary runtimes are unchanged. `MWXR_IN_PROCESS_WINE` still overrides the
+  choice.
+- **wineopenxr**: `build-in-process/gaze-gate` (`MWXR_FOVEATION_BUILD` overrides);
+  `vk-fov-gate` for the Vulkan games. Both rebuilt from current source on 2026-11-14
+  (several composition layers per frame, for UEVR); the previous builds are
+  `*.before-uevr-20261114`.
 - **Monado**: `gaze` needs `XR_FB_foveation`, `XR_FB_swapchain_update_state`,
   `XR_FB_foveation_configuration` and `XR_META_foveation_eye_tracked`. The
   installed service and x86_64 client have had them since v25.1.0-2500

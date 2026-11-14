@@ -129,12 +129,13 @@ Launch Option (the runner was called as the Steam Play tool calls it).
 
 ## Limits
 
-- **Runtimes with their own DXMT.** The DXMT change is in the unified runtime
-  (`runtime-unified`, and in `runtime`, `runtime-lsteamclient` and `runtime-wow64` with
-  the previous DLL beside it as `d3d11.dll.pre-desktop-swapchain`). The foveation runtime
-  (`build-in-process/wine-foveation-unified`, used with `MWXR_FOVEATION`) and the
-  foveation gates (`gaze-gate`, `vk-fov-gate`) carry their own DXMT and wineopenxr builds
-  without these changes, so UEVR does not hook there yet.
+- **Foveation.** UEVR works with `MWXR_FOVEATION` too: patch 0025 carries the
+  DXMT change into the foveation DXMT (`wine-foveation-unified`), and `gaze-gate` and
+  `vk-fov-gate` were rebuilt with the layer fix (2026-11-14). The Turing Test with UEVR
+  and fixed foveation: UEVR hooked, its double-wide eye swapchain became the foveation
+  target, DXMT compiled rate-map variants, no `xrEndFrame` failures; the eye images
+  showed the scene as without foveation (single frames; the menu scene moves). EXD
+  (fixed, D3D11) and No Man's Sky (fixed, Vulkan) ran on the rebuilt gates.
 - Only D3D11 games. UEVR's D3D12 hook fails at its dummy device (no D3D12 here).
 - UEVR's .NET frontend is not used: settings are changed in the in-game menu, and
   community profiles are added with `uevr_profile.py import`, not the frontend's
