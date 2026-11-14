@@ -591,7 +591,16 @@ does not fix either. A real fix needs:
 - a pass that loads an image drawn under another map to use that map, or to convert
   the image first.
 
-Until then `MWXR_FOVEATION=fixed` is the working mode for Vulkan games.
+Until then `MWXR_FOVEATION=fixed` is the working mode for Vulkan games (patch
+`0009-frame-boundary-latch.patch` has the frame-boundary latch).
+
+**A third fault at 50% render scale, with a fixed map.** At NMS's Standard graphics
+settings the scene renders at 2800×1428 (50%), not 3296×1696 (59%). There, with a fixed
+map and compaction off, one eye and 22% of the other are sunlit only inside a rectangle
+61% wide and 59% high: the physical size of the 2800×1428 map in side-by-side layout.
+Everything outside it has only ambient light. With `KK_IMPLICIT_SKIP=2800x1428` (a new
+game, so another planet) the image is clean. No raw ordinary-to-foveated copies were
+logged. Not yet found. At the default settings (59%) the runs were clean.
 
 ## Next
 
