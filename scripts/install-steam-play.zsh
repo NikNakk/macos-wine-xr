@@ -46,7 +46,8 @@ mkdir -p "${tool}"
 rm -f "${payload}/libmwxr_steam_compat_gate.dylib" "${payload}/steam-compat-gate-scan"
 cp -c "${build}/libmwxr_steam_compat_gate.dylib" "${build}/steam-compat-gate-scan" "${payload}/"
 # The game list's sync, run by Steam Play.app before each start (docs/steam-play.md).
-cp "${repo}/tools/steam_play/steam_play_games.py" "${repo}/tools/steam_games/steam_games.py" "${payload}/"
+cp "${repo}/tools/steam_play/steam_play_games.py" "${repo}/tools/steam_games/steam_games.py" \
+  "${repo}/tools/steam_play/uevr_profile.py" "${repo}/src/macos/steam_ui_options.js" "${payload}/"
 cp -c "${repo}/tools/steam_play/compatibilitytool.vdf" "${repo}/tools/steam_play/toolmanifest.vdf" \
   "${repo}/tools/steam_play/mwxr-steam-play" "${tool}/"
 chmod +x "${tool}/mwxr-steam-play"

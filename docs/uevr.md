@@ -8,7 +8,9 @@ wineopenxr, then Monado), like any other OpenXR game.
 
 ## Use
 
-Add to the game's Launch Options in Steam (Properties, General):
+Choose **UEVR: On (OpenXR)** on the game's Compatibility page in Steam (Properties,
+Compatibility; [steam-play.md](steam-play.md#macos-wine-xrs-options)), which adds this
+to its Launch Options, or add it there yourself (Properties, General):
 
 ```
 MWXR_UEVR=1
@@ -25,7 +27,8 @@ The injector's output goes to `uevr.log` in the launch's log folder.
 
 Two kinds of settings, each kept where it already lives:
 
-- **How UEVR is started** (the table below): the game's Launch Options in Steam.
+- **How UEVR is started** (the table below): the game's Launch Options in Steam, which
+  the Compatibility page's UEVR choice edits too.
   A default that every user of a game should get, such as a longer delay, goes in
   `scripts/steam-play-game-settings.zsh` by app ID, with the other per-game quirks.
   A Launch Option still overrides it.

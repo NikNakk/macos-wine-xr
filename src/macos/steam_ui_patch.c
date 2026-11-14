@@ -28,6 +28,10 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
+#include <spawn.h>
+#include <crt_externs.h>
+#include <sys/wait.h>
+#include <time.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -204,6 +208,9 @@ char *mwxr_patch_compat_service(const char *text, size_t len, size_t *outlen)
 // "Applies when Steam restarts" with a Restart Steam button while the answer says a
 // choice is not in use yet (mwxr_pending). Steam's restart ends the client with exit code
 // 42 and Steam Play.app starts it again with the game list brought up to date.
+// After the description comes an element for macos-wine-xr's options: the first render
+// loads /mwxr/options.js (steam_ui_options.js) into the interface's document, which
+// calls globalThis.mwxrOptions(element, answer).
 char *mwxr_patch_restart_note(const char *text, size_t len, size_t *outlen)
 {
 	static const char key[] = ",{toolActive:", desc[] = "description:(0,";
@@ -230,18 +237,29 @@ char *mwxr_patch_restart_note(const char *text, size_t len, size_t *outlen)
 	if (!dlen || memcmp(dv + dlen, ".data})", 7) != 0)
 		return NULL;
 	const char *orig = d + strlen("description:"), *orig_end = dv + dlen + 7;
-	char note[1024];
+	char note[1024], options[1024];
 	int n = snprintf(note, sizeof(note),
-	    "description:%2$.*3$s.data?.mwxr_pending?(0,%1$.*4$s.jsxs)(\"span\",{children:[\"Applies when Steam restarts. \","
+	    "description:(0,%1$.*4$s.jsxs)(\"div\",{children:["
+	    "%2$.*3$s.data?.mwxr_pending?(0,%1$.*4$s.jsxs)(\"span\",{children:[\"Applies when Steam restarts. \","
 	    "(0,%1$.*4$s.jsx)(\"button\",{className:\"DialogButton\",style:{display:\"inline-block\",width:\"auto\","
 	    "minWidth:0,padding:\"0 12px\",marginLeft:\"8px\"},onClick:mwxrEv=>{mwxrEv.stopPropagation();"
 	    "SteamClient.User.StartRestart(!1)},children:\"Restart Steam\"})]}):",
 	    jv, dv, (int)dlen, (int)jlen);
-	if (n <= 0 || (size_t)n >= sizeof(note))
+	// After the description, an element for macos-wine-xr's options (steam_ui_options.js,
+	// fetched once into the interface's own document, which runs the shared JS context).
+	int m = snprintf(options, sizeof(options),
+	    ",(0,%1$.*4$s.jsx)(\"div\",{ref:mwxrEl=>{if(!mwxrEl)return;const mwxrD=%2$.*3$s.data,"
+	    "mwxrGo=()=>globalThis.mwxrOptions?.(mwxrEl,mwxrD);if(globalThis.mwxrOptions)return mwxrGo();"
+	    "let mwxrS=document.getElementById(\"mwxr-options\");if(!mwxrS){mwxrS=document.createElement(\"script\");"
+	    "mwxrS.id=\"mwxr-options\";mwxrS.src=\"/mwxr/options.js\";document.head.appendChild(mwxrS)}"
+	    "mwxrS.addEventListener(\"load\",mwxrGo)}})]})",
+	    jv, dv, (int)dlen, (int)jlen);
+	if (n <= 0 || (size_t)n >= sizeof(note) || m <= 0 || (size_t)m >= sizeof(options))
 		return NULL;
 	struct buffer out = {0};
 	int ok = append(&out, text, (size_t)(d - text)) && append(&out, note, (size_t)n) &&
-	         append(&out, orig, (size_t)(orig_end - orig)) && append(&out, orig_end, (size_t)(end - orig_end));
+	         append(&out, orig, (size_t)(orig_end - orig)) && append(&out, options, (size_t)m) &&
+	         append(&out, orig_end, (size_t)(end - orig_end));
 	if (!ok) {
 		free(out.data);
 		return NULL;
@@ -352,8 +370,8 @@ static const char *patched_copy(const char *path, char *out, size_t outlen)
 		return NULL;
 	char dir[PATH_MAX], nomatch[PATH_MAX];
 	snprintf(dir, sizeof(dir), "%s/Library/Caches/macos-wine-xr/steamui", home);
-	// v8: the page, its tool service, the restart note, 32-bit macOS marks, the Windows logo. A new version of the patch gets new file names.
-	snprintf(out, outlen, "%s/sp-v8-%lld-%ld.js", dir, (long long)st.st_size, (long)st.st_mtimespec.tv_sec);
+	// v9: the page, its tool service, the restart note and options, 32-bit macOS marks, the Windows logo. A new version of the patch gets new file names.
+	snprintf(out, outlen, "%s/sp-v9-%lld-%ld.js", dir, (long long)st.st_size, (long)st.st_mtimespec.tv_sec);
 	snprintf(nomatch, sizeof(nomatch), "%s.unchanged", out);
 	struct stat have;
 	if (stat(out, &have) == 0)
@@ -593,6 +611,61 @@ static int wait_for_live_mapping(unsigned long appid)
 	return 0;
 }
 
+// Opens the game's UEVR settings folder in Finder (made if new): the folder from
+// uevr_profile.py, installed in the payload. error gets a short reason when it fails.
+static int open_uevr_folder(unsigned long appid, char *error, size_t elen)
+{
+	char script[PATH_MAX], id[24], folder[PATH_MAX] = "";
+	payload_path(script, sizeof(script), "uevr_profile.py");
+	snprintf(id, sizeof(id), "%lu", appid);
+	int fds[2];
+	if (pipe(fds) != 0) {
+		snprintf(error, elen, "pipe failed");
+		return 0;
+	}
+	posix_spawn_file_actions_t actions;
+	posix_spawn_file_actions_init(&actions);
+	posix_spawn_file_actions_adddup2(&actions, fds[1], STDOUT_FILENO);
+	posix_spawn_file_actions_addclose(&actions, fds[0]);
+	char *args[] = {"/usr/bin/python3", "-I", script, "folder", id, NULL};
+	pid_t pid;
+	int spawned = posix_spawn(&pid, args[0], &actions, NULL, args, *_NSGetEnviron()) == 0;
+	posix_spawn_file_actions_destroy(&actions);
+	close(fds[1]);
+	ssize_t got = 0, n;
+	while (spawned && got < (ssize_t)sizeof(folder) - 1 &&
+	       (n = read(fds[0], folder + got, sizeof(folder) - 1 - (size_t)got)) > 0)
+		got += n;
+	close(fds[0]);
+	int status = 0;
+	if (!spawned || waitpid(pid, &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0 || got <= 0) {
+		snprintf(error, elen, "game not found in Steam's library");
+		return 0;
+	}
+	folder[strcspn(folder, "\n")] = '\0';
+	// ~/Windows/uevr/profiles/<exe>: make the profiles folder and the game's.
+	char parent[PATH_MAX];
+	snprintf(parent, sizeof(parent), "%s", folder);
+	char *slash = strrchr(parent, '/');
+	if (slash) {
+		*slash = '\0';
+		char *grand = strrchr(parent, '/');
+		if (grand) {
+			*grand = '\0';
+			mkdir(parent, 0755);
+			*grand = '/';
+		}
+		mkdir(parent, 0755);
+	}
+	mkdir(folder, 0755);
+	char *open_args[] = {"/usr/bin/open", folder, NULL};
+	if (posix_spawn(&pid, open_args[0], NULL, NULL, open_args, *_NSGetEnviron()) != 0 || waitpid(pid, &status, 0) < 0) {
+		snprintf(error, elen, "could not open %s", folder);
+		return 0;
+	}
+	return 1;
+}
+
 // Answers /mwxr/... requests from the patched page with a generated file; NULL if path
 // is not one.
 static const char *answer_mwxr(const char *path, char *out, size_t outlen)
@@ -650,9 +723,9 @@ static const char *answer_mwxr(const char *path, char *out, size_t outlen)
 		    "{\"tools\":[{\"name\":\"" OUR_TOOL "\",\"display_name\":\"macos-wine-xr (Wine, DXMT, OpenXR)\",\"is_active\":%s},"
 		    "{\"name\":\"" NO_TOOL "\",\"display_name\":\"None: the macOS build\",\"is_active\":%s}],"
 		    "\"aliases\":[],\"selected_tool_identifier\":\"%s\",\"default_tool_identifier\":\"%s\","
-		    "\"mwxr_pending\":%s}",
+		    "\"mwxr_pending\":%s,\"mwxr_appid\":%lu}",
 		    active ? "true" : "false", active ? "false" : "true", selected, automatic ? OUR_TOOL : NO_TOOL,
-		    active != after ? "true" : "false");
+		    active != after ? "true" : "false", appid);
 		snprintf(out, outlen, "%s/compat-%lu.json", dir, appid);
 		return write_file(out, json) ? out : NULL;
 	}
@@ -663,6 +736,30 @@ static const char *answer_mwxr(const char *path, char *out, size_t outlen)
 		              applied ? " (mapped in Steam now)" : "");
 		snprintf(out, outlen, "%s/select.json", dir);
 		return write_file(out, ok ? "{\"ok\":true}" : "{\"ok\":false}") ? out : NULL;
+	}
+	if (strcmp(req, "options.js") == 0) {
+		// The options under the tool dropdown (steam_ui_options.js, installed in the payload).
+		payload_path(out, outlen, "steam_ui_options.js");
+		return access(out, R_OK) == 0 ? out : NULL;
+	}
+	if (sscanf(req, "uevr-folder/%lu.json", &appid) == 1) {
+		// The web helper may stat the answer before it opens it: one click, one Finder window.
+		static unsigned long last_appid;
+		static time_t last_time;
+		time_t now = time(NULL);
+		char error[160] = "";
+		if (appid == last_appid && now - last_time < 2) {
+			snprintf(out, outlen, "%s/uevr-folder.json", dir);
+			return out;
+		}
+		last_appid = appid;
+		last_time = now;
+		int ok = open_uevr_folder(appid, error, sizeof(error));
+		mwxr_gate_log("Compatibility page: UEVR settings folder for app %lu%s%s", appid, ok ? "" : ": ", error);
+		char json[256];
+		snprintf(json, sizeof(json), ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"%s\"}", error);
+		snprintf(out, outlen, "%s/uevr-folder.json", dir);
+		return write_file(out, json) ? out : NULL;
 	}
 	return NULL;
 }

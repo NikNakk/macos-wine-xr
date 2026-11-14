@@ -27,8 +27,8 @@ import tempfile
 import time
 import zipfile
 
-here = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(here / 'steam_games'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))                       # installed copy
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'steam_games'))  # repository
 
 HOME = Path.home()
 PROFILES = Path(os.environ.get('MWXR_UEVR_PROFILES', HOME / 'Windows/uevr/profiles'))
