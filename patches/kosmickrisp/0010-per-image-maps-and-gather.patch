@@ -1,0 +1,261 @@
+diff --git a/src/kosmickrisp/vulkan/kk_fdm.c b/src/kosmickrisp/vulkan/kk_fdm.c
+index 713598d..61ca843 100644
+--- a/src/kosmickrisp/vulkan/kk_fdm.c
++++ b/src/kosmickrisp/vulkan/kk_fdm.c
+@@ -395,14 +395,19 @@ kk_implicit_eyes(const struct kk_image *image)
+ {
+    if (!kk_implicit.view_width)
+       return 0;
+-   /* KK_IMPLICIT_SKIP=WxH[,WxH...] (diagnostic): sizes never foveated. */
++   /* KK_IMPLICIT_SKIP=WxH[:FORMAT][,...] (diagnostic): sizes, or sizes in one VkFormat,
++    * never foveated. */
+    const char *skip = getenv("KK_IMPLICIT_SKIP");
+    if (skip) {
+-      char want[32];
+-      snprintf(want, sizeof(want), "%ux%u", image->vk.extent.width, image->vk.extent.height);
+-      for (const char *p = skip; (p = strstr(p, want)); p++)
+-         if ((p == skip || p[-1] == ',') && (p[strlen(want)] == 0 || p[strlen(want)] == ','))
+-            return 0;
++      char want[2][40];
++      snprintf(want[0], sizeof(want[0]), "%ux%u", image->vk.extent.width, image->vk.extent.height);
++      snprintf(want[1], sizeof(want[1]), "%ux%u:%d", image->vk.extent.width,
++               image->vk.extent.height, (int)image->vk.format);
++      for (unsigned w = 0; w < 2; w++)
++         for (const char *p = skip; (p = strstr(p, want[w])); p++)
++            if ((p == skip || p[-1] == ',') &&
++                (p[strlen(want[w])] == 0 || p[strlen(want[w])] == ','))
++               return 0;
+    }
+    /* KK_IMPLICIT_HALF=1 (single-sample route): half-size targets too, each with its own
+     * map of the same profile (half-resolution effects; The Talos Principle VR). */
+@@ -669,6 +674,8 @@ kk_fdm_params_unref(struct kk_fdm_params *params)
+    assert(params->refs > 0);
+    if (--params->refs)
+       return;
++   if (params->map)
++      mtl_release(params->map);
+    kk_destroy_bo(params->dev, params->bo);
+    free(params);
+ }
+@@ -709,6 +716,12 @@ kk_fdm_image_finish(struct kk_device *dev, struct kk_image *image)
+       kk_rate_registry_remove(image);
+       kk_destroy_bo(dev, image->rate_params);
+    }
++   if (image->rate_ref) {
++      simple_mtx_lock(&kk_fdm_lock);
++      kk_fdm_params_unref(image->rate_ref);
++      simple_mtx_unlock(&kk_fdm_lock);
++      image->rate_ref = NULL;
++   }
+    if (image->fdm.params) {
+       simple_mtx_lock(&kk_fdm_lock);
+       kk_fdm_params_unref(image->fdm.params);
+@@ -948,10 +961,12 @@ kk_fdm_get_map(struct kk_cmd_buffer *cmd, struct kk_image *density,
+    }
+    params->dev = dev;
+    params->refs = 1;
++   params->map = mtl_retain(map);
+    if (density->fdm.params)
+       kk_fdm_params_unref(density->fdm.params);
+    density->fdm.params = params;
+    density->fdm.serial = ++kk_fdm_serial;
++   params->serial = density->fdm.serial;
+    density->fdm.params_bytes =
+       KK_RATE_PARAMS_HEADER_B + mtl_rate_map_parameter_size(map);
+    memcpy(density->fdm.map_shift, shift, sizeof(shift));
+@@ -1099,25 +1114,37 @@ kk_fdm_order_for_next_encoder(struct kk_cmd_buffer *cmd)
+ 
+ static void
+ kk_fdm_publish(struct kk_cmd_buffer *cmd, struct kk_image *density,
+-               struct kk_image_view *iview)
++               struct kk_fdm_params *params, struct kk_image_view *iview)
+ {
+    if (iview == NULL)
+       return;
+    struct kk_image *image = container_of(iview->vk.image, struct kk_image, vk);
+    if (image->rate_params == NULL)
+       return;
+-   /* Copied in every pass that renders the image rather than once: the
+-    * command buffer holding an earlier copy may be re-recorded or dropped. */
+    uint32_t bytes = MIN2(density->fdm.params_bytes, KK_RATE_PARAMS_SIZE_B);
+-   if (cmd->metal.render == NULL) {
+-      mtl_copy_from_buffer_to_buffer(cs_get_compute(cmd), density->fdm.params->bo->map,
+-                                     0, image->rate_params->map, 0, bytes);
++   if (image->rate_ref == params && cmd->metal.render != NULL) {
++      /* Same parameters as the image already has: rewriting the same bytes from the CPU
++       * is harmless, and covers a command buffer holding the first copy being dropped. */
++      memcpy(image->rate_params->cpu, params->bo->cpu, bytes);
++   } else {
++      /* New parameters change how every later reader sees the image, so they are written
++       * in GPU order: work recorded earlier still reads the old layout through the old
++       * parameters. Written from the CPU at record time, a moving gaze showed stretched
++       * content and hard-edged rectangles. */
++      if (cmd->metal.render != NULL)
++         cs_end(cmd);
++      mtl_copy_from_buffer_to_buffer(cs_get_compute(cmd), params->bo->map, 0,
++                                     image->rate_params->map, 0, bytes);
+       kk_fdm_order_for_next_encoder(cmd);
+    }
+-   else
+-      memcpy(image->rate_params->cpu, density->fdm.params->bo->cpu, bytes);
++   if (image->rate_ref != params) {
++      params->refs++;
++      if (image->rate_ref)
++         kk_fdm_params_unref(image->rate_ref);
++      image->rate_ref = params;
++   }
+    image->rate_params_owner = density;
+-   image->rate_params_serial = density->fdm.serial;
++   image->rate_params_serial = params->serial;
+ }
+ 
+ void
+@@ -1171,6 +1198,7 @@ kk_fdm_setup_rendering(struct kk_cmd_buffer *cmd,
+       kk_implicit_trace("render depth", render->depth_att.iview->vk.image,
+                         render->depth_att.resolve_iview ? render->depth_att.resolve_iview->vk.image : NULL);
+ 
++   bool implicit_density = false;
+    simple_mtx_lock(&kk_fdm_lock);
+    if (!density && kk_implicit_fdm_enabled() && !gfx->in_custom_resolve && !kk_implicit_raw_active() &&
+        !debug_get_bool_option("KK_IMPLICIT_NOMAP", false)) {
+@@ -1184,9 +1212,40 @@ kk_fdm_setup_rendering(struct kk_cmd_buffer *cmd,
+          const struct kk_attachment *att = render->color_att_count && render->color_att[0].iview
+                                               ? &render->color_att[0] : &render->depth_att;
+          density = kk_implicit_density(dev, target, att->load_op != VK_ATTACHMENT_LOAD_OP_LOAD);
++         implicit_density = density != NULL;
+       }
+    }
+    void *map = density ? kk_fdm_get_map(cmd, density, screen, render->area) : NULL;
++   /* A pass that loads an attachment drawn under an older map renders in that map, so
++    * the old contents and the new drawing share one layout; the image takes the new map
++    * when a pass next rewrites it without loading (usually the next frame). */
++   struct kk_fdm_params *use = map ? density->fdm.params : NULL;
++   if (map && implicit_density) {
++      struct kk_fdm_params *older = NULL;
++      bool mixed = false;
++      for (uint32_t i = 0; i <= render->color_att_count; i++) {
++         const struct kk_attachment *att =
++            i < render->color_att_count ? &render->color_att[i] : &render->depth_att;
++         if (!att->iview || att->load_op != VK_ATTACHMENT_LOAD_OP_LOAD)
++            continue;
++         struct kk_image *img = container_of(att->iview->vk.image, struct kk_image, vk);
++         if (!img->rate_ref || img->rate_ref == use)
++            continue;
++         if (older && older != img->rate_ref)
++            mixed = true;
++         else
++            older = img->rate_ref;
++      }
++      if (older && older->map) {
++         use = older;
++         map = older->map;
++      }
++      if (mixed) {
++         static uint32_t logged;
++         if (logged++ < 8)
++            mesa_logw("kk-implicit: a pass loads attachments drawn under different maps");
++      }
++   }
+    if (map && !kk_fdm_all_subsampled(render)) {
+       static uint32_t logged;
+       if (kk_fdm_debug() && logged++ < 8)
+@@ -1252,17 +1311,17 @@ kk_fdm_setup_rendering(struct kk_cmd_buffer *cmd,
+    bool publish = !(render->flags & VK_RENDERING_RESUMING_BIT);
+    if (map) {
+       mtl_render_pass_descriptor_set_rate_map(descriptor, map);
+-      kk_fdm_cmd_ref(cmd, density->fdm.params);
+-      params = density->fdm.params->bo->gpu;
++      kk_fdm_cmd_ref(cmd, use);
++      params = use->bo->gpu;
+       for (uint32_t i = 0; publish && i < render->color_att_count; i++) {
+-         kk_fdm_publish(cmd, density, render->color_att[i].iview);
+-         kk_fdm_publish(cmd, density, render->color_att[i].resolve_iview);
++         kk_fdm_publish(cmd, density, use, render->color_att[i].iview);
++         kk_fdm_publish(cmd, density, use, render->color_att[i].resolve_iview);
+       }
+       if (publish) {
+-         kk_fdm_publish(cmd, density, render->depth_att.iview);
+-         kk_fdm_publish(cmd, density, render->depth_att.resolve_iview);
+-         kk_fdm_publish(cmd, density, render->stencil_att.iview);
+-         kk_fdm_publish(cmd, density, render->stencil_att.resolve_iview);
++         kk_fdm_publish(cmd, density, use, render->depth_att.iview);
++         kk_fdm_publish(cmd, density, use, render->depth_att.resolve_iview);
++         kk_fdm_publish(cmd, density, use, render->stencil_att.iview);
++         kk_fdm_publish(cmd, density, use, render->stencil_att.resolve_iview);
+       }
+    }
+    simple_mtx_unlock(&kk_fdm_lock);
+@@ -1344,6 +1403,12 @@ kk_fdm_clear_image_mapping(struct kk_cmd_buffer *cmd, struct kk_image *image)
+    kk_fdm_order_for_next_encoder(cmd);
+    image->rate_params_owner = NULL;
+    image->rate_params_serial = 0;
++   if (image->rate_ref) {
++      simple_mtx_lock(&kk_fdm_lock);
++      kk_fdm_params_unref(image->rate_ref);
++      simple_mtx_unlock(&kk_fdm_lock);
++      image->rate_ref = NULL;
++   }
+ }
+ 
+ void
+@@ -1728,6 +1793,12 @@ kk_implicit_compact_dispatch(struct kk_cmd_buffer *cmd, const struct kk_shader *
+             kk_fdm_order_for_next_encoder(cmd);
+             img->rate_params_owner = d;
+             img->rate_params_serial = d->fdm.serial;
++            if (img->rate_ref != d->fdm.params) {
++               d->fdm.params->refs++;
++               if (img->rate_ref)
++                  kk_fdm_params_unref(img->rate_ref);
++               img->rate_ref = d->fdm.params;
++            }
+             density = d;
+             kk_compact_log(cs, "maps %ux%u", extent.width, extent.height);
+          }
+diff --git a/src/kosmickrisp/vulkan/kk_fdm.h b/src/kosmickrisp/vulkan/kk_fdm.h
+index 621127b..6ec77e8 100644
+--- a/src/kosmickrisp/vulkan/kk_fdm.h
++++ b/src/kosmickrisp/vulkan/kk_fdm.h
+@@ -25,6 +25,10 @@ struct kk_fdm_params {
+    struct kk_device *dev;
+    struct kk_bo *bo;
+    uint32_t refs;
++   /* The rate map these parameters describe (retained), so a pass can still render an
++    * image in the layout it was drawn in after the density map has moved on. */
++   void *map;
++   uint64_t serial;
+ };
+ 
+ void kk_fdm_cmd_release(struct kk_cmd_buffer *cmd);
+diff --git a/src/kosmickrisp/vulkan/kk_image.h b/src/kosmickrisp/vulkan/kk_image.h
+index b5443ed..ae2fcbc 100644
+--- a/src/kosmickrisp/vulkan/kk_image.h
++++ b/src/kosmickrisp/vulkan/kk_image.h
+@@ -88,6 +88,8 @@ struct kk_image {
+    bool implicit_unwarp_logged;
+    bool implicit_poison; /* shares a pass with an image that cannot be foveated */
+    struct kk_bo *rate_params;
++   /* The parameters (and map) the image's contents are laid out in, referenced. */
++   struct kk_fdm_params *rate_ref;
+    const void *rate_params_owner;
+    uint64_t rate_params_serial;
+    uint32_t rate_params_version;
+diff --git a/src/kosmickrisp/vulkan/kk_nir_lower_descriptors.c b/src/kosmickrisp/vulkan/kk_nir_lower_descriptors.c
+index cc97ea5..1c5a31b 100644
+--- a/src/kosmickrisp/vulkan/kk_nir_lower_descriptors.c
++++ b/src/kosmickrisp/vulkan/kk_nir_lower_descriptors.c
+@@ -651,10 +651,14 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
+    const uint64_t plane_offset_B =
+       plane * sizeof(struct kk_sampled_image_descriptor);
+ 
++   /* Gathers (tg4) take normalised coordinates like sampling: untranslated, NMS's
++    * half-resolution shadow mask (gathered by its full-resolution lighting) was read in
++    * its physical layout, sunlit only inside a rectangle of the physical size. */
+    if (KK_EXPERIMENTAL(FDM_RATE) && sampler != NULL &&
+        !tex->is_shadow &&
+        (tex->op == nir_texop_tex || tex->op == nir_texop_txb ||
+-        tex->op == nir_texop_txl || tex->op == nir_texop_txd) &&
++        tex->op == nir_texop_txl || tex->op == nir_texop_txd ||
++        tex->op == nir_texop_tg4) &&
+        kk_sampler_deref_is_subsampled(
+           b, nir_src_as_deref(nir_src_for_ssa(sampler)), ctx))
+       kk_lower_subsampled_coord(b, tex,

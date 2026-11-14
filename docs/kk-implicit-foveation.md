@@ -602,10 +602,38 @@ Everything outside it has only ambient light. With `KK_IMPLICIT_SKIP=2800x1428` 
 game, so another planet) the image is clean. No raw ordinary-to-foveated copies were
 logged. Not yet found. At the default settings (59%) the runs were clean.
 
+### Moving gaze and the 50% fault fixed (2026-11-14)
+
+Patch `0010-per-image-maps-and-gather.patch`.
+
+- **Per-image maps in GPU order.**
+  - Each map's parameters (`struct kk_fdm_params`) now keep their Metal rate map, and
+    each foveated image references the parameters its contents are laid out in
+    (`rate_ref`).
+  - New parameters reach an image's buffer only by a GPU copy (ending an open render
+    encoder if need be), so earlier work still reads the old layout through the old
+    parameters. Unchanged parameters are still rewritten from the CPU: the same bytes.
+  - A pass that loads an attachment drawn under an older map renders in that map; the
+    image takes the new map when a pass next rewrites it without loading. A pass
+    loading attachments under two different maps logs a warning (seen once per run).
+- **Gathers translated.** `textureGather` (`tg4`) takes normalised coordinates like
+  sampling but was not translated. At NMS's Standard settings the scene renders at
+  full eye size, and its half-resolution effects at 2800×1428 (50%) are foveated. Its
+  full-resolution lighting gathers a half-resolution 8-bit shadow mask, so it read the
+  mask's physical layout, sunlit only inside a rectangle of the physical size.
+  - Found by excluding images by size and format (`KK_IMPLICIT_SKIP=WxH:FORMAT`).
+  - At the default settings those effects are 1648×848 (29%), below the 40% rule, so
+    the fault never showed there.
+  - Depth-compare sampling is still not translated; it is normally used on shadow
+    maps, which are never foveated.
+
+Check: a fresh game at Standard settings with nothing excluded and the synthetic
+sweeping gaze. Both eyes are clean: no stretching, no rectangles, lighting continuous.
+
 ## Next
 
-1. Moving-gaze maps for the single-sample route: per-image maps in GPU order, and loads
-   across a map change (above). Fixed foveation until then.
+1. NMS in the headset with real gaze (`MWXR_FOVEATION=gaze`) at Standard and higher
+   settings.
 2. NMS's own graphics settings against its read-write compute pass (clouds or
    volumetrics, from the look of it).
 3. Find why compaction of NMS's two 16×16 compute shaders on its 25% targets leaves
