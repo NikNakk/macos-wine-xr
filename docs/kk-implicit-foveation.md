@@ -630,6 +630,36 @@ Patch `0010-per-image-maps-and-gather.patch`.
 Check: a fresh game at Standard settings with nothing excluded and the synthetic
 sweeping gaze. Both eyes are clean: no stretching, no rectangles, lighting continuous.
 
+### Talos in the headset (2026-11-14)
+
+First headset runs of Talos: fixed foveation worked but looked low-resolution; gaze
+broke the view as the eyes moved (NMS was fine). Patch
+`0011-gpu-ordered-params-copy-maps-both-eyes.patch`:
+
+- **Raw copies between foveated images now carry the map.** Talos renders an eye into
+  one image and copies it raw into a second foveated image, which it then submits as
+  the right eye. The copy moved the texels but not the map, so the second image kept a
+  map from long before and was unwarped through it. With a fixed map the two maps were
+  the same, which is why only a moving gaze showed it. `kk_implicit_copy_map` now gives
+  the destination the source's parameters, in GPU order, after a full-size level-0
+  copy.
+  - Found with the operation trace (`KK_IMPLICIT_SEQ=N`), which now shows each image's
+    map serial.
+  - In the simulator, the right eye's hidden-area mask edge moved by up to 1,349 pixels
+    between frames under a sweeping gaze; it now moves at most 10, like the left eye's.
+- **Parameters always written in GPU order.** Even when an image already held the
+  parameters at record time, the CPU rewrite could land before a still-queued copy of
+  other parameters. They are now always written by a GPU copy, with a barrier for later
+  work in the same compute encoder.
+- **One-eye targets use both eyes' profiles.** Talos renders each eye to its own image
+  of the same size, so KosmicKrisp cannot tell left from right, and it used the left
+  eye's horizontal profile for both. The PS VR2's eye fields of view are not mirror
+  images, so the right eye's sharp region sat off its gaze; this is probably part of
+  the low-resolution look with fixed foveation. One-eye targets now take the higher of
+  the two eyes' rates.
+- `KK_IMPLICIT_BOUNDARY=present` (diagnostic) takes new maps only at the application's
+  presents, not at the bridge's swapchain releases.
+
 ## Next
 
 1. NMS in the headset with real gaze (`MWXR_FOVEATION=gaze`) at Standard and higher
