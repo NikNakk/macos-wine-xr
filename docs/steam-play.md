@@ -221,7 +221,7 @@ opened again) and the page showed the choice with no note.
 ### macos-wine-xr's options
 
 While a game uses the macos-wine-xr tool, the page shows its options under the tool
-dropdown: **UEVR** (Off, On with OpenXR, On with OpenVR through xrizer; [uevr.md](uevr.md))
+dropdown, as rows of buttons: **UEVR** (Off, On with OpenXR, On with OpenVR through xrizer; [uevr.md](uevr.md))
 and **Foveated rendering** (Off, Fixed, Gaze; [foveation.md](foveation.md)), with an
 **Open UEVR settings folder** button while UEVR is on. They are hidden for a game set to
 its macOS build.
@@ -237,6 +237,10 @@ arguments, `%command%` and other `MWXR_` words (`MWXR_UEVR_DELAY`, `MWXR_KK_PASS
 stay as they are. A value the page has no choice for, such as `MWXR_FOVEATION=gaze:0.6`, is
 shown and kept as "Custom". "Off" removes the words, so a per-game default in
 `steam-play-game-settings.zsh` still applies; none of these options has one yet.
+
+They were drop-down menus at first, but Steam's windows do not pass mouse clicks to the
+native pop-up a `<select>` opens (choices worked from the keyboard only), so each option
+is a row of Steam-styled buttons instead.
 
 The controls are `src/macos/steam_ui_options.js`, installed in the payload and served to
 the page as `/mwxr/options.js`. The patch of `sp.js` adds one element after the tool
