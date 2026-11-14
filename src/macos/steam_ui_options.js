@@ -144,26 +144,42 @@
   function row(doc, appid, option, launch) {
     const current = option.read(launch);
     // One column: the options sit in the tool dropdown's description, under its label.
-    const wrap = doc.createElement("label");
+    const wrap = doc.createElement("div");
     wrap.style.cssText = "display:flex;flex-direction:column;gap:6px;margin:12px 0";
     const top = doc.createElement("div");
     top.style.cssText = "display:flex;flex-direction:column;gap:6px";
     top.append(text(doc, "span", option.label, null, "color:#dcdedf"));
-    const select = doc.createElement("select");
-    select.style.cssText = "width:100%;box-sizing:border-box;background:#32353c;color:#dcdedf;border:1px solid #4a4e57;border-radius:2px;padding:6px 8px";
+    // A row of buttons, not a <select>: Steam's windows do not pass mouse clicks to the
+    // native pop-up a <select> opens (the keyboard worked, clicks did nothing).
+    const group = doc.createElement("div");
+    group.setAttribute("role", "radiogroup");
+    group.setAttribute("aria-label", option.label);
+    group.style.cssText = "display:flex;flex-wrap:wrap;gap:6px";
     const choices = [...option.choices];
     // A value the page has no choice for (gaze:0.6, say) is kept and shown as it is.
     if (!choices.some((c) => c.value === current)) choices.push({ value: current, label: "Custom: " + current });
+    const paint = (button, on) => {
+      button.setAttribute("aria-checked", on ? "true" : "false");
+      button.style.background = on ? "#1a9fff" : "";
+      button.style.color = on ? "#ffffff" : "";
+    };
     for (const c of choices) {
-      const o = doc.createElement("option");
-      o.value = c.value;
-      o.textContent = c.label;
-      o.selected = c.value === current;
-      select.append(o);
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.className = "DialogButton";
+      button.setAttribute("role", "radio");
+      button.textContent = c.label;
+      button.style.cssText = "display:inline-block;width:auto;min-width:0;padding:0 12px;margin:0";
+      paint(button, c.value === current);
+      button.onclick = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        for (const other of group.children) paint(other, other === button);
+        save(appid, option.write(c.value));
+      };
+      group.append(button);
     }
-    select.onchange = () => save(appid, option.write(select.value));
-    select.onclick = (ev) => ev.stopPropagation();
-    top.append(select);
+    top.append(group);
     wrap.append(top, text(doc, "div", option.description, null, "font-size:12px;color:#8b929a"));
     return wrap;
   }
