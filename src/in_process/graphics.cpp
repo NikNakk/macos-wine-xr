@@ -331,11 +331,12 @@ extern "C" XrResult WINAPI xrReleaseSwapchainImage(XrSwapchain swapchain, const 
             wrapper->copy_source = swap->images[index].copy_source;
             wrapper->copy_target = swap->metal[index].texture;
         }
+        wrapper->capture_texture = swap->metal ? swap->metal[index].texture : nullptr;
     }
     struct xrReleaseSwapchainImage_params params = {swapchain, info};
     NTSTATUS status = UNIX_CALL(xrReleaseSwapchainImage, &params);
     XrResult result = call_result(status, params.result);
-    wrapper->copy_source = wrapper->copy_target = nullptr;
+    wrapper->copy_source = wrapper->copy_target = wrapper->capture_texture = nullptr;
     if (XR_SUCCEEDED(result) && swap->acquired_count) {
         swap->acquired_head = (swap->acquired_head + 1) % swap->count;
         --swap->acquired_count;
@@ -410,16 +411,37 @@ extern "C" XrResult WINAPI xrPollEvent(XrInstance instance, XrEventDataBuffer *e
     }
     return result;
 }
+// Layers per frame passed on. UEVR, for one, sends its projection layer with quads for the
+// game's UI and its own menu; the host reports far more (Monado: 128).
+enum { MAX_FRAME_LAYERS = 16 };
+union NativeLayer {
+    XrCompositionLayerProjection projection;
+    XrCompositionLayerQuad quad;
+};
 extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *info)
 {
-    if (!info || info->next || info->layerCount > 1) return XR_ERROR_LAYER_INVALID;
+    if (!info || info->next) return XR_ERROR_LAYER_INVALID;
+    if (info->layerCount > MAX_FRAME_LAYERS) return XR_ERROR_LAYER_LIMIT_EXCEEDED;
+    if (info->layerCount && !info->layers) return XR_ERROR_LAYER_INVALID;
     XrFrameEndInfo native = *info;
-    XrCompositionLayerProjection projection; XrCompositionLayerProjectionView views[4];
-    const XrCompositionLayerBaseHeader *layer = nullptr;
-    if (info->layerCount) {
-        if (!info->layers || !info->layers[0] || info->layers[0]->type != XR_TYPE_COMPOSITION_LAYER_PROJECTION)
-            return XR_ERROR_LAYER_INVALID;
-        projection = *(const XrCompositionLayerProjection *)info->layers[0];
+    NativeLayer copies[MAX_FRAME_LAYERS];
+    XrCompositionLayerProjectionView views[MAX_FRAME_LAYERS][4];
+    const XrCompositionLayerBaseHeader *layers[MAX_FRAME_LAYERS];
+    bool first_projection = true;
+    for (uint32_t l = 0; l < info->layerCount; ++l) {
+        const XrCompositionLayerBaseHeader *source = info->layers[l];
+        if (!source) return XR_ERROR_LAYER_INVALID;
+        if (source->type == XR_TYPE_COMPOSITION_LAYER_QUAD) {
+            XrCompositionLayerQuad &quad = copies[l].quad;
+            quad = *(const XrCompositionLayerQuad *)source;
+            if (quad.next || !quad.subImage.swapchain) return XR_ERROR_LAYER_INVALID;
+            quad.subImage.swapchain = wine_swapchain_from_handle(quad.subImage.swapchain)->host_swapchain;
+            layers[l] = (const XrCompositionLayerBaseHeader *)&quad;
+            continue;
+        }
+        if (source->type != XR_TYPE_COMPOSITION_LAYER_PROJECTION) return XR_ERROR_LAYER_INVALID;
+        XrCompositionLayerProjection &projection = copies[l].projection;
+        projection = *(const XrCompositionLayerProjection *)source;
         // The one chained struct passed on: XR_MNDX_display_distortion's display image marker.
         const auto *marker = (const XrCompositionLayerDisplayImageMNDX *)projection.next;
         if (marker && (marker->type != XR_TYPE_COMPOSITION_LAYER_DISPLAY_IMAGE_MNDX || marker->next))
@@ -431,26 +453,31 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
             logged_view_count = projection.viewCount;
             fprintf(stderr, "wineopenxr: projection layer with %u views\n", projection.viewCount);
         }
-        // Gaze foveation covers one swapchain holding both eyes: side by side in one layer, or
+        // Gaze foveation and the Vulkan bridge follow the frame's first projection layer, the
+        // scene. Gaze covers one swapchain holding both eyes: side by side in one layer, or
         // one array layer each (xrizer), where the two rectangles overlap and the map is the
         // higher of the two eyes' rates.
-        auto *gaze = wine_session_from_handle(session)->vulkan ? nullptr : (SessionState *)wine_session_from_handle(session)->graphics;
-        if (gaze && projection.viewCount == 2 && projection.views[0].subImage.swapchain &&
-            projection.views[0].subImage.swapchain == projection.views[1].subImage.swapchain) {
-            gaze->gaze_swapchain = projection.views[0].subImage.swapchain;
-            for (unsigned i = 0; i < 2; ++i) {
-                gaze->gaze_rects[i] = projection.views[i].subImage.imageRect; gaze->gaze_fovs[i] = projection.views[i].fov;
+        if (first_projection) {
+            first_projection = false;
+            auto *gaze = wine_session_from_handle(session)->vulkan ? nullptr : (SessionState *)wine_session_from_handle(session)->graphics;
+            if (gaze && projection.viewCount == 2 && projection.views[0].subImage.swapchain &&
+                projection.views[0].subImage.swapchain == projection.views[1].subImage.swapchain) {
+                gaze->gaze_swapchain = projection.views[0].subImage.swapchain;
+                for (unsigned i = 0; i < 2; ++i) {
+                    gaze->gaze_rects[i] = projection.views[i].subImage.imageRect; gaze->gaze_fovs[i] = projection.views[i].fov;
+                }
             }
+            if (wine_session_from_handle(session)->vulkan) mw_vk_note_projection(session, &projection);
         }
-        if (wine_session_from_handle(session)->vulkan) mw_vk_note_projection(session, &projection);
         for (unsigned i = 0; i < projection.viewCount; ++i) {
-            views[i] = projection.views[i];
-            if (views[i].next || !views[i].subImage.swapchain) return XR_ERROR_LAYER_INVALID;
-            views[i].subImage.swapchain = wine_swapchain_from_handle(views[i].subImage.swapchain)->host_swapchain;
+            views[l][i] = projection.views[i];
+            if (views[l][i].next || !views[l][i].subImage.swapchain) return XR_ERROR_LAYER_INVALID;
+            views[l][i].subImage.swapchain = wine_swapchain_from_handle(views[l][i].subImage.swapchain)->host_swapchain;
         }
-        projection.views = views; layer = (const XrCompositionLayerBaseHeader *)&projection;
-        native.layers = &layer;
+        projection.views = views[l];
+        layers[l] = (const XrCompositionLayerBaseHeader *)&projection;
     }
+    if (info->layerCount) native.layers = layers;
     struct xrEndFrame_params params = {session, &native};
     NTSTATUS status = UNIX_CALL(xrEndFrame, &params);
     XrResult result = call_result(status, params.result);

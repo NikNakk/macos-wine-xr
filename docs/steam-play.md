@@ -283,6 +283,7 @@ pass them to the game. A literal `%command%`, as Linux Steam uses, is dropped, s
 | `MWXR_ALYX=native` | Half-Life: Alyx starts its native ARM64 build (below) |
 | `MWXR_ALYX_OPTIMIZED=1` | with it, the native launcher's `--optimized` xrizer build |
 | `MWXR_WOW64=1` or `0` | the WoW64 or 64-bit runtime, whatever the game's exes are |
+| `MWXR_UEVR=1` | inject UEVR into an Unreal Engine game once its window is up ([uevr.md](uevr.md)) |
 
 Tested by calling the tool as Steam does; macOS Steam passing Launch Options to the tool
 is not confirmed yet.

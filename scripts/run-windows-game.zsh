@@ -220,7 +220,25 @@ stop_game() {
 }
 trap stop_game TERM INT HUP
 steam_client_windows=$(WINEDEBUG=-all "${wine}" winepath -w "${steam_client}" 2>/dev/null | tr -d '\r')
+# UEVR's settings live in one folder shared by every prefix (tools/steam_play/uevr_profile.py).
+[[ ${MWXR_UEVR:-0} == 1 ]] && python3 "${repo}/tools/steam_play/uevr_profile.py" link "${MWXR_IN_PROCESS_PREFIX}"
 "${repo}/scripts/run-in-process-openxr.zsh" "${stand_in}" --steam-dir "${steam_client_windows}" -- \
   "${exe_windows}" ${=arguments} "$@" > "${logs}/game.log" 2>&1 &
 game_pid=$!
+# MWXR_UEVR=1 (Steam Launch Options): inject UEVR into an Unreal Engine game once its window
+# is up (docs/uevr.md). MWXR_UEVR_EXE names the process when Steam starts a bootstrap exe.
+if [[ ${MWXR_UEVR:-0} == 1 ]]; then
+  uevr_dir=${MWXR_UEVR_DIR:-$HOME/Windows/uevr/current}
+  injector=${MWXR_UEVR_INJECTOR:-${repo}/build-in-process/uevr/mwxr-uevr-inject.exe}
+  if [[ -f ${uevr_dir}/UEVRBackend.dll && -f ${injector} ]]; then
+    uevr_args=(--exe "${MWXR_UEVR_EXE:-${exe:t}}" --runtime "${MWXR_UEVR_RUNTIME:-openxr}"
+      --delay "${MWXR_UEVR_DELAY:-5}"
+      --dir "$(WINEDEBUG=-all "${wine}" winepath -w "${uevr_dir:A}" 2>/dev/null | tr -d '\r')")
+    [[ ${MWXR_UEVR_NULLIFY:-0} == 1 ]] && uevr_args+=(--nullify-plugins)
+    print "UEVR: ${uevr_dir:A} (${MWXR_UEVR_RUNTIME:-openxr}), log ${logs}/uevr.log"
+    WINEDEBUG=-all "${wine}" "${injector}" "${uevr_args[@]}" > "${logs}/uevr.log" 2>&1 &
+  else
+    print -u2 "MWXR_UEVR=1: need ${uevr_dir}/UEVRBackend.dll and ${injector} (scripts/build-uevr-injector.zsh)"
+  fi
+fi
 wait ${game_pid}

@@ -161,7 +161,7 @@ int32_t mw_foveation_call(void *args)
     }
     return 0;
 }
-// MWXR_CAPTURE_DIR=dir MWXR_CAPTURE_EVERY=n [MWXR_CAPTURE_MAX=m]: every n-th release of a Vulkan session's
+// MWXR_CAPTURE_DIR=dir MWXR_CAPTURE_EVERY=n [MWXR_CAPTURE_MAX=m]: every n-th release of a swapchain
 // image, up to six times, write each array layer as dir/eye-K-L.png (debugging only;
 // it waits for the GPU).
 #pragma push_macro("interface")

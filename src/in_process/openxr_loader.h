@@ -67,7 +67,7 @@ typedef struct { XrSession host_session; wine_XrInstance *instance; void *metal_
 // uses an explicit graphics copy fallback (native MTLTexture objects).
 typedef struct { XrSwapchain host_swapchain; wine_XrSession *session; XrSwapchainCreateInfo info;
     void *graphics; void *copy_source, *copy_target;
-    void *capture_texture; // native MTLTexture being released, for MWXR_CAPTURE_DIR (Vulkan sessions)
+    void *capture_texture; // native MTLTexture being released, for MWXR_CAPTURE_DIR
 } wine_XrSwapchain;
 static inline wine_XrInstance *wine_instance_from_handle(XrInstance h) { return (wine_XrInstance *)h; }
 static inline wine_XrSession *wine_session_from_handle(XrSession h) { return (wine_XrSession *)h; }
