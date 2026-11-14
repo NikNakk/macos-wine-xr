@@ -25,7 +25,7 @@ The Wine/OpenXR repository is on `claude/steamvr-openxr-driver`, starting at
 `97d6309`. Its existing uncommitted OpenXR/Metal foveation work and results were
 retained. No branches were reset, commits made, or installed runtimes replaced.
 
-The active DXMT base is the clean local `~/Code/dxmt-d3d10fix` at
+The active DXMT base is the clean local `~/Code/dxmt` at
 `4c3a2f5ea661bd258c14cf8ccb6924791cc75a77`, rather than upstream DXMT or the
 separate dirty `~/Code/dxmt` checkout. Experimental source/builds are in
 `build-in-process/dxmt-foveation-{source,build}`. The private source also contains

@@ -498,7 +498,7 @@ command lists when they are executed.
 
 ### Frame boundary and the first capture, 2026-10-26
 
-- DXMT branch `claude/xr-frame-boundary` (`~/Code/dxmt-d3d10fix`, on
+- DXMT branch `claude/xr-frame-boundary` (`~/Code/dxmt`, on
   `435b2eb`) adds `IDXMTNativeDevice4::EndFrame()`: what `Present` does,
   without presenting. Installed in the rig's runtime and prefix (previous
   `d3d11.dll` in `~/Windows/backups/dxmt-steamvr-gpu-timing-435b2eb-20261026-163303`).

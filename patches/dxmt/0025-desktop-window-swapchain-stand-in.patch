@@ -5,7 +5,7 @@ throwaway swapchain whose OutputWindow is GetDesktopWindow(), which Windows allo
 Under Wine the desktop belongs to explorer, so the cross-process check refused it and
 UEVR never hooked (docs/uevr.md). Build such a swapchain on a hidden 1x1 popup of the
 calling process instead: same class and vtable as the game's swapchain, never
-presented. Also in the production DXMT (dxmt-d3d10fix 9d338cb).
+presented. Also in the production DXMT (branch claude/xr-frame-boundary, 9d338cb).
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
 index 38a5c6a..09abfa3 100644
