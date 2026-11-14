@@ -54,6 +54,12 @@ if [[ ${_mwxr_settings_app} == (552440|275850) && ${MWXR_VULKAN:-} != off ]]; th
   if [[ ${_mwxr_settings_app} == 552440 ]]; then
     export KK_IMPLICIT_SINGLE=${KK_IMPLICIT_SINGLE:-1} KK_IMPLICIT_HALF=${KK_IMPLICIT_HALF:-1}
   fi
+  # The game's desktop (spectator) window presents through KosmicKrisp; in FIFO mode each
+  # present can wait for the Mac display's refresh and hold up the VR frame. Immediate
+  # presentation never waits (the window may tear). MWXR_SPECTATOR_VSYNC=1 keeps FIFO.
+  if [[ ${MWXR_SPECTATOR_VSYNC:-} != 1 ]]; then
+    export MESA_VK_WSI_PRESENT_MODE=${MESA_VK_WSI_PRESENT_MODE:-immediate}
+  fi
   # MWXR_KK_PASS_TIMING=1 from the Launch Options (macOS Steam passes only MWXR_ words to
   # the tool as settings): KosmicKrisp's per-pass GPU timing in the game log.
   [[ ${MWXR_KK_PASS_TIMING:-} == 1 ]] && export KK_PASS_TIMING=1
