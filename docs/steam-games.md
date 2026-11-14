@@ -27,8 +27,8 @@ this rig's runner as the compatibility tool; Steam then does all three itself.
 | Games installed with SteamCMD | `~/Windows/library/steamapps/common/<installdir>` | one, used by every prefix (as `Z:`) |
 | Windows Steam's `steamclient64.dll`/`steamclient.dll` (loaded by `steam_api`, never run) | `~/Windows/library/steam-client` | one; copied once from the rig prefix's Steam |
 | Wine runtime with DXMT and lsteamclient, wineopenxr, xrizer | the runtime, `build-in-process`, `~/Windows/openvr-runtimes` | one |
-| A game's prefix (registry, `users`, Wine's system32 copies, about 0.9 GB) | `~/Windows/prefixes/<appid>` | one per game, an APFS clone of `~/Windows/prefixes/template` |
-| DXMT's and lsteamclient's DLLs in each system32 | synced from the runtime at every launch | APFS clones of the runtime's files |
+| A game's prefix (registry, `users`, saves; Wine's DLLs in `system32` and `syswow64`, about 1.4 GB) | `~/Windows/prefixes/<appid>` | one per game, an APFS clone of `~/Windows/prefixes/template` |
+| Wine's built-in DLLs in each prefix, DXMT's and lsteamclient's among them | checked at every launch (`tools/steam_games/share_prefix_dlls.py`, 0.3 s) | APFS clones of the runtime's files, so about nothing per prefix |
 
 Wine's system32 copies cannot be shared by symlinks: Wine's own prefix updates write
 through them and would overwrite the shared runtime. Clones share blocks until a game
@@ -83,6 +83,28 @@ scripts/game-prefix.zsh list                                  # the game prefixe
 
 Needs macOS Steam running and signed in, Windows Steam not running (one account, one
 client), and the runtime set up by `scripts/install-lsteamclient.zsh`.
+
+## Wine's DLLs in each prefix
+
+A prefix holds a copy of every Wine built-in it may load: `system32` for 64-bit programs,
+`syswow64` for 32-bit ones, and their `drivers` folders, about 1.4 GB with WoW64. Wine
+loads built-ins from the runtime; the copies are there so programs find the files. A
+prefix cloned from the template shares those blocks with it, but Wine's own prefix
+update, after any runtime change, writes them as new files, so every prefix used to end
+up with a private copy after a Wine update.
+
+`game-prefix.zsh` now runs `tools/steam_games/share_prefix_dlls.py` after its update
+step (`ensure`, `upgrade`, and when making the template): each file that carries Wine's
+built-in marker (`Wine builtin DLL` in its DOS stub) and has the same name in the runtime
+becomes an APFS clone of the runtime's file. Files without the marker, the native DLLs a
+game or installer put there (Microsoft's .NET in Assetto Corsa's prefix, for example), are
+left alone. A clone keeps the runtime file's size and time, so later launches skip it
+without reading it; a launch with nothing to share takes 0.3 s. Prefixes that are not game
+prefixes (the rig's) are shared with `game-prefix.zsh upgrade PREFIX`.
+
+On 2026-11-14 every game prefix, the template and the rig prefix were shared with
+`runtime-unified` (1,388–1,464 MB each; 0–8 native files kept per prefix), and The Turing
+Test with UEVR ran from a shared copy.
 
 ## Prefix updates and `dll*.tmp`
 

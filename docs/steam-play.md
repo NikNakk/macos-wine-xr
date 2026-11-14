@@ -365,8 +365,9 @@ How the switch was made:
   on only with `MWXR_LSTEAMCLIENT=1`.
 - `prefixes-wow64`'s games (Assetto Corsa, Braid, The Turing Test) and its template moved
   into `~/Windows/prefixes`; `prefixes-wow64` is now a link to it, and the Steam Cloud
-  `pfx` links name `prefixes`. The old 64-bit template and a duplicate Turing Test prefix
-  are in `~/Windows/prefixes/.backups`.
+  `pfx` links name `prefixes`. Every game prefix was upgraded on 2026-11-14 and its
+  backup removed after checking it; the rig prefix's backup is kept in
+  `~/Windows/prefixes/.backups` until Half-Life: Alyx has run in a headset.
 - A prefix made by a 64-bit-only runtime gets its 32-bit side the first time it is used
   (`game-prefix.zsh ensure`, or `game-prefix.zsh upgrade PREFIX` for any prefix): an APFS
   clone goes to `<root>/.backups/<name>-before-wow64-<time>`, then `wineboot -u` runs
