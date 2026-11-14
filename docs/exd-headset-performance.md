@@ -616,6 +616,21 @@ byte for byte and wrote nothing into Steam's EXD folder. `run-exd-scene-trace.zs
 `build-in-process/foveation-monado-arm64`, removed on 2026-11-10
 (`docs/results/dxmt-cleanup-20261110.json`), with any EXD copy; they stop at its check.
 
-Still to do: one headset baseline (2x MSAA, then fixed and gaze foveation) on this setup,
-compared with the private-copy numbers above, before the private copies' game, prefix and
-Wine folders are removed (keeping their cited run folders and `exd-depth/wine`).
+First measurements, 2026-11-14 (GPU busy time per frame, median of 600 frames from 300
+frames after the level appears, as `run-exd-headset-checks.zsh` measures; 2x MSAA):
+
+| Run | Setup | GPU, ms |
+|---|---|---|
+| PS VR2, 2026-11-11 (`exd-warp/headset-20261111-215217-msaa2-psvr2-baseline`) | private copy | 59.7 |
+| PS VR2, 2026-11-14 (`exd-steam/runs/headset-20261114-173207-msaa2`) | Steam's EXD | 72.2 |
+| High-resolution simulator, 2026-11-14, 5600x2856 | private copy (`exd-warp`) | 82.7 |
+| High-resolution simulator, 2026-11-14, 5600x2856 | Steam's EXD | 75.9 |
+
+Settings and the effective client compositor (off) were the same in the two headset runs.
+Under identical conditions the new setup is about 8% faster than the private copy, so it
+is not why the headset run is slower than on 2026-11-11: both setups are now well above
+what the same simulator gave on 2026-11-12 (59.6-62.6 ms), so the machine itself was
+slower that afternoon (9 GB of swap in use; other causes not visible without admin
+rights). Repeat the simulator pair after a restart before comparing absolute numbers
+with older runs. The private copies are no longer needed for comparison; their game,
+prefix and Wine folders can go, keeping their cited run folders and `exd-depth/wine`.
