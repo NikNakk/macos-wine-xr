@@ -572,3 +572,50 @@ The script edits copies of the private save with `tools/exd_settings.py`,
 restores the save and `GameUserSettings.ini` afterwards, and copies Monado's
 timing CSVs into the run directory. Runs are in
 `build-in-process/exd-ngx/headset-20261109-*`.
+
+## Measuring on Steam's EXD
+
+From 2026-11-14 the EXD scripts (`run-exd-headset-compare.zsh`, `-checks`, `-scene-trace`,
+`-tbdr-audit`) run the copy macOS Steam installed instead of the private copies under
+`build-in-process/exd-{ngx,warp,fov,depth}`. `scripts/exd-paths.zsh` picks the paths:
+
+- **Game:** `~/Library/Application Support/Steam/steamapps/common/EXD`, used read-only
+  (`MWXR_EXD_GAME`). It is the same build as the private copies, Steam build 26431855:
+  the shipping exe, the pak and the DLSS plugin match. The private copies only added
+  `nvngx.dll` and `_nvngx.dll` to `EXD/Binaries/Win64` and two Cheeky logs; with the
+  scripts' `nvapi64,nvngx,_nvngx,nvngx_dlss=b` override Wine loads the runtime's copies.
+  Each run records the build in `settings.txt` (or `audit-config.json`); set EXD to update
+  only when launched (Steam, Properties, Updates) so a series is not split by an update.
+- **Prefix:** `build-in-process/exd-steam/prefix` (`MWXR_EXD_PREFIX`), an APFS clone of
+  the Steam Play prefix (`~/Windows/prefixes/3962020`) with the private copies' settings:
+  `GameSettings.sav` templates (`.before-ngx`, upscaler off and 2x MSAA; `.dlss`) and
+  `Config/WindowsNoEditor`, identical in all four private copies. The runs edit and then
+  restore these files, so `exd-paths.zsh` refuses a prefix games are played in. EXD
+  does not use Steam Cloud.
+- **Wine:** `build-in-process/wine-foveation-unified` (`MWXR_EXD_WINE`), DXMT patches
+  0001-0025, now with DXMT's `nvapi64.dll` and `nvngx.dll` (also installed as `_nvngx.dll`
+  and `nvngx_dlss.dll`, as the private runtimes had them) for the DLSS configurations.
+  They stay inert for other games: without `DXMT_ENABLE_NVEXT=1` DXMT's nvapi reports no
+  NVIDIA device and removes the NGX registry keys.
+- **Runs:** `build-in-process/exd-steam/runs` (`MWXR_EXD_RUNS`).
+- **Depth checks (8, 9):** the depth-import DXMT patch is not in the series
+  (`patches/dxmt-experiments/import-depth-swapchain.patch`), so those use
+  `MWXR_EXD_WINE=build-in-process/exd-depth/wine`; only that runtime is still needed.
+
+`MWXR_EXD_EXPERIMENT_ROOT=<private copy>` uses a private copy as before.
+`scripts/test-dxmt-resource-read.py` and `-msaa.py`, which only borrowed `exd-warp`'s
+Wine and prefix to run their probes, use the foveation runtime and
+`build-in-process/prefix-warp` (upgraded to WoW64), and the fixture shader cache moved
+to `build-in-process/resource-read-fixture-cache`; both pass.
+
+Checked on 2026-11-14 with the stock simulated HMD: `run-exd-headset-compare.zsh msaa2 75`
+ran Steam's EXD (GPU 11.1 ms, frame 16.7 ms by the checks' measure; the stock simulator is
+pacing-bound, so this is no comparison), recorded build 26431855, restored the settings
+byte for byte and wrote nothing into Steam's EXD folder. `run-exd-scene-trace.zsh` and
+`run-exd-tbdr-audit.zsh` need the private probe service
+`build-in-process/foveation-monado-arm64`, removed on 2026-11-10
+(`docs/results/dxmt-cleanup-20261110.json`), with any EXD copy; they stop at its check.
+
+Still to do: one headset baseline (2x MSAA, then fixed and gaze foveation) on this setup,
+compared with the private-copy numbers above, before the private copies' game, prefix and
+Wine folders are removed (keeping their cited run folders and `exd-depth/wine`).

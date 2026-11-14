@@ -4,16 +4,16 @@
 """Per-resource read specialisation: pixel fixture matrix with the option off and on,
 including late, reversed, mixed and swapped bindings, a merged pass and a negative control.
 
-Requires the private runtime and prefix under build-in-process/exd-warp with DXMT
-patches 0001-0020, and the rebuilt probes. Usage: scripts/test-dxmt-resource-read.py [OUTPUT_DIRECTORY]
+Requires the foveation runtime (build-in-process/wine-foveation-unified, DXMT patches
+0001-0025), the test prefix build-in-process/prefix-warp, and the rebuilt probes. Usage: scripts/test-dxmt-resource-read.py [OUTPUT_DIRECTORY]
 """
 from pathlib import Path
 import os,subprocess,json,re,sys
 r=Path(__file__).resolve().parent.parent;b=r/'build-in-process';out=Path(sys.argv[1]) if len(sys.argv)>1 else b/'resource-read-validation';out.mkdir(parents=True,exist_ok=True)
-cache=b/'exd-warp/resource-read-fixture-cache-20261111';cache.mkdir(exist_ok=True)
+cache=b/'resource-read-fixture-cache';cache.mkdir(exist_ok=True)
 cases=[('ordinary',['--unfoveated']),('mapped',[]),('late',['--late-read']),('reverse',['--late-read','--reverse-read']),('mixed',['--mixed-reads']),('swap',['--mixed-swap']),('merge',['--unfoveated','--late-read','--split-pass'])]
 base={k:v for k,v in os.environ.items() if not k.startswith(('DXMT_','MWXR_','MTL_'))}
-base.update(MWXR_IN_PROCESS_WINE=str(b/'exd-warp/wine'),MWXR_WARP_READ_PREFIX=str(b/'exd-warp/prefix'),DXMT_RATE_MAP_POSITION='1',DXMT_RATE_MAP_READ='1',DXMT_RATE_MAP_SELECTIVE_READ='0',DXMT_TBDR_AUDIT='1',DXMT_SHADER_CACHE_PATH=str(cache))
+base.update(MWXR_IN_PROCESS_WINE=str(b/'wine-foveation-unified'),MWXR_WARP_READ_PREFIX=str(b/'prefix-warp'),DXMT_RATE_MAP_POSITION='1',DXMT_RATE_MAP_READ='1',DXMT_RATE_MAP_SELECTIVE_READ='0',DXMT_TBDR_AUDIT='1',DXMT_SHADER_CACHE_PATH=str(cache))
 results=[]
 for enabled in ['0','1']:
  env={**base,'DXMT_RATE_MAP_RESOURCE_READ':enabled}
