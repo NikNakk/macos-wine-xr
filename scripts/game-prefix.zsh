@@ -15,11 +15,13 @@
 # Usage: game-prefix.zsh template           make (or remake) the template prefix
 #        game-prefix.zsh ensure APPID       print the game's prefix, cloning it if new
 #        game-prefix.zsh upgrade PREFIX     bring any prefix (the rig's, for one) up to the
-#                                           runtime: its 32-bit side and Wine's update
+#                                           runtime: its 32-bit side, Wine's update and
+#                                           its built-ins shared with the runtime
 #        game-prefix.zsh list               the game prefixes
 # Environment: MWXR_IN_PROCESS_WINE (the runtime the template is made with),
 # MWXR_GAME_PREFIXES (default ~/Windows/prefixes).
 set -euo pipefail
+repo=${0:A:h:h}
 root=${MWXR_GAME_PREFIXES:-$HOME/Windows/prefixes}
 template=${root}/template
 cmd=${1:-}
@@ -100,6 +102,13 @@ sync_runtime_dlls() {  # prefix
       cp -c "${src}" "${dst}.new" && mv "${dst}.new" "${dst}"
     done
   fi
+  share_builtins "$1"
+}
+# Every other Wine built-in in the prefix as an APFS clone of the runtime's, so a Wine
+# update does not leave each prefix with its own 1.4 GB copy (share_prefix_dlls.py).
+share_builtins() {  # prefix
+  python3 "${repo}/tools/steam_games/share_prefix_dlls.py" "$1" "${MWXR_IN_PROCESS_WINE}" ||
+    print -u2 "Could not share $1's Wine DLLs with ${MWXR_IN_PROCESS_WINE}; carrying on"
 }
 
 make_template() {
@@ -147,6 +156,7 @@ case ${cmd} in
       upgrade_to_wow64 "${prefix}"
     fi
     update_prefix "${prefix}"
+    share_builtins "${prefix}"
     print -r -- "${prefix}" ;;
   list)
     for p in "${root}"/<->(/N); do
