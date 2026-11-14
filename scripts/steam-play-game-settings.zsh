@@ -4,38 +4,25 @@
 # Source from a rig wrapper, before assigning its default runtime. Explicit
 # environment overrides remain authoritative. $1 is the Steam app ID.
 #
-# Games with a 32-bit Windows executable get the WoW64 runtime and their own prefix root
-# (docs/steam-play.md, WoW64). From Steam Play, the game's install folder
-# (STEAM_COMPAT_INSTALL_PATH) and exe (GAME_EXE) decide it, so its setup call and its
-# launch agree (tools/steam_play/game_arch.py). MWXR_WOW64=1 or 0, also from the game's
-# Launch Options, overrides that. Assetto Corsa (launcher 32-bit, race engine 64-bit)
-# uses WoW64 when started outside Steam Play too.
+# Every game uses the one WoW64 runtime (~/Code/wine-crossover/runtime-unified, set by the
+# rig wrapper) and the one prefix root: 64-bit programs run in it as they do in a
+# 64-bit-only Wine, and 32-bit ones (launchers such as Assetto Corsa's) run too
+# (docs/steam-play.md, WoW64). What follows are per-game exceptions.
 _mwxr_settings_app=${1:-}
-_mwxr_wow64=${MWXR_WOW64:-}
-if [[ -z ${_mwxr_wow64} && -n ${_mwxr_settings_app} &&
-      ( -n ${STEAM_COMPAT_INSTALL_PATH:-} || -n ${GAME_EXE:-} ) ]]; then
-  _mwxr_args=(--appid "${_mwxr_settings_app}")
-  [[ -n ${STEAM_COMPAT_INSTALL_PATH:-} ]] && _mwxr_args+=(--install-path "${STEAM_COMPAT_INSTALL_PATH}")
-  [[ -n ${GAME_EXE:-} ]] && _mwxr_args+=(--exe "${GAME_EXE}")
-  _mwxr_arch=$(python3 "${${(%):-%x}:A:h:h}/tools/steam_play/game_arch.py" "${_mwxr_args[@]}" 2>/dev/null) ||
-    _mwxr_arch=unknown
-  [[ ${_mwxr_arch} == 32 ]] && _mwxr_wow64=1
-fi
-[[ -z ${_mwxr_wow64} && ${_mwxr_settings_app} == 244210 ]] && _mwxr_wow64=1
 # Google Earth VR asks for an OpenGL 3.2 compatibility context, which winemac's OpenGL
 # does not offer: it runs on Zink over KosmicKrisp (docs/zink-kosmickrisp.md).
 # MWXR_OPENGL=wine, also from the game's Launch Options, keeps Wine's OpenGL.
 [[ ${_mwxr_settings_app} == 348250 ]] && export MWXR_OPENGL=${MWXR_OPENGL:-zink}
 # Windows Vulkan games run on KosmicKrisp through wineopenxr's Vulkan path
-# (docs/vulkan-bridge.md), with the private Wine whose FreeType name is fixed (readable
-# dialogs) and xrizer with the queue-family fix. The Talos Principle VR needs
-# "+gfx_strAPI Vulkan" in its Launch Options (otherwise it uses D3D11 on DXMT).
+# (docs/vulkan-bridge.md), with xrizer with the queue-family fix. (They used a private
+# Wine for its FreeType name and NMS's fiber fix; the unified runtime has both.) The
+# Talos Principle VR needs "+gfx_strAPI Vulkan" in its Launch Options (otherwise it uses
+# D3D11 on DXMT).
 # MWXR_VULKAN=off, also from the Launch Options, keeps the ordinary setup.
 if [[ ${_mwxr_settings_app} == (552440|275850) && ${MWXR_VULKAN:-} != off ]]; then
   _mwxr_root=${MWXR_FOVEATION_ROOT:-${${(%):-%x}:A:h:h}/build-in-process}
   export MWXR_VULKAN=kosmickrisp
   export MWXR_KK_ROOT=${MWXR_KK_ROOT:-${_mwxr_root}/zink-fov}
-  export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-${_mwxr_root}/vulkan-wine}
   export MWXR_XRIZER_ROOT=${MWXR_XRIZER_ROOT:-${_mwxr_root}/vulkan-xrizer}
   export MWXR_IN_PROCESS_BUILD=${MWXR_IN_PROCESS_BUILD:-${_mwxr_root}/vk-fov-gate}
   # No Man's Sky stops on a "driver does not support wide lines" box; the private
@@ -71,16 +58,7 @@ fi
 # scripts/openxr-launch-settings.zsh checks the value and sets the rest.
 if [[ -n ${MWXR_FOVEATION:-} && ${MWXR_FOVEATION} != off && ${MWXR_VULKAN:-} != kosmickrisp ]]; then
   _mwxr_fov=${MWXR_FOVEATION_ROOT:-${${(%):-%x}:A:h:h}/build-in-process}
-  if [[ ${_mwxr_wow64} == 1 ]]; then
-    export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-${_mwxr_fov}/wine-foveation-wow64}
-  else
-    export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-${_mwxr_fov}/wine-foveation}
-  fi
+  export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-${_mwxr_fov}/wine-foveation-unified}
   unset _mwxr_fov
 fi
-if [[ ${_mwxr_wow64} == 1 ]]; then
-  export MWXR_IN_PROCESS_WINE=${MWXR_IN_PROCESS_WINE:-$HOME/Code/wine-crossover/runtime-wow64}
-  export MWXR_GAME_PREFIXES=${MWXR_GAME_PREFIXES:-$HOME/Windows/prefixes-wow64}
-  export GAME_PREFIX=${GAME_PREFIX:-pergame}
-fi
-unset _mwxr_settings_app _mwxr_wow64 _mwxr_arch _mwxr_args
+unset _mwxr_settings_app

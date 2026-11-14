@@ -14,6 +14,8 @@
 #
 # Usage: game-prefix.zsh template           make (or remake) the template prefix
 #        game-prefix.zsh ensure APPID       print the game's prefix, cloning it if new
+#        game-prefix.zsh upgrade PREFIX     bring any prefix (the rig's, for one) up to the
+#                                           runtime: its 32-bit side and Wine's update
 #        game-prefix.zsh list               the game prefixes
 # Environment: MWXR_IN_PROCESS_WINE (the runtime the template is made with),
 # MWXR_GAME_PREFIXES (default ~/Windows/prefixes).
@@ -33,13 +35,58 @@ wine_env() {
 # synced on every ensure, as APFS clones of the runtime's files, so a DXMT or
 # lsteamclient update reaches every game prefix.
 SYNCED=(d3d10core.dll d3d11.dll dxgi.dll winemetal.dll lsteamclient.dll ntdll.dll)
+# wineboot -u without Wine Mono and Gecko, stopped after MWXR_PREFIX_UPDATE_TIMEOUT seconds
+# (default 300). In a prefix with Microsoft's .NET (Assetto Corsa's), registering the
+# 32-bit mscoree.dll never returns, even with it disabled (setupapi loads it by path).
+# Wine records the update before it runs, so a stopped one is not tried again at launch.
+run_update() {  # prefix
+  local limit=${MWXR_PREFIX_UPDATE_TIMEOUT:-300} waited=0 pid
+  ( wine_env "$1"
+    WINEDLLOVERRIDES="mscoree=;mshtml=" "${MWXR_IN_PROCESS_WINE}/bin/wine" wineboot -u
+    "${MWXR_IN_PROCESS_WINE}/bin/wineserver" -w ) &
+  pid=$!
+  while kill -0 ${pid} 2>/dev/null; do
+    if (( waited++ >= limit )); then
+      print -u2 "Prefix update of $1 still running after ${limit}s; stopping it and carrying on"
+      WINEPREFIX=$1 "${MWXR_IN_PROCESS_WINE}/bin/wineserver" -k 2>/dev/null || true
+      break
+    fi
+    sleep 1
+  done
+  wait ${pid} 2>/dev/null || true
+}
+# A prefix made by a 64-bit-only runtime has no syswow64. The WoW64 runtime runs its 64-bit
+# programs unchanged; Wine's prefix update adds the 32-bit side. The prefix is kept first,
+# as an APFS clone, in <root>/.backups.
+upgrade_to_wow64() {  # prefix
+  local backup=${root}/.backups/${1:t}-before-wow64-$(date +%Y%m%d-%H%M%S)
+  mkdir -p "${root}/.backups"
+  WINEPREFIX=$1 "${MWXR_IN_PROCESS_WINE}/bin/wineserver" -k 2>/dev/null || true
+  cp -cpR "$1" "${backup}"
+  print -u2 "Updating $1 for 32-bit programs (WoW64); the previous prefix is ${backup}"
+  run_update "$1"
+  [[ -f $1/drive_c/windows/syswow64/ntdll.dll ]] || {
+    print -u2 "Prefix $1 still has no WoW64 system DLLs after the update"; return 1; }
+}
+# Wine updates a prefix by itself when its runtime's wine.inf changes, at the first
+# program started there, and that update offers Wine Mono and Gecko in a dialog the game
+# launch never shows: winepath waited on it for good. Do the update here instead, without
+# them (as the template is made), so a runtime update cannot stall a launch.
+update_prefix() {  # prefix
+  local inf=${MWXR_IN_PROCESS_WINE}/share/wine/wine.inf
+  [[ -f ${inf} ]] || return 0
+  local want=$(stat -f %m "${inf}") have=$(tr -d "\r\n" < "$1/.update-timestamp" 2>/dev/null || true)
+  [[ ${have} == (${want}|disable) ]] && return 0
+  print -u2 "Updating $1 for ${MWXR_IN_PROCESS_WINE:t}"
+  run_update "$1"
+}
 sync_runtime_dlls() {  # prefix
   local f src dst
-  if [[ -f ${MWXR_IN_PROCESS_WINE}/lib/wine/i386-windows/lsteamclient.dll &&
+  if [[ -d ${MWXR_IN_PROCESS_WINE}/lib/wine/i386-windows &&
         ! -f $1/drive_c/windows/syswow64/ntdll.dll ]]; then
-    print -u2 "Prefix $1 has no WoW64 system DLLs; initialize/update it with the WoW64 runtime before use"
-    return 1
+    upgrade_to_wow64 "$1" || return 1
   fi
+  update_prefix "$1"
   for f in ${SYNCED}; do
     src=${MWXR_IN_PROCESS_WINE}/lib/wine/x86_64-windows/${f} dst=$1/drive_c/windows/system32/${f}
     [[ -f ${src} ]] || continue
@@ -91,9 +138,19 @@ case ${cmd} in
     fi
     [[ -n ${MWXR_IN_PROCESS_WINE:-} ]] && sync_runtime_dlls "${prefix}"
     print -r -- "${prefix}" ;;
+  upgrade)
+    prefix=${2:?usage: game-prefix.zsh upgrade PREFIX}
+    [[ -f ${prefix}/system.reg ]] || { print -u2 "${prefix} is not a Wine prefix"; exit 2; }
+    : ${MWXR_IN_PROCESS_WINE:?Wine runtime to upgrade the prefix for}
+    if [[ -d ${MWXR_IN_PROCESS_WINE}/lib/wine/i386-windows &&
+          ! -f ${prefix}/drive_c/windows/syswow64/ntdll.dll ]]; then
+      upgrade_to_wow64 "${prefix}"
+    fi
+    update_prefix "${prefix}"
+    print -r -- "${prefix}" ;;
   list)
     for p in "${root}"/<->(/N); do
       print -r -- "${p:t}  $(du -sh "${p}" 2>/dev/null | cut -f1) (clone of the template; du counts shared blocks)"
     done ;;
-  *) print -u2 "usage: game-prefix.zsh template | ensure APPID | list"; exit 2 ;;
+  *) print -u2 "usage: game-prefix.zsh template | ensure APPID | upgrade PREFIX | list"; exit 2 ;;
 esac
