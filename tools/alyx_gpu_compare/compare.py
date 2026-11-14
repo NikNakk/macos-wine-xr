@@ -75,7 +75,7 @@ VARIANTS = {
     # and the mwxr-steam.exe stand-in to start the game.
     'wine-dxmt-macos-steam': dict(
         kind='wine', process='hlvr', extra_args=[], steam='macos',
-        wine_tree=HOME / 'Code/wine-crossover/runtime-lsteamclient',
+        wine_tree=HOME / 'Code/wine-crossover/runtime-unified',
         env=dict(MWXR_LSTEAMCLIENT='1', SteamAppId='546560', SteamGameId='546560',
                  STEAM_COMPAT_CLIENT_INSTALL_PATH=str(
                      HOME / 'Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS'),
