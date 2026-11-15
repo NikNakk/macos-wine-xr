@@ -13,7 +13,7 @@ of the original MSAA colour source.
 
 The private EXD clone ran with the simulated headset and the preserved upscaler-off, 2× MSAA settings. Base foveation and mapped rendering remained off. The final bounded audit captures frames 1200–1201 and restores the private settings afterwards. Game Metal validation remains disabled for the previously documented unrelated blit assertion, so this game trace is architectural evidence, not an EXD image-correctness pass.
 
-[Patch 0012](../patches/dxmt/0012-per-draw-depth-stencil-audit.patch) adds opt-in `DXMT_TBDR_DRAW_STATE=1` snapshots under the existing audit/detail controls. It records shader identities, depth/stencil operations and references, DSV flags, coverage output, alpha-to-coverage and selected potential-effect bindings at each PreDraw, including state changes that do not create a new pipeline. It inserts no GPU queries, encoders or waits. The analyser joins resource/allocation provenance and verifies snapshot counts against both selected pass labels.
+[Patch 0012](https://github.com/NikNakk/dxmt/commit/5a166dfc400d7db98569692da873d36cc7819f08) adds opt-in `DXMT_TBDR_DRAW_STATE=1` snapshots under the existing audit/detail controls. It records shader identities, depth/stencil operations and references, DSV flags, coverage output, alpha-to-coverage and selected potential-effect bindings at each PreDraw, including state changes that do not create a new pipeline. It inserts no GPU queries, encoders or waits. The analyser joins resource/allocation provenance and verifies snapshot counts against both selected pass labels.
 
 Both final frames identify the same 1792×1008, 2× MSAA `RG11B10Float` main scene pass and its earlier combined `Depth32Float_Stencil8` prepass:
 
@@ -42,7 +42,7 @@ The selected prepass pixel shaders have 35/37 static instruction lines; selected
 
 ## Focused HDR/stencil fixture
 
-[Patch 0013](../patches/dxmt/0013-explicit-combined-stencil-diagnostic.patch) extends only the existing opt-in attachment diagnostic to a combined D32Float/Stencil8 texture when depth and stencil reference the same attachment, retaining the sample-count, map-size and layer restrictions. Automatic foveation still rejects depth/MSAA. No generic stencil materialisation or pass replay is added.
+[Patch 0013](https://github.com/NikNakk/dxmt/commit/9d9d09675b7e8a78c8659296a5749901c0b31673) extends only the existing opt-in attachment diagnostic to a combined D32Float/Stencil8 texture when depth and stencil reference the same attachment, retaining the sample-count, map-size and layer restrictions. Automatic foveation still rejects depth/MSAA. No generic stencil materialisation or pass replay is added.
 
 The [new fixture](../tests/windows/dxmt_hdr_stencil_probe.h) creates ordinary D3D11-owned `R11G11B10_FLOAT` MSAA colour and typeless combined depth/stencil resources. It uses read-only-depth DSVs for shading and the stencil-tested consumer, with stencil still writable where appropriate. This avoids expanding the native texture-import interface.
 

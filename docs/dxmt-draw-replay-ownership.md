@@ -6,7 +6,7 @@
 
 A controlled immediate-context D3D11 draw can now be captured **inside DXMT**, replayed from owned commands/resources, and produce bit-identical conventional colour/depth/stencil output. This is the ownership prerequisite for the [previous MSAA materialisation experiment](dxmt-msaa-source-foveation.md). It does **not** yet replace an application pass with foveated rendering, select EXD passes, or establish a performance gain for capture/replay.
 
-[Patch 14](../patches/dxmt/0014-bounded-draw-replay-ownership.patch) adds a separate private diagnostic interface. `DXMT_REPLAY_CAPTURE=1` permits `IDXMTReplayProbe::CaptureNextDraw(budget, &packet)`. The next supported immediate `Draw(count,start)` snapshots its current state and inputs immediately before its normal draw. The application draw continues normally. The completed packet returns an ordinary D3D11 command list and separate conventional output textures. The diagnostic fixture explicitly arms capture; there is no automatic pass recogniser or game profile.
+[Patch 14](https://github.com/NikNakk/dxmt/commit/b65c4dac0c97d1786773ddc50c0384ee59047a4f) adds a separate private diagnostic interface. `DXMT_REPLAY_CAPTURE=1` permits `IDXMTReplayProbe::CaptureNextDraw(budget, &packet)`. The next supported immediate `Draw(count,start)` snapshots its current state and inputs immediately before its normal draw. The application draw continues normally. The completed packet returns an ordinary D3D11 command list and separate conventional output textures. The diagnostic fixture explicitly arms capture; there is no automatic pass recogniser or game profile.
 
 ## Architecture reused and added
 

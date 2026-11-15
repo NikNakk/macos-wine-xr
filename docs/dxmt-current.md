@@ -32,8 +32,11 @@ dependency.
 ## Where the live DXMT is built (2026-11-14)
 
 `~/Code/dxmt` is the checkout of `NikNakk/dxmt` on branch `claude/xr-frame-boundary`, the
-DXMT installed in `runtime`, `runtime-unified` and (with patches 0001-0025 on top, in
-`build-in-process/dxmt-warp-source`) the foveation runtime. Build it in `~/Code/dxmt/build`
+DXMT installed in `runtime` and `runtime-unified`. The foveation runtime
+(`build-in-process/wine-foveation-unified`) is built from `NikNakk/dxmt` `macos-xr-foveation`,
+the former patches 0001-0025 plus the pass-capture probe as commits; until 15 November 2026 that
+source existed only as `build-in-process/dxmt-warp-source`. `macos-xr-foveation-next` is the same
+work rebased onto upstream DXMT (built and checked with the replay probes; not yet in a runtime). Build it in `~/Code/dxmt/build`
 (meson, `build-win64.txt`, `-Dwine_builtin_dll=true`). Until 2026-11-14 this branch was
 checked out in a second worktree, `~/Code/dxmt-d3d10fix`, while `~/Code/dxmt` sat on the
 Oct 9 cross-process hardening experiment (`codex/cross-process-presentation-hardening`,

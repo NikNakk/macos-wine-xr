@@ -5,7 +5,7 @@ not yet an EXD integration or a real-eye-tracking validation of the Wine path.
 
 ## Target-specific OpenXR integration
 
-The [second DXMT patch](../patches/dxmt/0002-target-specific-metal-rate-map.patch)
+The [second DXMT patch](https://github.com/NikNakk/dxmt/commit/cb2e78ec407f3d43f2b4d02f8439942a77f8d992)
 adds `IDXMTNativeContext2::SetRenderTargetRasterizationRateMap(texture, map)`.
 Bindings belong to the resource and change in command-stream order; each
 render pass snapshots its own map. Binding another eye or switching to an
@@ -51,7 +51,7 @@ See [the second-stage results and reproduction](results/dxmt-foveation-openxr-20
 
 ## Implemented
 
-The [private DXMT patch](../patches/dxmt/0001-immediate-context-metal-rate-map.patch)
+The [private DXMT patch](https://github.com/NikNakk/dxmt/commit/51ee88f2910c6748cb8171bc601e238a363bdd7e)
 adds `IDXMTNativeContext1::SetRasterizationRateMap(UINT64)` to the immediate
 D3D11 context. It accepts a borrowed native Metal rate map from the same
 device, retains it synchronously, and queues the change in command order.

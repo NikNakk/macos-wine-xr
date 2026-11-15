@@ -24,7 +24,7 @@ the PS VR2, and nobody has looked at it in a headset.
 
 ## What was added
 
-[Patch 0017](../patches/dxmt/0017-automatic-stay-warped-stereo-profile.patch),
+[Patch 0017](https://github.com/NikNakk/dxmt/commit/baea81299886cb91fa9ac92a4c51e791ef7238d9),
 on top of 0015 and 0016:
 
 - **Automatic profile.** `DXMT_STAY_WARPED=WIDTHxHEIGHT` binds one fixed map

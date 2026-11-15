@@ -15,7 +15,7 @@ was enabled and no rendering was changed.
 
 ## Method
 
-[Patch 0016](../patches/dxmt/0016-passive-layout-audit.patch) adds
+[Patch 0016](https://github.com/NikNakk/dxmt/commit/4949a399dcc1a8008624ae5452b10202afdbdd9b) adds
 `DXMT_LAYOUT_AUDIT=1`. In a window of Present frames it logs every texture
 access with the encoder kind (render, compute, blit, clear, resolve, present,
 upscale), the shader stage, and whether it was a shader binding or an

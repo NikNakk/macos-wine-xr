@@ -199,7 +199,7 @@ been played past that screen).
   four pools of 16,384; the third and fourth failed, Talos ignored the error and
   called `vkGetQueryPoolResults` on a null handle, and Wine's thunk asserted
   (`!status && "vkGetQueryPoolResults"`), ending the process with no crash report.
-  The private KosmicKrisp (`patches/kosmickrisp/0002-occlusion-query-overflow.patch`)
+  The private KosmicKrisp ([`0002-occlusion-query-overflow`](https://github.com/NikNakk/mesa/commit/1cf5eb7a8a62e11c3e944449488bb3088a0cd414))
   now gives such a pool its own storage: its queries count nothing and report
   "visible", so occlusion culling is simply skipped for them. NMS creates a 65,536
   pool and takes the same fallback. The crash also left Talos's `Temp/run.txt`
@@ -247,7 +247,7 @@ use the simple-controller profile; NMS's menus still respond to it through xrize
 fiber, and the job fiber switches back to that value. On macOS `%gs:0x20` is the
 system's thread-specific-data slot for the thread's QoS class, not Wine's
 `NT_TIB.FiberData`, so NMS read 0x8ff. Writing the fiber there would corrupt macOS's
-QoS, so the private Wine's `kernelbase.dll` (`patches/wine/0001-kernelbase-fiber-gs-slot-macos.patch`,
+QoS, so the private Wine's `kernelbase.dll` ([`0001-kernelbase-fiber-gs-slot-macos`](https://github.com/NikNakk/wine-crossover/commit/9fd4067ba4e9cef6727b7a7304d7a6a9b100760c),
 built from `~/Code/wine-crossover/build`'s objects into `build-in-process/wine-fiber-fix`
 and installed in `vulkan-wine`; the original is kept as `kernelbase.dll.orig`) records
 which fiber last switched to each fiber; a switch to exactly the raw `%gs:0x20` value

@@ -104,7 +104,7 @@ With `MWXR_OPENGL=zink` (no headset connected; Monado used its service composito
   from many threads on one `InternetOpen` handle, and Wine adds sessions and
   requests to their parent's child list, and removes them, without a lock;
   closing a session then walked a freed child.
-  `patches/crossover/0011-wininet-lock-child-handle-lists.patch` guards those
+  [`0011-wininet-lock-child-handle-lists`](https://github.com/NikNakk/wine-crossover/commit/682225fd52b7cdff6903fd504ef7c1a4bec74a64) guards those
   lists (and the `valid_handle` check-and-set) with one critical section. It is
   installed in `runtime-lsteamclient` (original
   `lib/wine/x86_64-windows/wininet.dll.pre-children-lock`). The CrossOver build
@@ -139,7 +139,7 @@ Earth VR's GL texture ─ Zink VkImage ─ KosmicKrisp MTLTexture (2D view, same
   view of level 0, layer 0 (kept on the resource object), because KosmicKrisp
   stores images with input-attachment usage as 2D *array* textures, which DXMT
   rejects for `ArraySize = 1`.
-- **Wine** (`patches/crossover/0012-winevulkan-expose-metal-objects.patch`):
+- **Wine** ([`0012-winevulkan-expose-metal-objects`](https://github.com/NikNakk/wine-crossover/commit/57c8c3edbb5566d47139fa6dfd0b1be447257cfc)):
   winevulkan exposes `VK_EXT_metal_objects`, and the generator now copies the
   exported objects back to the caller (its win64 conversion of the chained structs
   was empty). Regenerated from the pinned Vulkan 1.4.335 registry: the unmodified

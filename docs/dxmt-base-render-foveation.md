@@ -91,7 +91,7 @@ VRS does not establish MSAA-compatible compact Metal resource semantics.
 
 ## What is implemented now
 
-At the colour-only checkpoint, the seven ordered [private DXMT patches](../patches/dxmt/)
+At the colour-only checkpoint, the seven ordered [private DXMT patches](../patches/README.md) (now commits on `NikNakk/dxmt` `macos-xr-foveation`)
 reproduced the pinned base and all306 tested `src/` files. The later optional
 depth/MSAA diagnostic adds patch0008; all eight now reproduce the current
 306 source files byte-for-byte. Existing uncommitted

@@ -23,13 +23,13 @@ pass. EXD's later passes then needed exact ordinary depth and stencil, which is
 what forced four geometry traversals and draw capture/replay. If the scene
 targets stay mapped until a late boundary, each draw is rasterised once and
 later consumers read through the map. The missing piece was the read side:
-[patch 0006](../patches/dxmt/0006-rate-map-position-translation.patch) corrects
+[patch 0006](https://github.com/NikNakk/dxmt/commit/1559d60315ff775d0b0e44cc6103e2bcb0ec83f5) corrects
 `SV_Position`, but a `Load` or `Sample` of a mapped target still used logical
 coordinates on physical storage.
 
 ## Implementation
 
-[Patch 0015](../patches/dxmt/0015-rate-map-read-translation.patch), on top of
+[Patch 0015](https://github.com/NikNakk/dxmt/commit/1a9135b7b8c673394d636a3a741c9a390a54051b), on top of
 0001–0014. Opt-in: `DXMT_RATE_MAP_READ=1` together with `DXMT_RATE_MAP_POSITION=1`.
 
 - **Layout tag.** At the end of a render pass that meets the existing

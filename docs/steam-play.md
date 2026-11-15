@@ -315,7 +315,7 @@ composites on it through a window of its own. Wine used to list it as a second m
 so a flat game going full screen could pick it: on 2026-11-14 The Turing Test, with and
 without UEVR, set the headset display to 4000x2040 and 3008x1534 at start and showed its
 flat picture in the headset, with its menu out of reach on the Mac. Patch
-`patches/crossover/0013-winemac-hide-vr-headset-displays.patch` leaves displays named in
+[`0013-winemac-hide-vr-headset-displays`](https://github.com/NikNakk/wine-crossover/commit/4f069519a5343ec8007b913b6f5c6fc9079a48e9) leaves displays named in
 `MWXR_HIDDEN_DISPLAYS` (comma-separated; unset means `PS VR2`, empty hides nothing) out
 of Wine's monitors, display modes and desktop rectangle; the main display is never
 hidden. Installed in `runtime-unified` and `wine-foveation-unified` (previous
@@ -369,7 +369,8 @@ Until 2026-11-14 a game with any 32-bit Windows executable got a separate runtim
 only the 64-bit one had the Metal-objects changes (Zink, the Vulkan bridge) and the
 wininet locking fix; only the WoW64 one had d3dx11 file loading and DualSense XInput and
 rumble. The unified runtime is a WoW64 build of `sources/wine`, which carries all of
-`patches/crossover` and the kernelbase fiber fix (`patches/wine/0001`, until then only in
+the CrossOver changes and the kernelbase fiber fix, now the `macos-wine-xr` branch of
+[NikNakk/wine-crossover](https://github.com/NikNakk/wine-crossover) (the fiber fix was until then only in
 the private `vulkan-wine`), with the production DXMT, winemetal and both architectures'
 lsteamclient on top. `build-in-process/wine-foveation-unified` is the same with the
 foveation DXMT, replacing `wine-foveation` and `wine-foveation-wow64`. Its `wine.inf`
@@ -535,7 +536,7 @@ Starting a race then failed: the launcher started `acs.exe`, which closed at onc
 returned to the launcher with no message. The per-launch `game.log` showed Wine aborting
 it at `d3dx11_43.dll.D3DX11CreateShaderResourceViewFromFileW`, a stub in CrossOver 26.3
 (as were `CreateTextureFromFile`, `GetImageInfoFromFile` and
-`CreateShaderResourceViewFromMemory`). `patches/crossover/0009-d3dx11-load-textures-from-files.patch`
+`CreateShaderResourceViewFromMemory`). [`0009-d3dx11-load-textures-from-files`](https://github.com/NikNakk/wine-crossover/commit/100782a48c16f96b9a0cdac1c80b54d0261edfc9)
 implements them on Wine's existing texture loader. Wine's d3dx11 tests, run in the
 244210 prefix against DXMT, pass the new file paths, with the same 7 pre-existing
 memory-path failures (test 17 data, invalid load info 4–7) repeated for the file
@@ -547,7 +548,7 @@ A Bluetooth DualSense then worked in the launcher's controls screen but not in a
 `cfg/controls.ini` had `INPUT_METHOD=X360` (the Gamepad method), which reads only XInput,
 and this Wine (no SDL; macOS IOHID) presented only Xbox pads to XInput: the DualSense
 reached games through DirectInput alone.
-`patches/crossover/0010-xinput-sony-gamepads-over-iohid.patch` marks DualSense and
+[`0010-xinput-sony-gamepads-over-iohid`](https://github.com/NikNakk/wine-crossover/commit/dd7fff04961cc4a08d58802485d5b786d9e03cdb) marks DualSense and
 DualShock 4 pads as gamepads in winebus and maps Sony's raw report in xinput and
 winexinput (sticks X/Y and Z/Rz, triggers Rx/Ry, Y axes pointing down, Sony button order,
 hat 0–7 with 8 for centred). winebus's existing Bluetooth DualSense fixup already turns

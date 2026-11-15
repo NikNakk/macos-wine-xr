@@ -30,7 +30,7 @@ for f in lsteamclient.dll lsteamclient.so; do
 done
 ntdll_pe=${WINE_BUILD}/dlls/ntdll/x86_64-windows/ntdll.dll ntdll_unix=${WINE_BUILD}/dlls/ntdll/ntdll.so
 python3 -c 'import sys; sys.exit(0 if "MWXR_LSTEAMCLIENT".encode("utf-16-le") in open(sys.argv[1], "rb").read() else 1)' \
-  "${ntdll_pe}" || { print -u2 "${ntdll_pe} lacks the lsteamclient redirect (patches/crossover/0007)"; exit 1; }
+  "${ntdll_pe}" || { print -u2 "${ntdll_pe} lacks the lsteamclient redirect (NikNakk/wine-crossover@98ad852b4b (formerly patches/crossover/0007))"; exit 1; }
 # Refuse to install a 64-bit-only ntdll.so over a WoW64 runtime. Preflight
 # every 32-bit artifact before replacing any runtime files.
 pe32=${runtime}/lib/wine/i386-windows
@@ -44,7 +44,7 @@ if [[ -d ${pe32} ]]; then
     print -u2 "${WINE_BUILD} is not a WoW64 build"; exit 1
   }
   python3 -c 'import sys; sys.exit(0 if "steamclient".encode("utf-16-le") + b"\0\0" in open(sys.argv[1], "rb").read() else 1)' \
-    "${ntdll32}" || { print -u2 "${ntdll32} lacks the 32-bit redirect (patches/crossover/0008)"; exit 1; }
+    "${ntdll32}" || { print -u2 "${ntdll32} lacks the 32-bit redirect (NikNakk/wine-crossover@4297995530 (formerly patches/crossover/0008))"; exit 1; }
 fi
 pgrep -f "${runtime}/" >/dev/null && { print -u2 "Processes from ${runtime} are running; stop them first"; exit 1; }
 

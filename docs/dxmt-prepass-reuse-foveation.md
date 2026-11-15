@@ -35,7 +35,7 @@ Comparison is **per MSAA sample in the active physical allocation**, against the
 
 The first reduced-rate control caught an existing diagnostic limitation: with position translation enabled, DXMT disabled rate maps for depth-only passes because it required exactly one colour attachment. Consequently the supposed mapped prepass was ordinary, and the control correctly failed.
 
-[Patch 0011](../patches/dxmt/0011-explicit-depth-only-rate-map-diagnostic.patch) admits zero-colour depth passes **only under the existing explicit attachment diagnostic switch**, with the existing D32Float, no-stencil, 2×/4×, single-layer and logical-size checks. It does not expand the automatic profile or select a game pass. Actual post-guard audit counts now verify **144 mapped D3D render passes per case**. Checking only the earlier SCENE row, logged before that guard, would not establish this.
+[Patch 0011](https://github.com/NikNakk/dxmt/commit/a4f94e5fa669747c68560f7f0e5e5f25d0b9fc9b) admits zero-colour depth passes **only under the existing explicit attachment diagnostic switch**, with the existing D32Float, no-stencil, 2×/4×, single-layer and logical-size checks. It does not expand the automatic profile or select a game pass. Actual post-guard audit counts now verify **144 mapped D3D render passes per case**. Checking only the earlier SCENE row, logged before that guard, would not establish this.
 
 ## Results
 

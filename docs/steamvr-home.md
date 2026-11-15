@@ -38,8 +38,8 @@ say; their cited evidence is now in `~/Code/monado-2-archive/evidence/`:
 
 What it takes:
 
-- CrossOver 26.3 FOSS Wine with msync and the five patches in
-  `patches/crossover/`:
+- CrossOver 26.3 FOSS Wine with msync and the five patches formerly in
+  `patches/crossover/` (now commits on [NikNakk/wine-crossover](https://github.com/NikNakk/wine-crossover) `macos-wine-xr`; see [patches/README.md](../patches/README.md)):
   - 0001: keyed-mutex waits on server syncs, or the first cross-process
     acquire hangs;
   - 0002: msync's leaked wait registrations, which slowed the wineserver
@@ -726,7 +726,7 @@ Setting up the Wine tree:
 cross-process `D3DKMTAcquireKeyedMutex`: vrcompositor waits forever for
 the driver's backbuffer. msync waits in-process on internal syncs, but a
 keyed mutex's wait sync is only ever signalled by the server.
-`patches/crossover/0001-server-keyed-mutex-waits-on-server-syncs.patch` creates
+[`0001-server-keyed-mutex-waits-on-server-syncs`](https://github.com/NikNakk/wine-crossover/commit/ff4dd6211cb264fcf234d8c661b3a98970003e78) creates
 that sync with `create_server_internal_sync`, as `debugger.c` already does.
 Rebuild with the macOS 26.5 SDK, then copy `server/wineserver` into the tree:
 `SDKROOT=.../MacOSX26.5.sdk make server/wineserver`.
@@ -1168,7 +1168,7 @@ wineserver gets slower the longer the prefix runs. Home's high CPU in a Steam
 session that had been running for hours, and the drop after a restart, fit
 this.
 
-`patches/crossover/0002-msync-remove-abandoned-wait-registrations.patch`
+[`0002-msync-remove-abandoned-wait-registrations`](https://github.com/NikNakk/wine-crossover/commit/2e1590b129e75e4b49ae9c562eeb4291d0015b7b)
 fixes both: the client now sends the removal when it gives up, and the
 server's early exit unregisters every object it registered. Rebuild
 `server/wineserver` and `dlls/ntdll/ntdll.so` and install both. In
@@ -1313,7 +1313,7 @@ scene graph whose panels are placed relative to the head or the dashboard
 
 ### Root cause: SteamVR thinks the Windows session is locked, 2026-10-08
 
-Fixed by `patches/crossover/0003-wtsapi32-session-info-ex-and-remote-session.patch`
+Fixed by [`0003-wtsapi32-session-info-ex-and-remote-session`](https://github.com/NikNakk/wine-crossover/commit/56d05fcd1db3eda7f59bad3b58b7f16b8b34f588)
 (Wine's `wtsapi32`). Traced with breakpoints on CrossOver, simulated,
 direct mode:
 
@@ -1377,7 +1377,7 @@ The OpenGL path cannot work in this setup:
   `tools/openvr_probe/sdl_gl_probe.c` reproduces this. Two causes:
   `winemac.drv` rejects `WGL_CONTEXT_OPENGL_NO_ERROR_ARB` (SDL passes it, 0,
   because Wine advertises the extension); fixed by
-  `patches/crossover/0004-winemac-accept-wgl-context-opengl-no-error.patch`,
+  [`0004-winemac-accept-wgl-context-opengl-no-error`](https://github.com/NikNakk/wine-crossover/commit/3dd198509988e46def23d103353ef4eb1d5183ed),
   installed (original `winemac.so.pre-noerror`). And it requires the
   forward-compatible flag for core contexts; CrossOver's own
   `CX_FWD_COMPAT_GL_CTX=1` adds it. With both, all four probe requests

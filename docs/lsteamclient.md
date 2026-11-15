@@ -20,7 +20,7 @@ in to one Steam client, so starting Windows Steam signs macOS Steam out
    `lsteamclient.dll`, and its `tier0_s64`/`vstdlib_s64` imports go to ntdll. This is
    Proton's redirect (`ValveSoftware/wine`, `proton_11.0`, `dlls/ntdll/loader.c` and
    `unix/loader.c`), ported to CrossOver 26.3 as
-   `patches/crossover/0007-ntdll-lsteamclient-redirect.patch` (x86_64 only, and opt-in
+   [`0007-ntdll-lsteamclient-redirect`](https://github.com/NikNakk/wine-crossover/commit/98ad852b4b5f3d99e869194012c34133a12a9dcb) (x86_64 only, and opt-in
    so the same runtime still works with Windows Steam).
 3. `lsteamclient.dll` (PE) and `lsteamclient.so` (unix) translate each Steamworks call to
    the host client, which they load from `$STEAM_COMPAT_CLIENT_INSTALL_PATH/steamclient.dylib`
@@ -102,7 +102,7 @@ Both use the same x86_64 native `lsteamclient.so` and macOS Steam library.
 Proton already provides generated WoW64 interface and callback conversions;
 this port enables them rather than introducing a second RPC transport.
 
-Apply `patches/crossover/0008-ntdll-lsteamclient-wow64.patch` after 0007 in the
+Apply [`0008-ntdll-lsteamclient-wow64`](https://github.com/NikNakk/wine-crossover/commit/429799553064fa9668f87278913f23b235a473a7) after 0007 in the
 CrossOver source. It adds the 32-bit Steam DLL names and dependency redirects,
 converts the two module handles at the WoW64 boundary, and writes x86 jumps
 for PE32 modules. Crucially, PE32 must reserve the native `pe_module_loaded`

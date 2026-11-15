@@ -14,7 +14,7 @@ Simulated headset, one scene; not run on the PS VR2.
 
 ## What it does
 
-[Patch 0020](../patches/dxmt/0020-resource-read-shader-variants.patch), on top
+[Patch 0020](https://github.com/NikNakk/dxmt/commit/713605973c0a4fdb53741ccff43d2cbebacb27d2), on top
 of 0019, is opt-in with `DXMT_RATE_MAP_RESOURCE_READ=1` (and
 `DXMT_RATE_MAP_POSITION=1`).
 

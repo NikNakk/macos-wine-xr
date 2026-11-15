@@ -45,7 +45,7 @@ the swapchain ([zink-kosmickrisp.md](zink-kosmickrisp.md)).
 
 Private copy `build-in-process/kk-fov-src`, build `kk-fov-x86_64`, Zink root
 `build-in-process/zink-fov`; change in
-`patches/kosmickrisp/0001-implicit-foveation-prototype.patch`. Run with
+[`0001-implicit-foveation-prototype`](https://github.com/NikNakk/mesa/commit/3e2a046d74cf86bbe6970f2e0cfb7b335ca3b793). Run with
 `build-in-process/kk-fov-tools/earth.zsh TAG [SECONDS]`; `FOV=1792x1007` turns
 it on, `HIRES=1 FOV=5600x2856` uses the high-resolution simulator.
 
@@ -258,7 +258,7 @@ back; GPU-side ordering would likely matter more for Talos than foveation.
 
 ## Per-pass GPU timing (2026-11-13)
 
-`KK_PASS_TIMING=1` (`patches/kosmickrisp/0004-pass-timing.patch`, diagnostic) writes a
+`KK_PASS_TIMING=1` ([`0004-pass-timing`](https://github.com/NikNakk/mesa/commit/1ada034cd63128ff501d104ef8504e3b137bc4fe), diagnostic) writes a
 precise GPU timestamp at the start of each Metal command buffer and the end of every
 encoder, resolves them into a buffer at the end of the command buffer, and every five
 seconds logs the time between stamps summed by pass shape (target size, colour and

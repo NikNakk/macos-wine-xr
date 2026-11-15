@@ -6,7 +6,7 @@
 
 ## Identified EXD pass
 
-[Patch 0010](../patches/dxmt/0010-depth-resolve-shader-diagnostics.patch) extends the existing opt-in audit with ordinary graphics-pipeline shader hashes/state snapshots and pixel texture-binding provenance. An explicit `DXMT_TBDR_SHADER_DUMP` directory optionally retains original DXBC at shader-cache insertion, bounded to 1 MiB per shader and 64 MiB per device cache. It does not alter shaders. No new queries, encoders, flushes or waits are added. These diagnostics remain disabled by default.
+[Patch 0010](https://github.com/NikNakk/dxmt/commit/3f64d23cf84973aaad6523a0a97e297f64d004bf) extends the existing opt-in audit with ordinary graphics-pipeline shader hashes/state snapshots and pixel texture-binding provenance. An explicit `DXMT_TBDR_SHADER_DUMP` directory optionally retains original DXBC at shader-cache insertion, bounded to 1 MiB per shader and 64 MiB per device cache. It does not alter shaders. No new queries, encoders, flushes or waits are added. These diagnostics remain disabled by default.
 
 The observed shader pair is:
 

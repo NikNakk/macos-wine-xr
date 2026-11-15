@@ -15,7 +15,7 @@ Steam/runtime/service settings or game files were changed.
 
 ## Implementation and controls
 
-[Patch 0008](../patches/dxmt/0008-explicit-depth-msaa-diagnostic.patch) adds a small,
+[Patch 0008](https://github.com/NikNakk/dxmt/commit/9db630fb99ab880cc6aeb30e35b92f2c574064a7) adds a small,
 default-off `DXMT_RATE_MAP_ATTACHMENT_PROBE=1` exception to the existing explicit
 map experiment. It allows one colour target plus D32Float depth, 2×/4× MSAA,
 one layer, and the existing inverse-coordinate binding. Its native-import

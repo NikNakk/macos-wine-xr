@@ -10,7 +10,7 @@ work inside passes that mix ordinary and mapped texture reads.
 
 ## Implementation
 
-[Patch 0019](../patches/dxmt/0019-selective-read-shader-variants.patch), on top of
+[Patch 0019](https://github.com/NikNakk/dxmt/commit/de214e1ffbc8a4188b93afccddf8f9b6d185fb6c), on top of
 0018, enables `DXMT_RATE_MAP_SELECTIVE_READ=1` for ordinary graphics pipelines
 when the existing position feature is enabled. It is off by default and does
 not combine with the earlier shader-component diagnostic override.

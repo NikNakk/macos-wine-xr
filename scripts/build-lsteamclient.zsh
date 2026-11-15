@@ -13,7 +13,7 @@
 # sources, so the unix half (lsteamclient.so, 219 C++ files) is compiled and linked
 # here with the tree's own unix flags.
 #
-# The game also needs the ntdll redirect, patches/crossover/0007-ntdll-lsteamclient-redirect.patch,
+# The game also needs the ntdll redirect, NikNakk/wine-crossover@98ad852b4b (0007-ntdll-lsteamclient-redirect),
 # built into the same tree (make dlls/ntdll/ntdll.so dlls/ntdll/x86_64-windows/ntdll.dll).
 #
 # Usage: [WINE_SRC=...] [WINE_BUILD=...] [OUT=...] build-lsteamclient.zsh
@@ -39,7 +39,7 @@ jobs=${JOBS:-$(sysctl -n hw.ncpu)}
   print -u2 "Need a CrossOver Wine source (${WINE_SRC}) and configured build (${WINE_BUILD})"; exit 1
 }
 grep -q MWXR_LSTEAMCLIENT "${WINE_SRC}/dlls/ntdll/loader.c" ||
-  print -u2 "warning: ${WINE_SRC} lacks the ntdll lsteamclient redirect (patches/crossover/0007); games will not use lsteamclient"
+  print -u2 "warning: ${WINE_SRC} lacks the ntdll lsteamclient redirect (NikNakk/wine-crossover@98ad852b4b (formerly patches/crossover/0007)); games will not use lsteamclient"
 
 # 1. Valve's sources, pinned and checked
 cache=${OUT}/src/proton-${PROTON_COMMIT}

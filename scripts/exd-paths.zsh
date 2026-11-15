@@ -8,7 +8,7 @@
 #   exd_prefix  the experiment prefix, an APFS clone of the game's Steam Play prefix with
 #               the settings templates the runs switch between (MWXR_EXD_PREFIX); never
 #               the prefix Steam plays the game in
-#   exd_wine    the Wine runtime: the foveation runtime, DXMT patches 0001-0025 with DXMT's
+#   exd_wine    the Wine runtime: the foveation runtime, NikNakk/dxmt macos-xr-foveation with DXMT's
 #               nvapi64/nvngx for the DLSS runs (MWXR_EXD_WINE)
 #   exd_runs    where run folders go (MWXR_EXD_RUNS)
 # MWXR_EXD_EXPERIMENT_ROOT=build-in-process/exd-ngx (or another private copy) uses that

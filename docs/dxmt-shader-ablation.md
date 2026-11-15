@@ -21,7 +21,7 @@ than establishing an intrinsic rasterization-rate-map hardware cost.
 layout tracking. Switching off that runtime flag does not remove the read
 shader code.
 
-[Patch 0018](../patches/dxmt/0018-no-map-shader-component-diagnostic.patch)
+[Patch 0018](https://github.com/NikNakk/dxmt/commit/3e06e4bb22ae0b38454c607c3eab283f173e6e74)
 adds `DXMT_RATE_MAP_DIAGNOSTIC_SHADER_MASK=0|1|2|3`, accepted only when the
 position switch is on and `DXMT_STAY_WARPED=0x0`. It selects neither component,
 position only, reads only, or both. Invalid masks or a nonzero stay-warped
