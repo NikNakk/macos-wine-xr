@@ -308,6 +308,21 @@ On 2026-11-08 (client 1794079253): listing Uplink (1510, a macOS game, not insta
 `Unmapping AppID 1510`; Steam kept running. A game bought while Steam runs has not been
 tried yet.
 
+## The headset's display
+
+macOS drives the PS VR2 as an ordinary display named "PS VR2" (4000x2040), and Monado
+composites on it through a window of its own. Wine used to list it as a second monitor,
+so a flat game going full screen could pick it: on 2026-11-14 The Turing Test, with and
+without UEVR, set the headset display to 4000x2040 and 3008x1534 at start and showed its
+flat picture in the headset, with its menu out of reach on the Mac. Patch
+`patches/crossover/0013-winemac-hide-vr-headset-displays.patch` leaves displays named in
+`MWXR_HIDDEN_DISPLAYS` (comma-separated; unset means `PS VR2`, empty hides nothing) out
+of Wine's monitors, display modes and desktop rectangle; the main display is never
+hidden. Installed in `runtime-unified` and `wine-foveation-unified` (previous
+`winemac.so` beside it as `winemac.so.pre-hidden-displays`). With only the Mac's own
+display Wine reports the same single monitor as before; hiding the headset itself is
+still to be seen with it connected.
+
 ## Launch Options
 
 Words of the form `MWXR_NAME=value` in a game's Launch Options (Steam: the game's

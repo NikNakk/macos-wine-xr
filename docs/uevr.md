@@ -127,6 +127,17 @@ Not yet tried: a real headset (tracking, comfort, frame rate), controllers throu
 UEVR's bindings, the OpenVR path, and starting from Steam's Play button with the
 Launch Option (the runner was called as the Steam Play tool calls it).
 
+## First headset runs, 2026-11-14
+
+The Turing Test with UEVR (and `MWXR_FOVEATION=gaze`) on the PS VR2: UEVR hooked and
+the OpenXR session reached FOCUSED with the PS VR2 Sense controllers and UEVR's emulated
+gamepad, but the game's menu could not be passed and UEVR's overlay did not work. The
+game had gone full screen on the headset's own display (above), so its window and menu
+were in the headset rather than on the Mac, where the keyboard and mouse that UEVR's
+Insert menu needs act. The session ended after three minutes when the connection to
+Monado broke (`XR_ERROR_INSTANCE_LOST`). Patch 0013 keeps the headset display from the
+game; to be tried again.
+
 ## Limits
 
 - **Foveation.** UEVR works with `MWXR_FOVEATION` too: patch 0025 carries the

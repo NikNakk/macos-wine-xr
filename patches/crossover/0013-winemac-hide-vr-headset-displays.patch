@@ -1,0 +1,100 @@
+Subject: winemac: keep a VR headset's display from Windows programs
+
+macOS drives the PS VR2 as an ordinary display, and Monado composites on it through a
+window of its own. Wine listed it as a second monitor, so a game going full screen
+(The Turing Test, under Steam Play) took it, changed its mode (4000x2040 and 3008x1534)
+underneath Monado and showed its flat picture in the headset. Displays named in
+MWXR_HIDDEN_DISPLAYS (comma-separated NSScreen.localizedName values; unset means
+"PS VR2", empty hides nothing) are left out of winemac's adapters, monitors and desktop
+rectangle. The main display is never hidden.
+
+diff -ru a/dlls/winemac.drv/cocoa_display.m b/dlls/winemac.drv/cocoa_display.m
+--- a/dlls/winemac.drv/cocoa_display.m	2026-11-15 10:13:01
++++ b/dlls/winemac.drv/cocoa_display.m	2026-11-15 10:13:01
+@@ -515,6 +515,43 @@
+ }
+ 
+ /***********************************************************************
++ *              macdrv_display_is_hidden
++ *
++ * macos-wine-xr: whether a display is kept from Windows programs. A VR headset that
++ * macOS drives as an ordinary display (the PS VR2, which Monado composites on through a
++ * window of its own) must not become a monitor a game can go full screen on or change
++ * the mode of. MWXR_HIDDEN_DISPLAYS lists display names (NSScreen.localizedName),
++ * separated by commas; unset means "PS VR2", empty hides nothing. The main display is
++ * never hidden.
++ */
++int macdrv_display_is_hidden(CGDirectDisplayID display_id)
++{
++@autoreleasepool
++{
++    static NSArray<NSString *> *hidden;
++    static dispatch_once_t once;
++    dispatch_once(&once, ^{
++        const char *env = getenv("MWXR_HIDDEN_DISPLAYS");
++        NSMutableArray<NSString *> *names = [NSMutableArray array];
++        for (NSString *name in [[NSString stringWithUTF8String:env ? env : "PS VR2"] componentsSeparatedByString:@","])
++        {
++            NSString *trimmed = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
++            if (trimmed.length) [names addObject:trimmed];
++        }
++        hidden = [names copy];
++    });
++    if (!hidden.count || CGDisplayIsMain(display_id)) return NO;
++    if (![NSScreen instancesRespondToSelector:@selector(localizedName)]) return NO;
++    for (NSScreen *screen in [NSScreen screens])
++    {
++        if ([[screen deviceDescription][@"NSScreenNumber"] unsignedIntValue] == display_id)
++            return [hidden containsObject:screen.localizedName];
++    }
++    return NO;
++}
++}
++
++/***********************************************************************
+  *              macdrv_get_adapters
+  *
+  * Get a list of adapters under gpu_id. The first adapter is primary if GPU is primary.
+@@ -554,6 +591,8 @@
+         /* Mirrored displays are under the same adapter with primary display, so they doesn't increase adapter count */
+         if (CGDisplayMirrorsDisplay(display_ids[i]) != kCGNullDirectDisplay)
+             continue;
++        if (macdrv_display_is_hidden(display_ids[i]))
++            continue;
+ 
+         if (macdrv_get_gpu_info_from_display_id(&gpu, display_ids[i]))
+             goto done;
+@@ -954,6 +993,8 @@
+         if (adapter_id     != kCGNullDirectDisplay &&
+             display_ids[i] != adapter_id           &&
+             CGDisplayMirrorsDisplay(display_ids[i]) != adapter_id)
++            continue;
++        if (macdrv_display_is_hidden(display_ids[i]))
+             continue;
+ 
+         /* Find and fill in monitor info */
+diff -ru a/dlls/winemac.drv/gdi.c b/dlls/winemac.drv/gdi.c
+--- a/dlls/winemac.drv/gdi.c	2026-11-15 10:13:01
++++ b/dlls/winemac.drv/gdi.c	2026-11-15 10:13:01
+@@ -71,7 +71,10 @@
+     }
+ 
+     for (i = 0; i < count; i++)
++    {
++        if (macdrv_display_is_hidden(displayIDs[i])) continue;  /* macos-wine-xr: a VR headset's display */
+         desktop_rect = CGRectUnion(desktop_rect, CGDisplayBounds(displayIDs[i]));
++    }
+     desktop_rect = cgrect_win_from_mac(desktop_rect);
+ }
+ 
+diff -ru a/dlls/winemac.drv/macdrv_cocoa.h b/dlls/winemac.drv/macdrv_cocoa.h
+--- a/dlls/winemac.drv/macdrv_cocoa.h	2026-11-15 10:13:01
++++ b/dlls/winemac.drv/macdrv_cocoa.h	2026-11-15 10:13:01
+@@ -285,6 +285,7 @@
+ extern int macdrv_get_adapters(uint64_t gpu_id, struct macdrv_adapter** adapters, int* count);
+ extern void macdrv_free_adapters(struct macdrv_adapter* adapters);
+ extern int macdrv_get_monitors(CGDirectDisplayID adapter_id, struct macdrv_monitor** monitors, int* count);
++extern int macdrv_display_is_hidden(CGDirectDisplayID display_id);
+ extern void macdrv_free_monitors(struct macdrv_monitor* monitors, int monitor_count);
+ 
+ 
