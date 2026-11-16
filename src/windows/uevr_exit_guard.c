@@ -67,10 +67,14 @@ static LONG CALLBACK guard(EXCEPTION_POINTERS *info)
     struct visible v = { 0 };
     const EXCEPTION_RECORD *r = info->ExceptionRecord;
     if (r->ExceptionCode != EXCEPTION_ACCESS_VIOLATION) return EXCEPTION_CONTINUE_SEARCH;
+    const ULONG_PTR address = r->NumberParameters > 1 ? r->ExceptionInformation[1] : 0;
     EnumWindows(find_visible, (LPARAM)&v);
-    say("access violation at %p (address %p), thread %lu, exiting=%ld, visible windows=%d%s%s\n",
-        r->ExceptionAddress, r->NumberParameters > 1 ? (void *)r->ExceptionInformation[1] : NULL,
-        GetCurrentThreadId(), exiting, v.count, v.count ? ", first " : "", v.first);
+    /* UEVR's scans fault thousands of times on purpose (wild addresses, caught by UEVR);
+     * only near-null reads, like the crash on quit, are logged while a window is up. */
+    if (exiting || !v.count || address < 0x10000)
+        say("access violation at %p (address %p), thread %lu, exiting=%ld, visible windows=%d%s%s\n",
+            r->ExceptionAddress, (void *)address, GetCurrentThreadId(), exiting, v.count, v.count ? ", first " : "",
+            v.first);
     if (!exiting && v.count) return EXCEPTION_CONTINUE_SEARCH;
     say("taking it as the crash on quit; ending the process\n");
     TerminateProcess(GetCurrentProcess(), 0);

@@ -239,6 +239,11 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   GMalloc ("binned"), so its `VR_UseFMallocSceneViewExtensions` option, which allocates
   the scene view extension the engine frees at shutdown through that allocator, was
   turned on in the profile (previous `config.txt` kept as `config.txt.pre-fmalloc-20261116`).
+  The next launch then crashed while loading, at the same instruction
+  (`TheTuringTest.exe+0x279eed`, address 0x2), so the option was turned off again. The
+  guard's log from that run showed UEVR's scans faulting thousands of times on purpose
+  while the window was up, which the guard rightly let through; it now logs only
+  near-null faults while a window is up.
 - **Synchronized Sequential** (`VR_RenderingMethod=1`, as in Gruntled's community
   profile, 14 Jan 2024: settings only, no UObjectHook, scripts or plugins; it also sets
   resolution scale 0.762 and a 10.9 cm near clip): the arms show in both eyes, but the
