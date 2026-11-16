@@ -181,8 +181,10 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
     display's width). DXMT foveates only passes the size of the map (the eye swapchain,
     5600x2856), so the scene passes, at about 2489x1269, are never foveated; only the
     full-size passes after the upscale are. That would make gaze foveation look like
-    it does nothing, and the 44% also costs sharpness in the headset. Not changed:
-    raising it to 100 is a large GPU cost, which foveation would then reduce.
+    it does nothing, and the 44% also costs sharpness in the headset. Set to 100 on
+    2026-11-16 in both prefixes' copies (`~/Windows/prefixes/499520`, the one in use, and
+    `prefixes-wow64/499520`), the previous files kept as `GameUserSettings.ini.pre-100`.
+    Changing the game's own graphics settings may write it again.
 
 ## Limits
 
