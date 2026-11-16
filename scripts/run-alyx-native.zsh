@@ -18,6 +18,9 @@
 # ALYX_NATIVE_TIMEOUT (seconds before the launcher stops the game, default 12 hours).
 # Stopping this script (SIGTERM, SIGHUP or SIGINT) stops the game.
 set -euo pipefail
+if [[ -n ${THRESHOLD_LAUNCH_STACK:-} ]]; then
+  exec python3 "${0:A:h:h}/tools/steam_play/managed_runner.py" --stack "${THRESHOLD_LAUNCH_STACK}" --native "$@"
+fi
 launcher=${ALYX_NATIVE_LAUNCHER:-$HOME/Code/alyx-native/run-alyx}
 runs=${ALYX_NATIVE_RUNS:-$HOME/Code/alyx-native/runs}
 [[ -x ${launcher} ]] || { print -u2 "No native Alyx launcher at ${launcher}"; exit 1; }

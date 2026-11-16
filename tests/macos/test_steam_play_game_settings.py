@@ -15,9 +15,9 @@ class GameSettingsTests(unittest.TestCase):
                 'MWXR_VULKAN', 'GAME_EXE', 'STEAM_COMPAT_INSTALL_PATH')}
         env.update(overrides)
         result = subprocess.run(['zsh', '-c',
-            'source "$1" "$2"; print -r -- "${MWXR_IN_PROCESS_WINE:-unset}" "${MWXR_GAME_PREFIXES:-unset}" "${GAME_PREFIX:-unset}"',
+            'source "$1" "$2"; print -rl -- "${MWXR_IN_PROCESS_WINE:-unset}" "${MWXR_GAME_PREFIXES:-unset}" "${GAME_PREFIX:-unset}"',
             'test', str(SCRIPT), app], env=env, check=True, capture_output=True, text=True)
-        return result.stdout.strip().split()
+        return result.stdout.strip().splitlines()
 
     def test_games_keep_the_rig_runtime_and_prefix_root(self):
         # Assetto Corsa (32-bit launcher) chose WoW64 here before the runtimes were unified.
