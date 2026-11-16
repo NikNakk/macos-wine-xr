@@ -233,6 +233,9 @@ trap stop_game TERM INT HUP
 steam_client_windows=$(WINEDEBUG=-all "${wine}" winepath -w "${steam_client}" 2>/dev/null | tr -d '\r')
 # UEVR's settings live in one folder shared by every prefix (tools/steam_play/uevr_profile.py).
 [[ ${MWXR_UEVR:-0} == 1 ]] && python3 "${repo}/tools/steam_play/uevr_profile.py" link "${MWXR_IN_PROCESS_PREFIX}"
+# What UEVR's exit guard sees (src/windows/uevr_exit_guard.c), beside the other logs.
+[[ ${MWXR_UEVR:-0} == 1 ]] &&
+  export MWXR_UEVR_GUARD_LOG="$(WINEDEBUG=-all "${wine}" winepath -w "${logs}/uevr-guard.log" 2>/dev/null | tr -d '\r')"
 "${repo}/scripts/run-in-process-openxr.zsh" "${stand_in}" --steam-dir "${steam_client_windows}" -- \
   "${exe_windows}" ${=arguments} "$@" > "${logs}/game.log" 2>&1 &
 game_pid=$!

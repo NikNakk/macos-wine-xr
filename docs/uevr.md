@@ -229,8 +229,22 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   window ends the process with exit code 0, before Unreal's crash handler can show
   "Fatal error". During play a window is visible and nothing changes.
   `MWXR_UEVR_EXIT_GUARD=0` leaves it out. Checked with a test program under Wine (an
-  access violation with no window: exit code 0 and the guard's message); not yet seen
-  on quitting the game.
+  access violation with no window: exit code 0 and the guard's message).
+  In the game it did not catch the crash (the next run, same dump). The C runtime frames
+  that suggested the crash was in `exit()` were stale stack values (`free`, a command-
+  line helper), so the crash is probably during Unreal's own shutdown, with its window
+  still up. The guard now also takes an access violation once Windows has begun the
+  process's exit, and logs what it sees to `uevr-guard.log` in the launch's log folder
+  (`MWXR_UEVR_GUARD_LOG`; its stderr never reached `game.log`). UEVR found the engine's
+  GMalloc ("binned"), so its `VR_UseFMallocSceneViewExtensions` option, which allocates
+  the scene view extension the engine frees at shutdown through that allocator, was
+  turned on in the profile (previous `config.txt` kept as `config.txt.pre-fmalloc-20261116`).
+- **Synchronized Sequential** (`VR_RenderingMethod=1`, as in Gruntled's community
+  profile, 14 Jan 2024: settings only, no UObjectHook, scripts or plugins; it also sets
+  resolution scale 0.762 and a 10.9 cm near clip): the arms show in both eyes, but the
+  image was blurry, more in the left eye. Each eye is then drawn on its own at
+  2800x2856, so no pass matches the 5600x2856 gaze map and nothing is foveated. UEVR's
+  Ghosting Fix (`VR_GhostingFix`, for the temporal blur of alternating eyes) was turned on.
 
 ## Limits
 
