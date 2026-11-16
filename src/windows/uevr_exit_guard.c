@@ -82,6 +82,8 @@ static int readable(const void *p, SIZE_T size)
 
 /* A fault in GMalloc->Free called from FMemory::Free: resume in FMemory::Free as if the
  * free had returned. Returns 1 when the context was changed. */
+static DWORD64 known_free; /* the Free already identified through FMemory::Free */
+
 static int skip_unowned_free(CONTEXT *context, ULONG_PTR address)
 {
     DWORD64 image = 0, caller_image = 0, main = (DWORD64)GetModuleHandleW(NULL);
@@ -123,7 +125,16 @@ static int skip_unowned_free(CONTEXT *context, ULONG_PTR address)
         slot = vtable[4];
         break;
     }
-    if (!loads_global) { say("not skipped: caller at %p does not load an allocator global\n", (void *)caller.Rip); return 0; }
+    /* Also reached from Realloc(Ptr, 0), which calls Free on an inner allocator held in a
+     * register and then returns null. There the function must be the Free already seen
+     * through FMemory::Free, or the fault the binned pool lookup's: TableIndex (offset 2)
+     * of a null FPoolInfo. */
+    if (loads_global) {
+        known_free = image + fn->BeginAddress;
+    } else if (image + fn->BeginAddress != known_free && address != 2) {
+        say("not skipped: caller at %p does not load an allocator global\n", (void *)caller.Rip);
+        return 0;
+    }
     /* Slot 4 is the faulting function, or a hook in front of it (UEVR hooks engine code). */
     say("skipped GMalloc->Free of a block the engine does not own (%p): fault at %p in %p, slot 4 %p, "
         "resuming at %p\n", (void *)caller.Rbx, (void *)context->Rip, (void *)(image + fn->BeginAddress),

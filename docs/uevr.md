@@ -265,6 +265,15 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   front of engine functions. The check was dropped (the `call [rax+0x20]` return site
   and `FMemory::Free`'s shape still identify it), and the guard now logs why it passes
   over any near-null fault in the game's code.
+  With that, Ghosting Fix works: the guard skipped about 4,600 such frees in one run,
+  every one of pointer 0x1, so Ghosting Fix sets it off every frame. GMalloc's slot 4
+  was 0x140279a70, not the faulting 0x140279df0. The crash on quit still came through:
+  there the same `Free` is called from `Realloc(Ptr, 0)` (0x1402862f9, a chunk of a
+  larger function), which calls `[rax+0x20]` on an inner allocator held in r14 and then
+  returns null, so it does not load the global. The guard now also skips a `Free` reached
+  through `call [rax+0x20]` when the function is the `Free` already identified through
+  `FMemory::Free`, or the fault is at address 2 (the null pool's `TableIndex`). Tested
+  under Wine with both shapes.
 - **Synchronized Sequential** (`VR_RenderingMethod=1`, as in Gruntled's community
   profile, 14 Jan 2024: settings only, no UObjectHook, scripts or plugins; it also sets
   resolution scale 0.762 and a 10.9 cm near clip): the arms show in both eyes, but the
