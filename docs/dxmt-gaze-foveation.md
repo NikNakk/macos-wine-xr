@@ -122,7 +122,9 @@ the fixed profile on the same scene has not been measured.
 ([foveation.md](foveation.md)). DXMT patch 0022 adds what OpenVR games need:
 xrizer copies each eye texture into an array swapchain, and a stay-warped
 source is now drawn through its map into the swapchain image instead of being
-copied texel for texel. Other whole-image copies pass the layout on.
+copied texel for texel. Other whole-image copies pass the layout on; since DXMT
+`98ea692` (2026-11-16) a copy of part of a warped image into a texture that can be drawn
+to is resampled too (UEVR's per-eye copies).
 wineopenxr accepts a swapchain with one array layer per eye.
 
 Simulated headset only (896×1007 per eye), runs under

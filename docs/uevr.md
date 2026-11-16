@@ -165,8 +165,24 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   map's tables. The read fixture's `--two-maps` case (a scene under each of two maps,
   read together by a pass under the second) passes on the new build, worst error 3.3
   logical pixels, and fails on the old one (2,048 px). The existing fixture cases and
-  the resource-read tests pass. Installed in `wine-foveation-unified`; not yet seen in
-  the game.
+  the resource-read tests pass. Installed in `wine-foveation-unified`.
+- **Gaze foveation, second try: no better, and gaze had no visible effect.** The run had
+  no rate-map warnings, valid gaze and 128 maps, so the reads were now right. Two other
+  causes:
+  - UEVR sets up 2800x2856 per-eye textures (its log), most likely filled by copying each
+    eye's half of the engine's 5600x2856 target with `CopySubresourceRegion` (not
+    confirmed in a trace). DXMT copied part of a warped image texel for
+    texel, so each eye got the squeezed physical layout. DXMT `98ea692` resamples such
+    a copy through the map. The fixture's `--partial-copy` case (the right half of a
+    mapped image copied into a half-width texture) fails on the previous builds (2,048
+    px) and passes on the new one (worst 1.5 px). Installed in `wine-foveation-unified`.
+  - The game renders its scene at 44% resolution: `sg.ResolutionQuality=44.444401` in
+    its `GameUserSettings.ini`, saved on its first run (about 1280/2880 of the Mac
+    display's width). DXMT foveates only passes the size of the map (the eye swapchain,
+    5600x2856), so the scene passes, at about 2489x1269, are never foveated; only the
+    full-size passes after the upscale are. That would make gaze foveation look like
+    it does nothing, and the 44% also costs sharpness in the headset. Not changed:
+    raising it to 100 is a large GPU cost, which foveation would then reduce.
 
 ## Limits
 

@@ -1,5 +1,43 @@
 # EXD performance investigation, 2026-11-08
 
+## Two wearer-reported launch failures, 2026-11-16
+
+The user reports the first failure before the menu and the second while loading.
+These are different failure paths, not evidence of one repeated crash:
+
+- **00:12:03, SteamVR route:** Steam passed `-dx11 -vr -hmd=SteamVR`
+  and 50% viewport scale. The 00:12:07 Unreal crash context records
+  `0xc06d007e` (delay-loaded module not found). The minidump's exception
+  parameter points to a delay-load record with error 126; its DLL-name
+  address, mapped into the shipping executable, identifies `openvr_api.dll`.
+  That DLL is absent beside `EXD-Win64-Shipping.exe`. This run did not reach
+  the OpenXR session shown in the second run.
+- **00:12:36, OpenXR route:** Steam passed
+  `-dx11 -hmd=OpenXRHMD -EXDOpenXROnly -DisablePlugins=OculusOpenXR`
+  and `MWXR_FOVEATION=gaze`, with runtime-default viewport scale (not the
+  first run's 50%). Monado connected EXD PID 89556 and imported four
+  5600×2856 Metal images. The service then reports
+  `Semaphore waiting failed: value=3818 result=2` and
+  `Client GPU obligation failed: frame=1814 value=3818 result=2`.
+  Result 2 is the timeout path; current source defaults to a 5 s producer
+  obligation deadline. The 00:13:37 Unreal crash context, 58 s after startup,
+  records `EXD OpenXR acquire failed ... XR_ERROR_SESSION_LOST`.
+  This is session loss following an unfinished GPU obligation. The producer
+  stall's cause, and whether foveation caused it, remain unproven.
+
+Evidence: `~/Library/Logs/macos-wine-xr/3962020-20261116-{001203,001236}/game.log`,
+`steam-play.log`, `~/Library/Logs/Monado/monado-service.err.log` (EXD PID 89556),
+and the playing prefix's `EXD/Saved/Crashes/UE4CC-Windows-{AC77383E4352AC8B9C2BC9B3F9689027,67DF6A3E4CD0CE1E94EC428770F4D367}_0000/`.
+Analysis checkouts: Monado `b6758b7d6`, bridge `a24c57e`; these identify the
+analysis sources, not a verified deployed binary revision.
+
+Next wearer-operated control: retain Steam's DX11/OpenXR launch choice and set
+`MWXR_FOVEATION=off MWXR_CLIENT_COMPOSITOR=0 MWXR_VIEWPORT_SCALE_PERCENTAGE=50`.
+If loading succeeds, compare gaze at the same 50% scale before testing full
+resolution. Preserve the GPU-loss guard; increasing its timeout would not
+identify why the producer stopped signalling. No launch settings or runtime
+binaries were changed during this investigation.
+
 EXD – Extra Dimensional, Steam app 3962020, Unreal Engine 4.27. Investigation
 of the existing launches. Subsequent private simulated-headset runs are documented
 in the [DXMT TBDR audit](dxmt-tbdr-audit.md), including separate initial and loaded

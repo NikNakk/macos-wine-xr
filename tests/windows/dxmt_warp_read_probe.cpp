@@ -8,6 +8,8 @@
 // C and D are read back and compared with the analytic logical result.
 // --two-maps: A under map 1, a second scene under map 2 (another layout), and B under
 // map 2 reads both, as a temporal pass does while gaze foveation moves the map.
+// --partial-copy: the right half of the mapped chain is copied with CopySubresourceRegion
+// into a half-width texture (UEVR copies each eye this way), which is read back instead.
 #include <windows.h>
 #include <d3d11_4.h>
 #include <d3dcompiler.h>
@@ -51,7 +53,7 @@ struct Error { double centre_max = 0, outer_max = 0, sum = 0; unsigned long long
 
 int main(int argc, char **argv)
 {
-    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false, two_maps = false;
+    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false, two_maps = false, partial_copy = false;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--unfoveated")) unfoveated = true;
         else if (!std::strcmp(argv[i], "--scissor")) scissor = true;
@@ -61,6 +63,7 @@ int main(int argc, char **argv)
         else if (!std::strcmp(argv[i], "--mixed-reads")) mixed_reads = true;
         else if (!std::strcmp(argv[i], "--mixed-swap")) mixed_reads = mixed_swap = true;
         else if (!std::strcmp(argv[i], "--two-maps")) two_maps = true;
+        else if (!std::strcmp(argv[i], "--partial-copy")) partial_copy = true;
         else REQUIRE(false);
     }
     REQUIRE(!split_pass || (unfoveated && late_read));
@@ -191,6 +194,40 @@ int main(int argc, char **argv)
         pass(1, 1, srvs[0]);   // B: mapped pass reading the mapped scene
     }
     REQUIRE(SUCCEEDED(foveation->SetRasterizationRateMap(0)));
+    if (partial_copy) {
+        D3D11_TEXTURE2D_DESC half = {};
+        textures[1]->GetDesc(&half);
+        half.Width = N / 2;
+        ID3D11Texture2D *eye = nullptr, *eye_staging = nullptr;
+        REQUIRE(SUCCEEDED(device->CreateTexture2D(&half, nullptr, &eye)));
+        half.Usage = D3D11_USAGE_STAGING; half.BindFlags = 0; half.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        REQUIRE(SUCCEEDED(device->CreateTexture2D(&half, nullptr, &eye_staging)));
+        context->OMSetRenderTargets(0, nullptr, nullptr);
+        const D3D11_BOX box = {N / 2, 0, 0, N, N, 1};
+        context->CopySubresourceRegion(eye, 0, 0, 0, 0, textures[1], 0, &box);
+        context->CopyResource(eye_staging, eye);
+        D3D11_MAPPED_SUBRESOURCE mapped = {};
+        REQUIRE(SUCCEEDED(context->Map(eye_staging, 0, D3D11_MAP_READ, 0, &mapped)));
+        double worst = 0, sum = 0; unsigned long long count = 0, over = 0;
+        for (unsigned y = 0; y < N; ++y) {
+            auto row = reinterpret_cast<const unsigned short *>(static_cast<const char *>(mapped.pData) + y * mapped.RowPitch);
+            for (unsigned x = 0; x + 16 < N / 2; ++x) {
+                const double expected[2] = {N / 2 + x + .5, y + .5};
+                for (unsigned c = 0; c < 2; ++c) {
+                    double e = std::fabs(row[x * 4 + c] * double(N) / 65535.0 - expected[c]);
+                    worst = std::max(worst, e); sum += e; ++count; over += e > 8;
+                }
+            }
+        }
+        context->Unmap(eye_staging, 0);
+        eye->Release(); eye_staging->Release();
+        const bool ok = worst <= 6.5;
+        std::printf("WARP_COPY box=%u,0-%u,%u worst_px=%.3f mean_px=%.4f over_8px=%llu checked=%llu %s\n", N / 2, N, N,
+            worst, sum / double(count), over, count, ok ? "ok" : "WRONG");
+        std::printf("%s mode=%u logical=%ux%u physical=%ux%u\n", ok ? "PASS" : "FAIL", map.mode, N, N,
+            map.physical_width, map.physical_height);
+        return ok ? 0 : 1;
+    }
     pass(2, 2, srvs[1]);   // C: ordinary pass, Load of the mapped chain
     pass(3, 3, srvs[1]);   // D: ordinary pass, bilinear Sample of the mapped chain
     context->PSSetShaderResources(0, 1, &no_srv);
