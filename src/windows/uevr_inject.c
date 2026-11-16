@@ -9,7 +9,7 @@
  * and its first visible window. Used by scripts/run-windows-game.zsh with MWXR_UEVR=1.
  *
  * Usage: mwxr-uevr-inject.exe --exe NAME.exe --dir UEVR_DIR [--runtime openxr|openvr]
- *        [--delay SECONDS] [--timeout SECONDS] [--nullify-plugins]
+ *        [--delay SECONDS] [--timeout SECONDS] [--nullify-plugins] [--exit-guard DLL]
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -138,7 +138,7 @@ static void write_config(const wchar_t *exe, const wchar_t *runtime_dll)
 
 int wmain(int argc, wchar_t **argv)
 {
-    const wchar_t *exe = NULL, *dir = NULL, *runtime = L"openxr";
+    const wchar_t *exe = NULL, *dir = NULL, *runtime = L"openxr", *exit_guard = NULL;
     int delay = 5, timeout = 300, nullify = 0;
     const wchar_t *runtime_dll;
     wchar_t path[MAX_PATH];
@@ -154,11 +154,12 @@ int wmain(int argc, wchar_t **argv)
         else if (!wcscmp(argv[i], L"--delay") && i + 1 < argc) delay = _wtoi(argv[++i]);
         else if (!wcscmp(argv[i], L"--timeout") && i + 1 < argc) timeout = _wtoi(argv[++i]);
         else if (!wcscmp(argv[i], L"--nullify-plugins")) nullify = 1;
+        else if (!wcscmp(argv[i], L"--exit-guard") && i + 1 < argc) exit_guard = argv[++i];
         else { say(L"unknown argument %ls", argv[i]); return 2; }
     }
     if (!exe || !dir) {
         say(L"usage: mwxr-uevr-inject.exe --exe NAME.exe --dir UEVR_DIR [--runtime openxr|openvr] "
-            L"[--delay S] [--timeout S] [--nullify-plugins]");
+            L"[--delay S] [--timeout S] [--nullify-plugins] [--exit-guard DLL]");
         return 2;
     }
     if (!wcscmp(runtime, L"openxr")) runtime_dll = L"openxr_loader.dll";
@@ -182,6 +183,8 @@ int wmain(int argc, wchar_t **argv)
                           PROCESS_VM_WRITE | PROCESS_VM_READ | SYNCHRONIZE, FALSE, pid);
     if (!process) { say(L"OpenProcess(%lu) failed (error %lu)", pid, GetLastError()); return 1; }
     write_config(exe, runtime_dll);
+    /* Before UEVR, so that its crash on quit is caught (uevr_exit_guard.c). */
+    if (exit_guard) inject(process, pid, exit_guard);
     if (nullify) {
         swprintf(path, MAX_PATH, L"%ls\\UEVRPluginNullifier.dll", dir);
         inject(process, pid, path);

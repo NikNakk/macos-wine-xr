@@ -246,6 +246,11 @@ if [[ ${MWXR_UEVR:-0} == 1 ]]; then
       --delay "${MWXR_UEVR_DELAY:-5}"
       --dir "$(WINEDEBUG=-all "${wine}" winepath -w "${uevr_dir:A}" 2>/dev/null | tr -d '\r')")
     [[ ${MWXR_UEVR_NULLIFY:-0} == 1 ]] && uevr_args+=(--nullify-plugins)
+    # UEVR games commonly crash on quit; the guard ends the process quietly instead
+    # (src/windows/uevr_exit_guard.c). MWXR_UEVR_EXIT_GUARD=0 leaves it out.
+    guard=${injector:h}/mwxr-uevr-exit-guard.dll
+    [[ ${MWXR_UEVR_EXIT_GUARD:-1} == 1 && -f ${guard} ]] &&
+      uevr_args+=(--exit-guard "$(WINEDEBUG=-all "${wine}" winepath -w "${guard}" 2>/dev/null | tr -d '\r')")
     print "UEVR: ${uevr_dir:A} (${MWXR_UEVR_RUNTIME:-openxr}), log ${logs}/uevr.log"
     WINEDEBUG=-all "${wine}" "${injector}" "${uevr_args[@]}" > "${logs}/uevr.log" 2>&1 &
   else

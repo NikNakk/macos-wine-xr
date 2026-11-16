@@ -9,4 +9,6 @@ out=${MWXR_UEVR_INJECTOR:-${repo}/build-in-process/uevr/mwxr-uevr-inject.exe}
 mkdir -p "${out:h}"
 x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -municode -static \
  "${repo}/src/windows/uevr_inject.c" -lshell32 -o "${out}"
-print "Built ${out}"
+x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -shared -static \
+ "${repo}/src/windows/uevr_exit_guard.c" -o "${out:h}/mwxr-uevr-exit-guard.dll"
+print "Built ${out} and ${out:h}/mwxr-uevr-exit-guard.dll"

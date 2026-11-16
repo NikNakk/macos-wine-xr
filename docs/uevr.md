@@ -176,15 +176,12 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
     a copy through the map. The fixture's `--partial-copy` case (the right half of a
     mapped image copied into a half-width texture) fails on the previous builds (2,048
     px) and passes on the new one (worst 1.5 px). Installed in `wine-foveation-unified`.
-  - The game renders its scene at 44% resolution: `sg.ResolutionQuality=44.444401` in
-    its `GameUserSettings.ini`, saved on its first run (about 1280/2880 of the Mac
-    display's width). DXMT foveates only passes the size of the map (the eye swapchain,
-    5600x2856), so the scene passes, at about 2489x1269, are never foveated; only the
-    full-size passes after the upscale are. That would make gaze foveation look like
-    it does nothing, and the 44% also costs sharpness in the headset. Set to 100 on
-    2026-11-16 in both prefixes' copies (`~/Windows/prefixes/499520`, the one in use, and
-    `prefixes-wow64/499520`), the previous files kept as `GameUserSettings.ini.pre-100`.
-    Changing the game's own graphics settings may write it again.
+  - At the time the game's `sg.ResolutionQuality=44.444401` (its `GameUserSettings.ini`,
+    saved on its first run) was taken to mean the scene rendered at 44%, below the map's
+    size. That was wrong under UEVR: the audited runs at 100 and later at 44 again (the
+    game rewrote it when its graphics settings were changed) both drew every scene pass
+    at 5600x2856. Under UEVR the scene size follows the OpenXR recommended size times
+    UEVR's `OpenXR_ResolutionScale` (its menu), not the game's resolution quality.
 - **Gaze foveation, third try: wrong lighting in parts of each eye.** With the scene at
   100%, the eyes showed whole regions dark orange next to lit ones, with a hard edge.
   An audited run (`MWXR_FOVEATION_AUDIT=1`, [foveation.md](foveation.md#diagnosing-a-game))
@@ -209,8 +206,8 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   then its left half redrawn under map 2 without a clear) fails without the rewrite
   (655 px) and passes with it (2 px). Each rewrite costs a copy and a full-screen draw
   of that target. Installed in `wine-foveation-unified`.
-- **Resolution quality 70, still foveated** (2026-11-16). Below 100, UE4 renders the
-  scene into a smaller target (about 3920x2000 at 70%) and upscales it to the 5600x2856
+- **A scene smaller than the eye image** (2026-11-16). A game that renders its scene
+  smaller than its output (a screen percentage, then an upscale) and upscales it to the 5600x2856
   eye image, and DXMT maps only passes of the map's size. DXMT (`macos-xr-foveation`
   after `eea53ec`) now reports the render-target sizes with the most draws each frame
   (`DXMT_GUID_RATE_MAP_SCENE_SIZES` on the device), and the bridge (`gaze-gate`) builds
@@ -220,8 +217,20 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   follows the scene at WxH`). `MWXR_FOVEATION_SCENE=0` keeps the output's size. The
   fixture's `--scene-sizes` case checks the report; the bridge's choice has not yet
   been seen in the game. The upscale and later full-size passes are then not foveated.
-  `sg.ResolutionQuality` set to 70 in both prefixes' settings files. The previous
-  bridge is kept as `build-in-process/gaze-gate.before-scene-20261116`.
+  The previous bridge is kept as `build-in-process/gaze-gate.before-scene-20261116`. In
+  The Turing Test under UEVR the scene is drawn at the eye image's size whatever the
+  resolution quality (above), so this does not come into play there; lowering UEVR's
+  resolution scale would make the eye swapchain smaller as well, and the map with it.
+- **Crash on quit, fixed** (2026-11-16). The fault is in Unreal's binned allocator during
+  the C runtime's exit: freeing a pointer for which it finds no pool (the lookup returns
+  null, and it reads address 0x2), consistent with the engine freeing memory UEVR
+  allocated. The injector now loads `mwxr-uevr-exit-guard.dll` before UEVR
+  (`src/windows/uevr_exit_guard.c`): an access violation while the game has no visible
+  window ends the process with exit code 0, before Unreal's crash handler can show
+  "Fatal error". During play a window is visible and nothing changes.
+  `MWXR_UEVR_EXIT_GUARD=0` leaves it out. Checked with a test program under Wine (an
+  access violation with no window: exit code 0 and the guard's message); not yet seen
+  on quitting the game.
 
 ## Limits
 
