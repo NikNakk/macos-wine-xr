@@ -244,6 +244,22 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   guard's log from that run showed UEVR's scans faulting thousands of times on purpose
   while the window was up, which the guard rightly let through; it now logs only
   near-null faults while a window is up.
+  The next quit crashed the same way, again about 30 s after launch, with only
+  `VR_GhostingFix` differing from the last good run (it was on in the earlier load crash
+  too), so Ghosting Fix rather than the FMalloc option set off the crash while loading;
+  it was turned off again.
+  Unwinding the crash dump with the game's unwind data (the earlier caller addresses
+  were stale stack values) gives the real chain: `FMallocBinned::Free` (0x140279df0,
+  GMalloc's vtable slot 4), called from `FMemory::Free` (0x140279d70: loads GMalloc at
+  0x142de0fe0 and calls `[rax+0x20]`), reached through engine functions called from
+  UEVR's code. `Free` finds no pool for the pointer and reads the null pool's
+  `TableIndex` (offset 2), before taking any lock. The guard now skips such a free: on
+  a near-null fault in a function of the game's image that GMalloc's vtable slot 4
+  points to, called through `call [rax+0x20]` from a short `FMemory::Free` that loads
+  GMalloc, it unwinds out of `Free` (`RtlVirtualUnwind`) and resumes in `FMemory::Free`
+  as if the free had finished. The block, which UEVR allocated, leaks. Each skip is
+  logged. Tested under Wine with a program of the same shape (three unowned frees
+  skipped, normal exit); not yet seen in the game.
 - **Synchronized Sequential** (`VR_RenderingMethod=1`, as in Gruntled's community
   profile, 14 Jan 2024: settings only, no UObjectHook, scripts or plugins; it also sets
   resolution scale 0.762 and a 10.9 cm near clip): the arms show in both eyes, but the

@@ -14,6 +14,15 @@
  * played neither holds, so nothing changes. The guard is loaded only after the game's
  * window has appeared, so start-up is unaffected.
  *
+ * The crash itself is also prevented, wherever it happens (at quit, or while loading
+ * with UEVR's Ghosting Fix): a fault inside the engine allocator's Free on a pointer it
+ * does not own is skipped. Unreal's FMemory::Free loads GMalloc and calls its virtual
+ * Free (slot 4); FMallocBinned::Free looks up the pointer's pool, finds none for memory
+ * UEVR allocated, and reads the null pool (address 0x2). The guard checks that the
+ * faulting function is exactly GMalloc's Free, called from FMemory::Free, then unwinds
+ * out of it and resumes in FMemory::Free as if the free had been done: that block leaks,
+ * which is harmless, and nothing has been locked yet at that point.
+ *
  * MWXR_UEVR_GUARD_LOG (a Windows path) names a file for what the guard sees.
  */
 #include <windows.h>
@@ -62,12 +71,64 @@ static BOOL CALLBACK find_visible(HWND hwnd, LPARAM data)
     return TRUE;
 }
 
+static int readable(const void *p, SIZE_T size)
+{
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!VirtualQuery(p, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT) return 0;
+    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return 0;
+    return (const char *)p + size <= (const char *)mbi.BaseAddress + mbi.RegionSize;
+}
+
+/* A fault in GMalloc->Free called from FMemory::Free: resume in FMemory::Free as if the
+ * free had returned. Returns 1 when the context was changed. */
+static int skip_unowned_free(CONTEXT *context, ULONG_PTR address)
+{
+    DWORD64 image = 0, caller_image = 0;
+    PRUNTIME_FUNCTION fn, caller_fn;
+    CONTEXT caller = *context;
+    PVOID handler_data = NULL;
+    DWORD64 frame = 0;
+    const unsigned char *call, *code;
+    DWORD i;
+    if (address >= 0x10000) return 0;
+    fn = RtlLookupFunctionEntry(context->Rip, &image, NULL);
+    if (!fn || image != (DWORD64)GetModuleHandleW(NULL)) return 0;
+    RtlVirtualUnwind(UNW_FLAG_NHANDLER, image, context->Rip, fn, &caller, &handler_data, &frame, NULL);
+    /* The caller made the call with "call [rax+0x20]": slot 4 of a vtable. */
+    call = (const unsigned char *)caller.Rip - 3;
+    if (!readable(call, 3) || call[0] != 0xff || call[1] != 0x50 || call[2] != 0x20) return 0;
+    caller_fn = RtlLookupFunctionEntry(caller.Rip, &caller_image, NULL);
+    if (!caller_fn || caller_image != image || caller_fn->EndAddress - caller_fn->BeginAddress > 0x80) return 0;
+    /* FMemory::Free: "mov rcx, [rip+GMalloc]" before the call. GMalloc's vtable slot 4 must
+     * be the function that faulted. */
+    code = (const unsigned char *)(image + caller_fn->BeginAddress);
+    for (i = 0; i + 7 <= (DWORD)(caller.Rip - 3 - (DWORD64)code); i++) {
+        if (code[i] != 0x48 || code[i + 1] != 0x8b || code[i + 2] != 0x0d) continue;
+        {
+            const unsigned char *global = code + i + 7 + *(const INT32 *)(code + i + 3);
+            const DWORD64 *object, *vtable;
+            if (!readable(global, 8)) continue;
+            object = *(const DWORD64 *const *)global;
+            if (!object || !readable(object, 8)) continue;
+            vtable = (const DWORD64 *)*object;
+            if (!vtable || !readable(vtable + 4, 8)) continue;
+            if (vtable[4] != image + fn->BeginAddress) continue;
+            say("skipped GMalloc->Free (%p) of a block the engine does not own (%p): fault at %p, resuming at %p\n",
+                (void *)vtable[4], (void *)caller.Rbx, (void *)context->Rip, (void *)caller.Rip);
+            *context = caller;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static LONG CALLBACK guard(EXCEPTION_POINTERS *info)
 {
     struct visible v = { 0 };
     const EXCEPTION_RECORD *r = info->ExceptionRecord;
     if (r->ExceptionCode != EXCEPTION_ACCESS_VIOLATION) return EXCEPTION_CONTINUE_SEARCH;
     const ULONG_PTR address = r->NumberParameters > 1 ? r->ExceptionInformation[1] : 0;
+    if (skip_unowned_free(info->ContextRecord, address)) return EXCEPTION_CONTINUE_EXECUTION;
     EnumWindows(find_visible, (LPARAM)&v);
     /* UEVR's scans fault thousands of times on purpose (wild addresses, caught by UEVR);
      * only near-null reads, like the crash on quit, are logged while a window is up. */
