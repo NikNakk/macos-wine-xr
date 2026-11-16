@@ -209,6 +209,19 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   then its left half redrawn under map 2 without a clear) fails without the rewrite
   (655 px) and passes with it (2 px). Each rewrite costs a copy and a full-screen draw
   of that target. Installed in `wine-foveation-unified`.
+- **Resolution quality 70, still foveated** (2026-11-16). Below 100, UE4 renders the
+  scene into a smaller target (about 3920x2000 at 70%) and upscales it to the 5600x2856
+  eye image, and DXMT maps only passes of the map's size. DXMT (`macos-xr-foveation`
+  after `eea53ec`) now reports the render-target sizes with the most draws each frame
+  (`DXMT_GUID_RATE_MAP_SCENE_SIZES` on the device), and the bridge (`gaze-gate`) builds
+  its gaze maps at the busiest size with the eye image's shape (within 2%) that is
+  smaller than it and more than a quarter of its area, scaling the eye rectangles to
+  match. A change of size must hold for 30 frames, and is logged (`gaze foveation
+  follows the scene at WxH`). `MWXR_FOVEATION_SCENE=0` keeps the output's size. The
+  fixture's `--scene-sizes` case checks the report; the bridge's choice has not yet
+  been seen in the game. The upscale and later full-size passes are then not foveated.
+  `sg.ResolutionQuality` set to 70 in both prefixes' settings files. The previous
+  bridge is kept as `build-in-process/gaze-gate.before-scene-20261116`.
 
 ## Limits
 

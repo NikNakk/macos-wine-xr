@@ -8,7 +8,10 @@
 #include "mndx_display_distortion.h"
 #include <d3d11_4.h>
 #include <dxgi1_2.h>
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "graphics_interop.h"
 #include "graphics_vulkan.h"
 struct SwapState { wine_XrSwapchain *wrapper; GraphicsImage *images; XrSwapchainImageMetalKHR *metal; uint32_t count;
@@ -17,7 +20,62 @@ struct SwapState { wine_XrSwapchain *wrapper; GraphicsImage *images; XrSwapchain
 struct SessionState { ID3D11Device *device; GraphicsInterop *interop; SwapState *swapchains;
     CRITICAL_SECTION release_lock;
     // MWXR_GAZE_FOVEATION: the packed stereo layout last submitted, and the map now set.
-    XrSwapchain gaze_swapchain; XrRect2Di gaze_rects[2]; XrFovf gaze_fovs[2]; uint64_t gaze_map; };
+    XrSwapchain gaze_swapchain; XrRect2Di gaze_rects[2]; XrFovf gaze_fovs[2]; uint64_t gaze_map;
+    // The scene size the gaze map follows (below), and a different one waiting to take over.
+    uint32_t scene_width, scene_height, scene_next_width, scene_next_height, scene_next_frames; };
+
+// DXMT (stay-warped foveation): the render-target sizes that took the most draws in the last
+// frame, from the device's private data. Matches DXMT_RATE_MAP_SCENE_SIZES in
+// dxmt_native_interop.h on DXMT macos-xr-foveation.
+struct MwxrSceneSizes { UINT64 frame; struct { UINT width, height, draws, passes; } sizes[4]; };
+static const GUID mwxr_scene_sizes_guid = {0x6d777872, 0x7363, 0x4e65, {0x90, 0x02, 's', 'c', 'e', 'n', 'e', 0}};
+
+// A game that renders its scene below the output size (a screen percentage, then an
+// upscale) draws it into a smaller target that a map of the output's size never matches,
+// so nothing is foveated. Follow the size with the most draws when it has the eye target's
+// shape and is smaller, scaling the eye rectangles with it. A change of size must persist
+// 30 frames. MWXR_FOVEATION_SCENE=0 keeps the output's size.
+static void follow_scene_size(SessionState *session, mw_gaze_foveation_params &gaze)
+{
+    static int enabled = -1; // no thread-safe statics in this PE build
+    if (enabled < 0) { const char *v = getenv("MWXR_FOVEATION_SCENE"); enabled = !v || strcmp(v, "0"); }
+    if (!enabled || !session->device || !gaze.width || !gaze.height) return;
+    MwxrSceneSizes sizes = {}; UINT size = sizeof(sizes);
+    uint32_t width = gaze.width, height = gaze.height;
+    if (SUCCEEDED(session->device->GetPrivateData(mwxr_scene_sizes_guid, &size, &sizes)) && size == sizeof(sizes)) {
+        const double aspect = double(gaze.width) / gaze.height;
+        for (auto &s : sizes.sizes) {
+            if (!s.width || !s.height || s.draws < 20) continue;
+            if (s.width == gaze.width && s.height == gaze.height) break; // the output size is the busiest match
+            if (s.width > gaze.width || s.height > gaze.height || uint64_t(s.width) * s.height * 4 <= uint64_t(gaze.width) * gaze.height)
+                continue;
+            if (fabs(double(s.width) / s.height / aspect - 1.0) > 0.02) continue;
+            width = s.width; height = s.height;
+            break;
+        }
+    }
+    if (!session->scene_width) { session->scene_width = gaze.width; session->scene_height = gaze.height; }
+    if (width != session->scene_width || height != session->scene_height) {
+        if (width != session->scene_next_width || height != session->scene_next_height) {
+            session->scene_next_width = width; session->scene_next_height = height; session->scene_next_frames = 0;
+        }
+        if (++session->scene_next_frames >= 30) {
+            fprintf(stderr, "wineopenxr: gaze foveation follows the scene at %ux%u (output %ux%u)\n", width, height,
+                    gaze.width, gaze.height);
+            session->scene_width = width; session->scene_height = height;
+        }
+    } else {
+        session->scene_next_frames = 0;
+    }
+    if (session->scene_width == gaze.width && session->scene_height == gaze.height) return;
+    const double sx = double(session->scene_width) / gaze.width, sy = double(session->scene_height) / gaze.height;
+    for (auto &r : gaze.rects) {
+        int32_t x1 = int32_t(lround((r.offset.x + r.extent.width) * sx)), y1 = int32_t(lround((r.offset.y + r.extent.height) * sy));
+        r.offset.x = int32_t(lround(r.offset.x * sx)); r.offset.y = int32_t(lround(r.offset.y * sy));
+        r.extent.width = x1 - r.offset.x; r.extent.height = y1 - r.offset.y;
+    }
+    gaze.width = session->scene_width; gaze.height = session->scene_height;
+}
 static wine_XrSession *active_session;
 static XrResult call_result(NTSTATUS status, XrResult result) { return status ? XR_ERROR_RUNTIME_FAILURE : result; }
 static int32_t native_graphics_call(void *params) { return UNIX_CALL(mw_graphics_native, params); }
@@ -295,6 +353,7 @@ extern "C" XrResult WINAPI xrAcquireSwapchainImage(XrSwapchain swapchain, const 
                                      {(int32_t)(source[v][5] - source[v][3]), (int32_t)(source[v][6] - source[v][4])}};
             }
         }
+        follow_scene_size(session, gaze);
         if (!UNIX_CALL(mw_gaze_foveation, &gaze) && gaze.map != session->gaze_map &&
             SUCCEEDED(session->interop->set_frame_rate_map((void *)gaze.map)))
             session->gaze_map = gaze.map;

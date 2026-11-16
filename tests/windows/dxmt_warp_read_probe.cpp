@@ -15,6 +15,8 @@
 // --relayout: after A, the map changes (as gaze foveation's does each frame) and a pass
 // under map 2 redraws only the left half of the scene, without a clear; the right half
 // still holds map 1's layout and must be rewritten into map 2's before that pass.
+// --scene-sizes: 25 draws into a N*3/4 x N*3/8 target and one into an N x N target, then
+// two frame ends; the device must report the smaller target as the busiest size.
 #include <windows.h>
 #include <d3d11_4.h>
 #include <d3dcompiler.h>
@@ -60,7 +62,7 @@ struct Error { double centre_max = 0, outer_max = 0, sum = 0; unsigned long long
 
 int main(int argc, char **argv)
 {
-    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false, two_maps = false, partial_copy = false, compute_write = false, relayout = false;
+    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false, two_maps = false, partial_copy = false, compute_write = false, relayout = false, scene_sizes = false;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--unfoveated")) unfoveated = true;
         else if (!std::strcmp(argv[i], "--scissor")) scissor = true;
@@ -73,6 +75,7 @@ int main(int argc, char **argv)
         else if (!std::strcmp(argv[i], "--partial-copy")) partial_copy = true;
         else if (!std::strcmp(argv[i], "--compute-write")) compute_write = true;
         else if (!std::strcmp(argv[i], "--relayout")) relayout = true;
+        else if (!std::strcmp(argv[i], "--scene-sizes")) scene_sizes = true;
         else REQUIRE(false);
     }
     REQUIRE(!split_pass || (unfoveated && late_read));
@@ -169,6 +172,40 @@ int main(int argc, char **argv)
     };
     // --late-read: bind an ordinary source first, then a mapped one without
     // changing the pixel shader or render target. Selection must see the whole pass.
+    if (scene_sizes) {
+        IDXMTNativeDevice4 *frames = nullptr;
+        REQUIRE(SUCCEEDED(device->QueryInterface(DXMT_IID_NATIVE_DEVICE4, reinterpret_cast<void **>(&frames))));
+        D3D11_TEXTURE2D_DESC scene = {};
+        textures[0]->GetDesc(&scene);
+        scene.Width = N * 3 / 4; scene.Height = N * 3 / 8;
+        ID3D11Texture2D *small = nullptr; ID3D11RenderTargetView *small_rtv = nullptr;
+        REQUIRE(SUCCEEDED(device->CreateTexture2D(&scene, nullptr, &small)));
+        REQUIRE(SUCCEEDED(device->CreateRenderTargetView(small, nullptr, &small_rtv)));
+        const D3D11_VIEWPORT small_viewport = {0, 0, float(scene.Width), float(scene.Height), 0, 1};
+        for (unsigned frame = 0; frame < 2; ++frame) {
+            context->RSSetViewports(1, &small_viewport);
+            context->OMSetRenderTargets(1, &small_rtv, nullptr);
+            context->PSSetShader(pixel[0], nullptr, 0);
+            for (unsigned i = 0; i < 25; ++i) context->Draw(3, 0);
+            context->RSSetViewports(1, &viewport);
+            pass(2, 0, nullptr);
+            REQUIRE(SUCCEEDED(frames->EndFrame()));
+        }
+        pass(3, 0, nullptr); // a pass in the next frame publishes the last one
+        context->CopyResource(staging, textures[3]);
+        D3D11_MAPPED_SUBRESOURCE mapped = {};
+        REQUIRE(SUCCEEDED(context->Map(staging, 0, D3D11_MAP_READ, 0, &mapped)));
+        context->Unmap(staging, 0);
+        DXMT_RATE_MAP_SCENE_SIZES sizes = {}; UINT size = sizeof(sizes);
+        REQUIRE(SUCCEEDED(device->GetPrivateData(DXMT_GUID_RATE_MAP_SCENE_SIZES, &size, &sizes)));
+        for (auto &e : sizes.sizes)
+            if (e.width) std::printf("SCENE_SIZE frame=%llu %ux%u draws=%u passes=%u\n", (unsigned long long)sizes.frame,
+                                     e.width, e.height, e.draws, e.passes);
+        const bool ok = sizes.sizes[0].width == scene.Width && sizes.sizes[0].height == scene.Height &&
+                        sizes.sizes[0].draws == 25;
+        std::printf("%s scene-sizes\n", ok ? "PASS" : "FAIL");
+        return ok ? 0 : 1;
+    }
     if (late_read || mixed_reads) pass(2, 0, nullptr);
     // Everything is recorded before the first flush.
     REQUIRE(SUCCEEDED(foveation->SetRasterizationRateMap(map.map)));
