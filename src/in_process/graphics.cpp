@@ -22,7 +22,10 @@ struct SessionState { ID3D11Device *device; GraphicsInterop *interop; SwapState 
     // MWXR_GAZE_FOVEATION: the packed stereo layout last submitted, and the map now set.
     XrSwapchain gaze_swapchain; XrRect2Di gaze_rects[2]; XrFovf gaze_fovs[2]; uint64_t gaze_map;
     // The scene size the gaze map follows (below), and a different one waiting to take over.
-    uint32_t scene_width, scene_height, scene_next_width, scene_next_height, scene_next_frames; };
+    uint32_t scene_width, scene_height, scene_next_width, scene_next_height, scene_next_frames;
+    // One swapchain per eye (left, right), and the order UEVR acquires them in: the last
+    // eye acquired, how many acquires in a row have alternated, and the mode last logged.
+    XrSwapchain eye_swapchains[2]; int last_eye; uint32_t alternations; int eye_mode_logged; };
 
 // DXMT (stay-warped foveation): the render-target sizes that took the most draws in the last
 // frame, from the device's private data. Matches DXMT_RATE_MAP_SCENE_SIZES in
@@ -148,6 +151,7 @@ extern "C" XrResult WINAPI xrCreateSession(XrInstance instance, const XrSessionC
     auto *state = (SessionState *)calloc(1, sizeof(SessionState));
     if (!wrapper || !state) { free(wrapper); free(state); return XR_ERROR_OUT_OF_MEMORY; }
     InitializeCriticalSection(&state->release_lock);
+    state->last_eye = -1;
     state->device = binding->device; state->device->AddRef();
     HRESULT hr = mw_graphics_interop_open(state->device, native_host, &state->interop);
     if (FAILED(hr)) {
@@ -291,6 +295,10 @@ extern "C" XrResult WINAPI xrDestroySwapchain(XrSwapchain swapchain)
     XrResult result = call_result(status, params.result);
     if (XR_FAILED(result)) return result;
     auto *parent = (SessionState *)wrapper->session->graphics;
+    if (swapchain == parent->eye_swapchains[0] || swapchain == parent->eye_swapchains[1]) {
+        parent->eye_swapchains[0] = parent->eye_swapchains[1] = XR_NULL_HANDLE;
+        parent->last_eye = -1; parent->alternations = 0;
+    }
     if (swapchain == parent->gaze_swapchain) {
         parent->gaze_swapchain = XR_NULL_HANDLE;
         if (parent->gaze_map) { parent->interop->set_frame_rate_map(nullptr); parent->gaze_map = 0; }
@@ -341,9 +349,29 @@ extern "C" XrResult WINAPI xrAcquireSwapchainImage(XrSwapchain swapchain, const 
         state->acquired[(state->acquired_head + state->acquired_count++) % state->count] = *index;
     // Once per frame, before the application records the passes for this image.
     auto *session = (SessionState *)wrapper->session->graphics;
-    if (XR_SUCCEEDED(result) && wrapper->session->instance->gaze_foveation && swapchain == session->gaze_swapchain) {
-        mw_gaze_foveation_params gaze = {swapchain, wrapper->info.width, wrapper->info.height,
+    const bool eye_swapchain = session->eye_swapchains[1] &&
+                               (swapchain == session->eye_swapchains[0] || swapchain == session->eye_swapchains[1]);
+    if (XR_SUCCEEDED(result) && wrapper->session->instance->gaze_foveation &&
+        (swapchain == session->gaze_swapchain || eye_swapchain)) {
+        mw_gaze_foveation_params gaze = {session->gaze_swapchain, wrapper->info.width, wrapper->info.height,
             {session->gaze_rects[0], session->gaze_rects[1]}, {session->gaze_fovs[0], session->gaze_fovs[1]}, 0, XR_SUCCESS};
+        // One swapchain per eye (UEVR's Synchronized Sequential): the engine draws one eye per
+        // frame, and UEVR acquires that eye's swapchain once it has drawn it, so the next frame
+        // draws the other eye. While the acquires alternate, the map is that other eye's alone;
+        // otherwise it covers both eyes (the same rectangle with both fields of view).
+        if (eye_swapchain) {
+            const int eye = swapchain == session->eye_swapchains[1];
+            session->alternations = eye != session->last_eye ? session->alternations + 1 : 0;
+            session->last_eye = eye;
+            const int mode = session->alternations >= 8 ? 1 : 0;
+            if (mode) gaze.fovs[0] = gaze.fovs[1] = session->gaze_fovs[1 - eye];
+            if (mode != session->eye_mode_logged) {
+                session->eye_mode_logged = mode;
+                fprintf(stderr, "wineopenxr: gaze foveation per eye: %s\n",
+                        mode ? "eyes alternate; each frame gets the next eye's map"
+                             : "eyes do not alternate; one map covers both eyes");
+            }
+        }
         // An application that copies its own eye textures into the swapchain (OpenVR through
         // xrizer) renders at that texture's size, which need not be the swapchain's: a render
         // scale, both eyes in one texture, or part of a larger texture under dynamic
@@ -541,6 +569,7 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
             const XrSwapchain left = projection.views[0].subImage.swapchain, right = projection.views[1].subImage.swapchain;
             if (gaze && projection.viewCount == 2 && left && left == right) {
                 gaze->gaze_swapchain = left;
+                gaze->eye_swapchains[0] = gaze->eye_swapchains[1] = XR_NULL_HANDLE;
                 for (unsigned i = 0; i < 2; ++i) {
                     gaze->gaze_rects[i] = projection.views[i].subImage.imageRect; gaze->gaze_fovs[i] = projection.views[i].fov;
                 }
@@ -554,6 +583,7 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
                 // swapchain and covers both eyes' gaze over the same rectangle, so it serves
                 // whichever eye is drawn.
                 gaze->gaze_swapchain = left;
+                gaze->eye_swapchains[0] = left; gaze->eye_swapchains[1] = right;
                 for (unsigned i = 0; i < 2; ++i) {
                     gaze->gaze_rects[i] = projection.views[0].subImage.imageRect; gaze->gaze_fovs[i] = projection.views[i].fov;
                 }

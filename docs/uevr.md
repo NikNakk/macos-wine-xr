@@ -289,6 +289,18 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   whose two views share one swapchain. It now also follows the first eye's swapchain when
   the two views use different swapchains of one size and the same rectangle, with both
   eyes' fields of view over that rectangle (the same union map, set up directly).
+  The per-eye swapchains also say which eye is which, so the map can be one eye's alone.
+  UEVR acquires an eye's swapchain once the engine has drawn that eye, and the engine
+  draws the other eye next (the audit: one 2800x2856 eye of about 58 passes per frame,
+  then one copy into a 2800x2856 swapchain image). At each acquire of an eye swapchain the
+  bridge sets the other eye's map (that eye's field of view alone over the rectangle).
+  This needs the acquires to alternate: after 8 alternating acquires in a row it switches
+  to per-eye maps, and after any repeat it goes back to the map covering both eyes until
+  8 more; each change is logged (`gaze foveation per eye: ...`). The map cache key now
+  includes the fields of view, since the two eyes' maps share a rectangle. With the
+  PS VR2's lopsided per-eye fields of view the two eyes' gaze points are some 15% of the
+  image width apart (an estimate), so the map covering both has a full-rate band about a
+  third wider than one eye's.
   Built into `gaze-gate`; not yet seen in the game. That run also quit without a crash:
   the guard skipped the `Realloc(Ptr, 0)` free, and no crash dump was written.
 - **Synchronized Sequential** (`VR_RenderingMethod=1`, as in Gruntled's community

@@ -449,10 +449,14 @@ int32_t mw_gaze_foveation_call(void *args)
         float core = gaze.have_gaze ? gaze.core : 20.f, edge = gaze.have_gaze ? gaze.edge : 35.f;
         float cy = gaze.have_gaze ? gaze.yaw : 0.f, cp = gaze.have_gaze ? gaze.pitch : 0.f;
         gaze_push_kosmickrisp(p, cy, cp, core, edge);
-        NSString *key = [NSString stringWithFormat:@"%d,%d,%d,%u,%u,%d,%d,%d,%d,%d,%d,%d,%d", (int)lroundf(cy * 8),
+        // The fields of view are in the key too: a per-eye map has one eye's over a rectangle
+        // that the other eye's map shares.
+        NSString *key = [NSString stringWithFormat:@"%d,%d,%d,%u,%u,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", (int)lroundf(cy * 8),
                          (int)lroundf(cp * 8), gaze.have_gaze, p->width, p->height,
                          p->rects[0].offset.x, p->rects[0].offset.y, p->rects[0].extent.width, p->rects[0].extent.height,
-                         p->rects[1].offset.x, p->rects[1].offset.y, p->rects[1].extent.width, p->rects[1].extent.height];
+                         p->rects[1].offset.x, p->rects[1].offset.y, p->rects[1].extent.width, p->rects[1].extent.height,
+                         (int)lroundf(p->fovs[0].angleLeft * 1000), (int)lroundf(p->fovs[0].angleRight * 1000),
+                         (int)lroundf(p->fovs[1].angleLeft * 1000), (int)lroundf(p->fovs[1].angleRight * 1000)];
         if (p->width != gaze.logged_width || p->height != gaze.logged_height || p->rects[0].extent.width != gaze.logged_extent) {
             gaze.logged_width = p->width; gaze.logged_height = p->height; gaze.logged_extent = p->rects[0].extent.width;
             fprintf(stderr, "wineopenxr: gaze foveation target %ux%u eyes (%d,%d %dx%d) (%d,%d %dx%d)\n", p->width, p->height,
