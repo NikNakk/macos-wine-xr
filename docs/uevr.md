@@ -284,7 +284,13 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   map serves whichever eye is drawn, at some cost in savings. UEVR's copy of each eye into
   its half of the double-wide swapchain goes through DXMT's resampling copy. Logged as
   `gaze foveation follows the scene at 2800x2856 (output 5600x2856, one eye at a time)`.
-  Built into `gaze-gate`; not yet seen in the game.
+  The first run of it was not foveated at all: in Synchronized Sequential UEVR gives each
+  eye its own 2800x2856 swapchain, and gaze foveation only followed a projection layer
+  whose two views share one swapchain. It now also follows the first eye's swapchain when
+  the two views use different swapchains of one size and the same rectangle, with both
+  eyes' fields of view over that rectangle (the same union map, set up directly).
+  Built into `gaze-gate`; not yet seen in the game. That run also quit without a crash:
+  the guard skipped the `Realloc(Ptr, 0)` free, and no crash dump was written.
 - **Synchronized Sequential** (`VR_RenderingMethod=1`, as in Gruntled's community
   profile, 14 Jan 2024: settings only, no UObjectHook, scripts or plugins; it also sets
   resolution scale 0.762 and a 10.9 cm near clip): the arms show in both eyes, but the

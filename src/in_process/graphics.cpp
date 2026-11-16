@@ -538,11 +538,24 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
         if (first_projection) {
             first_projection = false;
             auto *gaze = wine_session_from_handle(session)->vulkan ? nullptr : (SessionState *)wine_session_from_handle(session)->graphics;
-            if (gaze && projection.viewCount == 2 && projection.views[0].subImage.swapchain &&
-                projection.views[0].subImage.swapchain == projection.views[1].subImage.swapchain) {
-                gaze->gaze_swapchain = projection.views[0].subImage.swapchain;
+            const XrSwapchain left = projection.views[0].subImage.swapchain, right = projection.views[1].subImage.swapchain;
+            if (gaze && projection.viewCount == 2 && left && left == right) {
+                gaze->gaze_swapchain = left;
                 for (unsigned i = 0; i < 2; ++i) {
                     gaze->gaze_rects[i] = projection.views[i].subImage.imageRect; gaze->gaze_fovs[i] = projection.views[i].fov;
+                }
+            } else if (gaze && projection.viewCount == 2 && left && right &&
+                       wine_swapchain_from_handle(left)->info.width == wine_swapchain_from_handle(right)->info.width &&
+                       wine_swapchain_from_handle(left)->info.height == wine_swapchain_from_handle(right)->info.height &&
+                       !memcmp(&projection.views[0].subImage.imageRect, &projection.views[1].subImage.imageRect,
+                               sizeof(XrRect2Di))) {
+                // One swapchain per eye, of one size (UEVR's Synchronized Sequential, which draws
+                // one eye per engine frame into its own image). The map follows the first eye's
+                // swapchain and covers both eyes' gaze over the same rectangle, so it serves
+                // whichever eye is drawn.
+                gaze->gaze_swapchain = left;
+                for (unsigned i = 0; i < 2; ++i) {
+                    gaze->gaze_rects[i] = projection.views[0].subImage.imageRect; gaze->gaze_fovs[i] = projection.views[i].fov;
                 }
             }
             if (wine_session_from_handle(session)->vulkan) mw_vk_note_projection(session, &projection);
