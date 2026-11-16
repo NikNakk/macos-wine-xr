@@ -28,7 +28,10 @@ it and sets the DXMT and wineopenxr variables;
   (`dxmt-warp-build`; the 0022 files are kept in `build-in-process/dxmt-0022-backup`,
   the files before 0025 beside the new ones as `*.pre-0025`). It replaced
   `wine-foveation` and `wine-foveation-wow64` on 2026-11-14. It carries
-  `share/mwxr-foveation-dxmt`; a launch with `MWXR_FOVEATION` refuses a runtime without
+  `share/mwxr-foveation-dxmt`. Since 2026-11-16 its DXMT is `NikNakk/dxmt`
+  `macos-xr-foveation` at `0482175` (two read layouts per pass), built in
+  `build-in-process/dxmt-fov-wt-build` from the worktree `dxmt-fov-wt`; the previous
+  files are beside the new ones as `*.pre-two-layouts`. A launch with `MWXR_FOVEATION` refuses a runtime without
   it. The ordinary runtimes are unchanged. `MWXR_IN_PROCESS_WINE` still overrides the
   choice.
 - **wineopenxr**: `build-in-process/gaze-gate` (`MWXR_FOVEATION_BUILD` overrides);
@@ -66,8 +69,11 @@ the compositor is unchanged. The map is sized to:
 | Depth submitted to the compositor | Colour only; a warped depth source would be copied unresampled, with a warning. |
 | Vulkan, OpenGL or D3D12 games | Not affected. |
 
-A pass that reads targets in two different layouts is left untranslated and
-logged (`second layout in one pass`); that would show as a distorted effect.
+A pass can read targets in two different layouts: gaze foveation makes a new map as the
+gaze moves, and a temporal pass reads this frame's target with one rendered under an
+earlier map. Each read goes through its own map's tables (DXMT `0482175`, 2026-11-16).
+A third layout in one pass is left untranslated and logged (`third layout in one
+pass`); that would show as a distorted effect.
 The first frames, before the first copy, use the swapchain's size.
 
 ## Checked so far

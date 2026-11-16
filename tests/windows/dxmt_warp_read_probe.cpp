@@ -6,6 +6,8 @@
 //   B (mapped)   chain = Load / Sample / offset Load / point SampleLevel of scene
 //   C (ordinary) Load of chain, D (ordinary) bilinear Sample of chain
 // C and D are read back and compared with the analytic logical result.
+// --two-maps: A under map 1, a second scene under map 2 (another layout), and B under
+// map 2 reads both, as a temporal pass does while gaze foveation moves the map.
 #include <windows.h>
 #include <d3d11_4.h>
 #include <d3dcompiler.h>
@@ -22,7 +24,7 @@
 constexpr unsigned N = FOVEATION_PROBE_SIZE;
 
 static const char *source =
-    "Texture2D<float4> ordinary:register(t127);Texture2D<float4> src:register(t0);SamplerState lin:register(s0);SamplerState pt:register(s1);"
+    "Texture2D<float4> ordinary:register(t127);Texture2D<float4> src:register(t0);Texture2D<float4> src2:register(t1);SamplerState lin:register(s0);SamplerState pt:register(s1);"
     "struct V{float4 p:SV_Position;float2 uv:TEXCOORD;};"
     "V vs(uint i:SV_VertexID){V v;float2 p=float2((i==2)?3:-1,(i==1)?3:-1);"
     "v.p=float4(p,0,1);v.uv=float2((p.x+1)*.5,(1-p.y)*.5);return v;}"
@@ -31,6 +33,8 @@ static const char *source =
     "return float4(src.Load(q).r,src.Sample(lin,v.uv).g,src.Load(q,int2(7,0)).r,src.SampleLevel(pt,v.uv,0).g);}"
     "float4 ps_mixed(V v):SV_Target{int3 q=int3(v.p.xy,0);"
     "return float4(src.Load(q).r,ordinary.Sample(lin,v.uv).g,src.Load(q,int2(7,0)).r,ordinary.SampleLevel(pt,v.uv,0).g);}"
+    "float4 ps_two(V v):SV_Target{int3 q=int3(v.p.xy,0);"
+    "return float4(src.Load(q).r,src2.Sample(lin,v.uv).g,src2.Load(q,int2(7,0)).r,src.SampleLevel(pt,v.uv,0).g);}"
     "float4 ps_load(V v):SV_Target{return src.Load(int3(v.p.xy,0));}"
     "float4 ps_sample(V v):SV_Target{return src.Sample(lin,v.uv);}";
 
@@ -47,7 +51,7 @@ struct Error { double centre_max = 0, outer_max = 0, sum = 0; unsigned long long
 
 int main(int argc, char **argv)
 {
-    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false;
+    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false, two_maps = false;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--unfoveated")) unfoveated = true;
         else if (!std::strcmp(argv[i], "--scissor")) scissor = true;
@@ -56,11 +60,13 @@ int main(int argc, char **argv)
         else if (!std::strcmp(argv[i], "--reverse-read")) reverse_read = true;
         else if (!std::strcmp(argv[i], "--mixed-reads")) mixed_reads = true;
         else if (!std::strcmp(argv[i], "--mixed-swap")) mixed_reads = mixed_swap = true;
+        else if (!std::strcmp(argv[i], "--two-maps")) two_maps = true;
         else REQUIRE(false);
     }
     REQUIRE(!split_pass || (unfoveated && late_read));
     REQUIRE(!reverse_read || late_read);
     REQUIRE(!(late_read && mixed_reads));
+    REQUIRE(!two_maps || !(unfoveated || scissor || late_read || mixed_reads));
     HMODULE helper = LoadLibraryA("wine_foveation_probe.dll");
     REQUIRE(helper);
     auto probe = reinterpret_cast<LONG (WINAPI *)(UINT, void *)>(GetProcAddress(helper, "MWXRMetalProbe"));
@@ -78,13 +84,18 @@ int main(int argc, char **argv)
     map.mode = unfoveated ? 0 : 1; map.value = 1;
     REQUIRE(probe(FOVEATION_CREATE, &map) == 0 && map.status == 0);
     if (!unfoveated) REQUIRE(map.map && map.physical_width < N && map.physical_height < N);
+    foveation_probe_params map2 = {};
+    if (two_maps) {
+        map2.device = map.device; map2.mode = 2; map2.value = 1;
+        REQUIRE(probe(FOVEATION_CREATE, &map2) == 0 && map2.status == 0 && map2.map);
+    }
 
     ID3DBlob *vs = compile("vs", "vs_5_0");
     REQUIRE(vs);
     ID3D11VertexShader *vertex = nullptr;
     REQUIRE(SUCCEEDED(device->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr, &vertex)));
     vs->Release();
-    const char *entries[4] = {"ps_scene", mixed_reads ? "ps_mixed" : "ps_chain", "ps_load", "ps_sample"};
+    const char *entries[4] = {"ps_scene", two_maps ? "ps_two" : mixed_reads ? "ps_mixed" : "ps_chain", "ps_load", "ps_sample"};
     ID3D11PixelShader *pixel[4] = {};
     for (unsigned i = 0; i < 4; ++i) {
         ID3DBlob *ps = compile(entries[i], "ps_5_0");
@@ -110,15 +121,15 @@ int main(int argc, char **argv)
     REQUIRE(SUCCEEDED(device->CreateRasterizerState(&raster, &scissored)));
     const D3D11_RECT rect = {LONG(N * 9 / 16), LONG(N * 3 / 16), LONG(N * 14 / 16), LONG(N * 13 / 16)};
 
-    // scene, chain, ordinary Load result, ordinary Sample result
+    // scene, chain, ordinary Load result, ordinary Sample result, second scene (--two-maps)
     D3D11_TEXTURE2D_DESC desc = {};
     desc.Width = desc.Height = N; desc.MipLevels = desc.ArraySize = 1;
     desc.Format = DXGI_FORMAT_R16G16B16A16_UNORM; desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    ID3D11Texture2D *textures[4] = {};
-    ID3D11RenderTargetView *rtvs[4] = {};
-    ID3D11ShaderResourceView *srvs[4] = {};
-    for (unsigned i = 0; i < 4; ++i) {
+    ID3D11Texture2D *textures[5] = {};
+    ID3D11RenderTargetView *rtvs[5] = {};
+    ID3D11ShaderResourceView *srvs[5] = {};
+    for (unsigned i = 0; i < 5; ++i) {
         REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc, nullptr, &textures[i])));
         REQUIRE(SUCCEEDED(device->CreateRenderTargetView(textures[i], nullptr, &rtvs[i])));
         REQUIRE(SUCCEEDED(device->CreateShaderResourceView(textures[i], nullptr, &srvs[i])));
@@ -151,7 +162,18 @@ int main(int argc, char **argv)
     if (scissor) { context->RSSetState(scissored); context->RSSetScissorRects(1, &rect); }
     pass(0, 0, nullptr);   // A: mapped scene
     context->RSSetState(rasterizer);
-    if (mixed_reads) {
+    if (two_maps) {
+        REQUIRE(SUCCEEDED(foveation->SetRasterizationRateMap(map2.map)));
+        pass(4, 0, nullptr);   // the second scene, under map 2
+        context->OMSetRenderTargets(1, &rtvs[1], nullptr);
+        context->ClearRenderTargetView(rtvs[1], clear);
+        context->PSSetShader(pixel[1], nullptr, 0);
+        ID3D11ShaderResourceView *both[2] = {srvs[0], srvs[4]};
+        context->PSSetShaderResources(0, 2, both);
+        context->Draw(3, 0);   // B under map 2 reads map 1's and map 2's scenes
+        ID3D11ShaderResourceView *none[2] = {};
+        context->PSSetShaderResources(0, 2, none);
+    } else if (mixed_reads) {
         context->PSSetShaderResources(127, 1, &srvs[2]);
         pass(1, 1, srvs[0]);
         if (mixed_swap) {
@@ -193,7 +215,7 @@ int main(int argc, char **argv)
                     if (row[x * 4] || row[x * 4 + 1]) { x0 = std::min(x0, x); x1 = std::max(x1, x + 1); y0 = std::min(y0, y); y1 = std::max(y1, y + 1); }
                     continue;
                 }
-                const bool centre = !unfoveated && x + .5 > cx0 && x + .5 < cx1 && y + .5 > cy0 && y + .5 < cy1;
+                const bool centre = !unfoveated && !two_maps && x + .5 > cx0 && x + .5 < cx1 && y + .5 > cy0 && y + .5 < cy1;
                 const double expected[4] = {x + .5, y + .5, x + 7.5, y + .5};
                 for (unsigned c = 0; c < 4; ++c) {
                     if (c == 2 && x + 16 >= N) continue; // offset read clamps at the edge
@@ -234,9 +256,11 @@ int main(int argc, char **argv)
     std::printf("%s mode=%u logical=%ux%u physical=%ux%u\n", ok ? "PASS" : "FAIL", map.mode, N, N,
         map.physical_width, map.physical_height);
     context->ClearState();
-    for (unsigned i = 0; i < 4; ++i) { srvs[i]->Release(); rtvs[i]->Release(); textures[i]->Release(); pixel[i]->Release(); }
+    for (unsigned i = 0; i < 4; ++i) pixel[i]->Release();
+    for (unsigned i = 0; i < 5; ++i) { srvs[i]->Release(); rtvs[i]->Release(); textures[i]->Release(); }
     scissored->Release(); staging->Release(); samplers[0]->Release(); samplers[1]->Release(); rasterizer->Release(); vertex->Release();
     REQUIRE(probe(FOVEATION_RELEASE, &map) == 0);
+    if (two_maps) REQUIRE(probe(FOVEATION_RELEASE, &map2) == 0);
     foveation->Release(); native->Release(); context->Release(); device->Release();
     FreeLibrary(helper);
     return ok ? 0 : 1;

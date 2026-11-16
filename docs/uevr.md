@@ -160,7 +160,13 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   foveation. Every gaze update makes a new rate map, and a pass that reads this frame's
   target and one rendered under an earlier map (UE's temporal AA history, say) can
   translate only one of them; the other is read in its physical layout. Fixed foveation
-  has one map, so it should not hit this (the 2026-11-14 fixed run had no warnings).
+  has one map, so it does not hit this (the 2026-11-14 fixed run had no warnings).
+  Fixed in DXMT `0482175`: a pass keeps two read layouts, each read through its own
+  map's tables. The read fixture's `--two-maps` case (a scene under each of two maps,
+  read together by a pass under the second) passes on the new build, worst error 3.3
+  logical pixels, and fails on the old one (2,048 px). The existing fixture cases and
+  the resource-read tests pass. Installed in `wine-foveation-unified`; not yet seen in
+  the game.
 
 ## Limits
 
