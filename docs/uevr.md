@@ -185,6 +185,18 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
     2026-11-16 in both prefixes' copies (`~/Windows/prefixes/499520`, the one in use, and
     `prefixes-wow64/499520`), the previous files kept as `GameUserSettings.ini.pre-100`.
     Changing the game's own graphics settings may write it again.
+- **Gaze foveation, third try: wrong lighting in parts of each eye.** With the scene at
+  100%, the eyes showed whole regions dark orange next to lit ones, with a hard edge.
+  An audited run (`MWXR_FOVEATION_AUDIT=1`, [foveation.md](foveation.md#diagnosing-a-game))
+  showed the map changing only at frame ends and every copy using the right layout.
+  The fault: a 5600x2856 RGBA16F target that UE4 writes from compute (two dispatches
+  reading the G-buffer, most likely its lighting) kept a layout tag from an old gaze map,
+  left by an earlier mapped render pass. Compute writes at logical coordinates, so its
+  contents were ordinary, but the passes that read it went through the stale map and
+  took each pixel's lighting from elsewhere. DXMT `585ce5c` clears the tag when a texture
+  is bound as a UAV for writing. The fixture's `--compute-write` case (a mapped scene
+  pass, then a compute shader rewriting that texture) fails on the previous build (up to
+  1,040 px) and passes on the new one (2 px). Installed in `wine-foveation-unified`.
 
 ## Limits
 

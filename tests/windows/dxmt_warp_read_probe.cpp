@@ -10,6 +10,8 @@
 // map 2 reads both, as a temporal pass does while gaze foveation moves the map.
 // --partial-copy: the right half of the mapped chain is copied with CopySubresourceRegion
 // into a half-width texture (UEVR copies each eye this way), which is read back instead.
+// --compute-write: after the mapped scene pass, a compute shader rewrites the scene through
+// a UAV (ordinary layout, as UE4's compute lighting does); B must read it untranslated.
 #include <windows.h>
 #include <d3d11_4.h>
 #include <d3dcompiler.h>
@@ -37,6 +39,8 @@ static const char *source =
     "return float4(src.Load(q).r,ordinary.Sample(lin,v.uv).g,src.Load(q,int2(7,0)).r,ordinary.SampleLevel(pt,v.uv,0).g);}"
     "float4 ps_two(V v):SV_Target{int3 q=int3(v.p.xy,0);"
     "return float4(src.Load(q).r,src2.Sample(lin,v.uv).g,src2.Load(q,int2(7,0)).r,src.SampleLevel(pt,v.uv,0).g);}"
+    "RWTexture2D<float4> uav:register(u0);"
+    "[numthreads(8,8,1)] void cs_scene(uint3 id:SV_DispatchThreadID){uav[id.xy]=float4((id.xy+.5)/PROBE_SIZE,.5,1);}"
     "float4 ps_load(V v):SV_Target{return src.Load(int3(v.p.xy,0));}"
     "float4 ps_sample(V v):SV_Target{return src.Sample(lin,v.uv);}";
 
@@ -53,7 +57,7 @@ struct Error { double centre_max = 0, outer_max = 0, sum = 0; unsigned long long
 
 int main(int argc, char **argv)
 {
-    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false, two_maps = false, partial_copy = false;
+    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false, two_maps = false, partial_copy = false, compute_write = false;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--unfoveated")) unfoveated = true;
         else if (!std::strcmp(argv[i], "--scissor")) scissor = true;
@@ -64,6 +68,7 @@ int main(int argc, char **argv)
         else if (!std::strcmp(argv[i], "--mixed-swap")) mixed_reads = mixed_swap = true;
         else if (!std::strcmp(argv[i], "--two-maps")) two_maps = true;
         else if (!std::strcmp(argv[i], "--partial-copy")) partial_copy = true;
+        else if (!std::strcmp(argv[i], "--compute-write")) compute_write = true;
         else REQUIRE(false);
     }
     REQUIRE(!split_pass || (unfoveated && late_read));
@@ -133,6 +138,7 @@ int main(int argc, char **argv)
     ID3D11RenderTargetView *rtvs[5] = {};
     ID3D11ShaderResourceView *srvs[5] = {};
     for (unsigned i = 0; i < 5; ++i) {
+        desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | (i == 0 && compute_write ? D3D11_BIND_UNORDERED_ACCESS : 0);
         REQUIRE(SUCCEEDED(device->CreateTexture2D(&desc, nullptr, &textures[i])));
         REQUIRE(SUCCEEDED(device->CreateRenderTargetView(textures[i], nullptr, &rtvs[i])));
         REQUIRE(SUCCEEDED(device->CreateShaderResourceView(textures[i], nullptr, &srvs[i])));
@@ -165,6 +171,23 @@ int main(int argc, char **argv)
     if (scissor) { context->RSSetState(scissored); context->RSSetScissorRects(1, &rect); }
     pass(0, 0, nullptr);   // A: mapped scene
     context->RSSetState(rasterizer);
+    if (compute_write) {
+        ID3DBlob *cs = compile("cs_scene", "cs_5_0");
+        REQUIRE(cs);
+        ID3D11ComputeShader *compute = nullptr;
+        REQUIRE(SUCCEEDED(device->CreateComputeShader(cs->GetBufferPointer(), cs->GetBufferSize(), nullptr, &compute)));
+        cs->Release();
+        ID3D11UnorderedAccessView *uav = nullptr;
+        REQUIRE(SUCCEEDED(device->CreateUnorderedAccessView(textures[0], nullptr, &uav)));
+        ID3D11RenderTargetView *no_target = nullptr;
+        context->OMSetRenderTargets(1, &no_target, nullptr);
+        context->CSSetShader(compute, nullptr, 0);
+        context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+        context->Dispatch(N / 8, N / 8, 1);
+        ID3D11UnorderedAccessView *no_uav = nullptr;
+        context->CSSetUnorderedAccessViews(0, 1, &no_uav, nullptr);
+        uav->Release(); compute->Release();
+    }
     if (two_maps) {
         REQUIRE(SUCCEEDED(foveation->SetRasterizationRateMap(map2.map)));
         pass(4, 0, nullptr);   // the second scene, under map 2
