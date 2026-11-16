@@ -29,9 +29,9 @@ it and sets the DXMT and wineopenxr variables;
   the files before 0025 beside the new ones as `*.pre-0025`). It replaced
   `wine-foveation` and `wine-foveation-wow64` on 2026-11-14. It carries
   `share/mwxr-foveation-dxmt`. Since 2026-11-16 its DXMT is `NikNakk/dxmt`
-  `macos-xr-foveation` at `585ce5c` (two read layouts per pass; a copy of part of a warped
+  `macos-xr-foveation` at `eea53ec` (two read layouts per pass; a copy of part of a warped
   image is resampled; a UAV write leaves a texture ordinary; a target loaded by a mapped
-  pass is first rewritten into its layout, `eea53ec`), built in
+  pass is first rewritten into its layout), built in
   `build-in-process/dxmt-fov-wt-build` from the worktree `dxmt-fov-wt`; the previous
   files are beside the new ones as `*.pre-two-layouts`. A launch with `MWXR_FOVEATION` refuses a runtime without
   it. The ordinary runtimes are unchanged. `MWXR_IN_PROCESS_WINE` still overrides the
