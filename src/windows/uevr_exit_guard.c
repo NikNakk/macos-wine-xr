@@ -18,8 +18,9 @@
  * with UEVR's Ghosting Fix): a fault inside the engine allocator's Free on a pointer it
  * does not own is skipped. Unreal's FMemory::Free loads GMalloc and calls its virtual
  * Free (slot 4); FMallocBinned::Free looks up the pointer's pool, finds none for memory
- * UEVR allocated, and reads the null pool (address 0x2). The guard checks that the
- * faulting function is exactly GMalloc's Free, called from FMemory::Free, then unwinds
+ * UEVR allocated, and reads the null pool (address 0x2). The guard checks for a near-null
+ * fault in the game's code, called through "call [rax+0x20]" from a short function that
+ * loads the allocator global (FMemory::Free), then unwinds
  * out of it and resumes in FMemory::Free as if the free had been done: that block leaks,
  * which is harmless, and nothing has been locked yet at that point.
  *
@@ -83,43 +84,52 @@ static int readable(const void *p, SIZE_T size)
  * free had returned. Returns 1 when the context was changed. */
 static int skip_unowned_free(CONTEXT *context, ULONG_PTR address)
 {
-    DWORD64 image = 0, caller_image = 0;
+    DWORD64 image = 0, caller_image = 0, main = (DWORD64)GetModuleHandleW(NULL);
     PRUNTIME_FUNCTION fn, caller_fn;
     CONTEXT caller = *context;
     PVOID handler_data = NULL;
-    DWORD64 frame = 0;
+    DWORD64 frame = 0, slot = 0;
     const unsigned char *call, *code;
     DWORD i;
-    if (address >= 0x10000) return 0;
+    int loads_global = 0;
+    if (address >= 0x10000 || context->Rip < main || context->Rip >= main + 0x10000000) return 0;
     fn = RtlLookupFunctionEntry(context->Rip, &image, NULL);
-    if (!fn || image != (DWORD64)GetModuleHandleW(NULL)) return 0;
+    if (!fn || image != main) { say("not skipped: no unwind entry in the game for %p\n", (void *)context->Rip); return 0; }
     RtlVirtualUnwind(UNW_FLAG_NHANDLER, image, context->Rip, fn, &caller, &handler_data, &frame, NULL);
-    /* The caller made the call with "call [rax+0x20]": slot 4 of a vtable. */
+    /* The caller made the call with "call [rax+0x20]": slot 4 of a vtable (FMalloc::Free). */
     call = (const unsigned char *)caller.Rip - 3;
-    if (!readable(call, 3) || call[0] != 0xff || call[1] != 0x50 || call[2] != 0x20) return 0;
+    if (!readable(call, 3) || call[0] != 0xff || call[1] != 0x50 || call[2] != 0x20) {
+        say("not skipped: %p returns to %p, not after call [rax+0x20]\n", (void *)context->Rip, (void *)caller.Rip);
+        return 0;
+    }
     caller_fn = RtlLookupFunctionEntry(caller.Rip, &caller_image, NULL);
-    if (!caller_fn || caller_image != image || caller_fn->EndAddress - caller_fn->BeginAddress > 0x80) return 0;
-    /* FMemory::Free: "mov rcx, [rip+GMalloc]" before the call. GMalloc's vtable slot 4 must
-     * be the function that faulted. */
+    if (!caller_fn || caller_image != image || caller_fn->EndAddress - caller_fn->BeginAddress > 0x80) {
+        say("not skipped: caller at %p is not a short function of the game\n", (void *)caller.Rip);
+        return 0;
+    }
+    /* FMemory::Free: "mov rcx, [rip+GMalloc]" (a global holding an object) before the call. */
     code = (const unsigned char *)(image + caller_fn->BeginAddress);
     for (i = 0; i + 7 <= (DWORD)(caller.Rip - 3 - (DWORD64)code); i++) {
+        const unsigned char *global;
+        const DWORD64 *object, *vtable;
         if (code[i] != 0x48 || code[i + 1] != 0x8b || code[i + 2] != 0x0d) continue;
-        {
-            const unsigned char *global = code + i + 7 + *(const INT32 *)(code + i + 3);
-            const DWORD64 *object, *vtable;
-            if (!readable(global, 8)) continue;
-            object = *(const DWORD64 *const *)global;
-            if (!object || !readable(object, 8)) continue;
-            vtable = (const DWORD64 *)*object;
-            if (!vtable || !readable(vtable + 4, 8)) continue;
-            if (vtable[4] != image + fn->BeginAddress) continue;
-            say("skipped GMalloc->Free (%p) of a block the engine does not own (%p): fault at %p, resuming at %p\n",
-                (void *)vtable[4], (void *)caller.Rbx, (void *)context->Rip, (void *)caller.Rip);
-            *context = caller;
-            return 1;
-        }
+        global = code + i + 7 + *(const INT32 *)(code + i + 3);
+        if (!readable(global, 8)) continue;
+        object = *(const DWORD64 *const *)global;
+        if (!object || !readable(object, 8)) continue;
+        vtable = (const DWORD64 *)*object;
+        if (!vtable || !readable(vtable + 4, 8)) continue;
+        loads_global = 1;
+        slot = vtable[4];
+        break;
     }
-    return 0;
+    if (!loads_global) { say("not skipped: caller at %p does not load an allocator global\n", (void *)caller.Rip); return 0; }
+    /* Slot 4 is the faulting function, or a hook in front of it (UEVR hooks engine code). */
+    say("skipped GMalloc->Free of a block the engine does not own (%p): fault at %p in %p, slot 4 %p, "
+        "resuming at %p\n", (void *)caller.Rbx, (void *)context->Rip, (void *)(image + fn->BeginAddress),
+        (void *)slot, (void *)caller.Rip);
+    *context = caller;
+    return 1;
 }
 
 static LONG CALLBACK guard(EXCEPTION_POINTERS *info)

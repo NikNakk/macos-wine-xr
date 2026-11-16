@@ -259,7 +259,12 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   GMalloc, it unwinds out of `Free` (`RtlVirtualUnwind`) and resumes in `FMemory::Free`
   as if the free had finished. The block, which UEVR allocated, leaks. Each skip is
   logged. Tested under Wine with a program of the same shape (three unowned frees
-  skipped, normal exit); not yet seen in the game.
+  skipped, normal exit). In the game, Ghosting Fix turned on in UEVR's menu crashed it
+  at the same instruction and the guard did not skip it: its last check, that GMalloc's
+  vtable slot 4 is the faulting function, most likely failed because UEVR puts a hook in
+  front of engine functions. The check was dropped (the `call [rax+0x20]` return site
+  and `FMemory::Free`'s shape still identify it), and the guard now logs why it passes
+  over any near-null fault in the game's code.
 - **Synchronized Sequential** (`VR_RenderingMethod=1`, as in Gruntled's community
   profile, 14 Jan 2024: settings only, no UObjectHook, scripts or plugins; it also sets
   resolution scale 0.762 and a 10.9 cm near clip): the arms show in both eyes, but the
