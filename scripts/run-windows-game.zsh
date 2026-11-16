@@ -203,6 +203,11 @@ done
 logs=${GAME_LOG_DIR:-$HOME/Library/Logs/macos-wine-xr/${appid}-$(date +%Y%m%d-%H%M%S)}
 mkdir -p "${logs}"
 print "Logs: ${logs}"
+# MWXR_FOVEATION_AUDIT: also capture swapchain images, to compare with the audited frames.
+if [[ -n ${MWXR_FOVEATION_AUDIT:-} && ${MWXR_FOVEATION_AUDIT} != 0 && -z ${MWXR_CAPTURE_DIR:-} ]]; then
+  export MWXR_CAPTURE_DIR=${logs}/captures MWXR_CAPTURE_EVERY=${MWXR_CAPTURE_EVERY:-500} MWXR_CAPTURE_MAX=${MWXR_CAPTURE_MAX:-24}
+  mkdir -p "${MWXR_CAPTURE_DIR}"
+fi
 export MWXR_LSTEAMCLIENT=1 STEAM_COMPAT_CLIENT_INSTALL_PATH=${mac_steam}
 export SteamAppId=${appid} SteamGameId=${appid}
 export VR_OVERRIDE=${xrizer_windows} XDG_STATE_HOME="Z:${logs//\//\\}"

@@ -55,6 +55,13 @@ if [[ -n ${MWXR_FOVEATION+x} && ${MWXR_FOVEATION} != off ]]; then
     fi
     export DXMT_STAY_WARPED=external DXMT_RATE_MAP_POSITION=1 DXMT_RATE_MAP_READ=1
     export DXMT_RATE_MAP_ATTACHMENT_PROBE=1 DXMT_RATE_MAP_RESOURCE_READ=1
+    # MWXR_FOVEATION_AUDIT=1 (or a Present frame number): DXMT's layout audit of three
+    # frames from frame 2400 (or that one): every pass with its map, the textures it reads,
+    # copies and map changes, in game.log as LAYOUT lines (docs/foveation.md).
+    if [[ -n ${MWXR_FOVEATION_AUDIT:-} && ${MWXR_FOVEATION_AUDIT} != 0 ]]; then
+      export DXMT_LAYOUT_AUDIT=1 DXMT_LAYOUT_AUDIT_FRAME_COUNT=3
+      export DXMT_LAYOUT_AUDIT_START_FRAME=$([[ ${MWXR_FOVEATION_AUDIT} == 1 ]] && print 2400 || print ${MWXR_FOVEATION_AUDIT})
+    fi
     # The rig wrappers name the ordinary wineopenxr build; foveation needs the one with the map.
     export MWXR_IN_PROCESS_BUILD=${MWXR_FOVEATION_BUILD:-${fov_root}/gaze-gate}
   fi

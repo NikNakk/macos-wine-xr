@@ -47,6 +47,16 @@ it and sets the DXMT and wineopenxr variables;
 - **Shader cache**: the stay-warped translation has its own shader flags, so
   DXMT's on-disk cache keeps foveated and ordinary variants apart.
 
+## Diagnosing a game
+
+`MWXR_FOVEATION_AUDIT=1` in the game's Launch Options (with `MWXR_FOVEATION`) turns on
+DXMT's layout audit for three Present frames from frame 2400 (a number instead of 1
+picks the first frame) and captures every 500th swapchain image, up to 24, into the
+launch's log folder (`captures`). The audit writes `LAYOUT` lines to `game.log`: each
+pass with its map (`positions`), the layouts it reads and its first target's layout;
+each texture copy with both layouts and boxes; and each map change with its calling
+thread (DXMT `macos-xr-foveation` after `98ea692`).
+
 ## Which games it can affect
 
 DXMT maps a render pass when its target has exactly the size of the map and is
