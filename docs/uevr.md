@@ -274,6 +274,17 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   through `call [rax+0x20]` when the function is the `Free` already identified through
   `FMemory::Free`, or the fault is at address 2 (the null pool's `TableIndex`). Tested
   under Wine with both shapes.
+- **Foveation in Synchronized Sequential** (2026-11-16). Each eye is drawn on its own at
+  2800x2856, one eye per engine frame, and which eye a frame draws is not known to the
+  bridge. The bridge now also follows a scene size with one eye's shape (within 2% of the
+  submitted eye rectangle's aspect, no larger, more than a quarter of its area): the map
+  spans that one image with both eyes' rectangles over all of it, each with its own
+  field of view. The map builder already takes the higher rate of the two at each column
+  and row, so the full-rate area covers where the gaze falls in either eye, and the same
+  map serves whichever eye is drawn, at some cost in savings. UEVR's copy of each eye into
+  its half of the double-wide swapchain goes through DXMT's resampling copy. Logged as
+  `gaze foveation follows the scene at 2800x2856 (output 5600x2856, one eye at a time)`.
+  Built into `gaze-gate`; not yet seen in the game.
 - **Synchronized Sequential** (`VR_RenderingMethod=1`, as in Gruntled's community
   profile, 14 Jan 2024: settings only, no UObjectHook, scripts or plugins; it also sets
   resolution scale 0.762 and a 10.9 cm near clip): the arms show in both eyes, but the

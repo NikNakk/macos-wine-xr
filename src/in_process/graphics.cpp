@@ -32,26 +32,39 @@ static const GUID mwxr_scene_sizes_guid = {0x6d777872, 0x7363, 0x4e65, {0x90, 0x
 
 // A game that renders its scene below the output size (a screen percentage, then an
 // upscale) draws it into a smaller target that a map of the output's size never matches,
-// so nothing is foveated. Follow the size with the most draws when it has the eye target's
-// shape and is smaller, scaling the eye rectangles with it. A change of size must persist
-// 30 frames. MWXR_FOVEATION_SCENE=0 keeps the output's size.
+// so nothing is foveated. Follow the size with the most draws when it has the eye
+// target's shape and is smaller, scaling the eye rectangles with it.
+//
+// A game that draws one eye at a time (UEVR's Synchronized Sequential) draws its scene at
+// one eye's size. Follow that too: the map then spans that one image with both eyes'
+// rectangles over all of it, each with its own field of view, so its full-rate area
+// covers where the gaze falls in either eye and serves whichever eye is being drawn.
+//
+// A change of size must persist 30 frames. MWXR_FOVEATION_SCENE=0 keeps the output's size.
+static bool shape_matches(double width, double height, double target_width, double target_height)
+{
+    return fabs(width / height / (target_width / target_height) - 1.0) <= 0.02 && width <= target_width &&
+           height <= target_height && width * height * 4 > target_width * target_height;
+}
+
 static void follow_scene_size(SessionState *session, mw_gaze_foveation_params &gaze)
 {
     static int enabled = -1; // no thread-safe statics in this PE build
     if (enabled < 0) { const char *v = getenv("MWXR_FOVEATION_SCENE"); enabled = !v || strcmp(v, "0"); }
     if (!enabled || !session->device || !gaze.width || !gaze.height) return;
+    const XrRect2Di eye = gaze.rects[0];
     MwxrSceneSizes sizes = {}; UINT size = sizeof(sizes);
     uint32_t width = gaze.width, height = gaze.height;
     if (SUCCEEDED(session->device->GetPrivateData(mwxr_scene_sizes_guid, &size, &sizes)) && size == sizeof(sizes)) {
-        const double aspect = double(gaze.width) / gaze.height;
         for (auto &s : sizes.sizes) {
             if (!s.width || !s.height || s.draws < 20) continue;
             if (s.width == gaze.width && s.height == gaze.height) break; // the output size is the busiest match
-            if (s.width > gaze.width || s.height > gaze.height || uint64_t(s.width) * s.height * 4 <= uint64_t(gaze.width) * gaze.height)
-                continue;
-            if (fabs(double(s.width) / s.height / aspect - 1.0) > 0.02) continue;
-            width = s.width; height = s.height;
-            break;
+            if (shape_matches(s.width, s.height, gaze.width, gaze.height) ||
+                (eye.extent.width > 0 && eye.extent.height > 0 &&
+                 shape_matches(s.width, s.height, eye.extent.width, eye.extent.height))) {
+                width = s.width; height = s.height;
+                break;
+            }
         }
     }
     if (!session->scene_width) { session->scene_width = gaze.width; session->scene_height = gaze.height; }
@@ -60,19 +73,25 @@ static void follow_scene_size(SessionState *session, mw_gaze_foveation_params &g
             session->scene_next_width = width; session->scene_next_height = height; session->scene_next_frames = 0;
         }
         if (++session->scene_next_frames >= 30) {
-            fprintf(stderr, "wineopenxr: gaze foveation follows the scene at %ux%u (output %ux%u)\n", width, height,
-                    gaze.width, gaze.height);
+            const bool one_eye = !(width == gaze.width && height == gaze.height) &&
+                                 !shape_matches(width, height, gaze.width, gaze.height);
+            fprintf(stderr, "wineopenxr: gaze foveation follows the scene at %ux%u (output %ux%u%s)\n", width, height,
+                    gaze.width, gaze.height, one_eye ? ", one eye at a time" : "");
             session->scene_width = width; session->scene_height = height;
         }
     } else {
         session->scene_next_frames = 0;
     }
     if (session->scene_width == gaze.width && session->scene_height == gaze.height) return;
-    const double sx = double(session->scene_width) / gaze.width, sy = double(session->scene_height) / gaze.height;
-    for (auto &r : gaze.rects) {
-        int32_t x1 = int32_t(lround((r.offset.x + r.extent.width) * sx)), y1 = int32_t(lround((r.offset.y + r.extent.height) * sy));
-        r.offset.x = int32_t(lround(r.offset.x * sx)); r.offset.y = int32_t(lround(r.offset.y * sy));
-        r.extent.width = x1 - r.offset.x; r.extent.height = y1 - r.offset.y;
+    if (shape_matches(session->scene_width, session->scene_height, gaze.width, gaze.height)) {
+        const double sx = double(session->scene_width) / gaze.width, sy = double(session->scene_height) / gaze.height;
+        for (auto &r : gaze.rects) {
+            int32_t x1 = int32_t(lround((r.offset.x + r.extent.width) * sx)), y1 = int32_t(lround((r.offset.y + r.extent.height) * sy));
+            r.offset.x = int32_t(lround(r.offset.x * sx)); r.offset.y = int32_t(lround(r.offset.y * sy));
+            r.extent.width = x1 - r.offset.x; r.extent.height = y1 - r.offset.y;
+        }
+    } else {
+        for (auto &r : gaze.rects) r = {{0, 0}, {int32_t(session->scene_width), int32_t(session->scene_height)}};
     }
     gaze.width = session->scene_width; gaze.height = session->scene_height;
 }
