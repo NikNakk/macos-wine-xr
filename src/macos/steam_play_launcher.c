@@ -144,7 +144,11 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	char payload[PATH_MAX], gate[PATH_MAX], tools[PATH_MAX], client[PATH_MAX];
-	snprintf(payload, sizeof(payload), "%s/Library/Application Support/macos-wine-xr/steam-play", home);
+	const char *selected_payload = getenv("MWXR_STEAM_PLAY_PAYLOAD");
+	if (selected_payload && *selected_payload)
+		snprintf(payload, sizeof(payload), "%s", selected_payload);
+	else
+		snprintf(payload, sizeof(payload), "%s/Library/Application Support/macos-wine-xr/steam-play", home);
 	snprintf(gate, sizeof(gate), "%s/libmwxr_steam_compat_gate.dylib", payload);
 	snprintf(tools, sizeof(tools), "%s/compatibilitytools.d", payload);
 	snprintf(client, sizeof(client),
