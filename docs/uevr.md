@@ -197,6 +197,18 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   is bound as a UAV for writing. The fixture's `--compute-write` case (a mapped scene
   pass, then a compute shader rewriting that texture) fails on the previous build (up to
   1,040 px) and passes on the new one (2 px). Installed in `wine-foveation-unified`.
+- **Gaze foveation, fourth try: much better, but glitches on turning** (by stick or head),
+  and constant in some places (climbing to the docking bay): smeared blocks and doubled
+  edges. The audit showed the gaze map changing every frame and, every frame, three
+  5600x2856 targets drawn by mapped passes over the previous frame's contents without
+  a clear. Whatever those passes blended over or left undrawn was still in the previous
+  map's layout but was then read through the new one. DXMT `eea53ec` rewrites such a
+  target into the pass's layout first (a copy and one full-screen draw through both
+  maps' tables), and tags a fully cleared target with the current map, since a clear
+  reads the same in any layout. The fixture's `--relayout` case (a scene under map 1,
+  then its left half redrawn under map 2 without a clear) fails without the rewrite
+  (655 px) and passes with it (2 px). Each rewrite costs a copy and a full-screen draw
+  of that target. Installed in `wine-foveation-unified`.
 
 ## Limits
 

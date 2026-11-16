@@ -12,6 +12,9 @@
 // into a half-width texture (UEVR copies each eye this way), which is read back instead.
 // --compute-write: after the mapped scene pass, a compute shader rewrites the scene through
 // a UAV (ordinary layout, as UE4's compute lighting does); B must read it untranslated.
+// --relayout: after A, the map changes (as gaze foveation's does each frame) and a pass
+// under map 2 redraws only the left half of the scene, without a clear; the right half
+// still holds map 1's layout and must be rewritten into map 2's before that pass.
 #include <windows.h>
 #include <d3d11_4.h>
 #include <d3dcompiler.h>
@@ -57,7 +60,7 @@ struct Error { double centre_max = 0, outer_max = 0, sum = 0; unsigned long long
 
 int main(int argc, char **argv)
 {
-    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false, two_maps = false, partial_copy = false, compute_write = false;
+    bool unfoveated = false, scissor = false, late_read = false, split_pass = false, reverse_read = false, mixed_reads = false, mixed_swap = false, two_maps = false, partial_copy = false, compute_write = false, relayout = false;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--unfoveated")) unfoveated = true;
         else if (!std::strcmp(argv[i], "--scissor")) scissor = true;
@@ -69,6 +72,7 @@ int main(int argc, char **argv)
         else if (!std::strcmp(argv[i], "--two-maps")) two_maps = true;
         else if (!std::strcmp(argv[i], "--partial-copy")) partial_copy = true;
         else if (!std::strcmp(argv[i], "--compute-write")) compute_write = true;
+        else if (!std::strcmp(argv[i], "--relayout")) relayout = true;
         else REQUIRE(false);
     }
     REQUIRE(!split_pass || (unfoveated && late_read));
@@ -93,7 +97,7 @@ int main(int argc, char **argv)
     REQUIRE(probe(FOVEATION_CREATE, &map) == 0 && map.status == 0);
     if (!unfoveated) REQUIRE(map.map && map.physical_width < N && map.physical_height < N);
     foveation_probe_params map2 = {};
-    if (two_maps) {
+    if (two_maps || relayout) {
         map2.device = map.device; map2.mode = 2; map2.value = 1;
         REQUIRE(probe(FOVEATION_CREATE, &map2) == 0 && map2.status == 0 && map2.map);
     }
@@ -171,6 +175,17 @@ int main(int argc, char **argv)
     if (scissor) { context->RSSetState(scissored); context->RSSetScissorRects(1, &rect); }
     pass(0, 0, nullptr);   // A: mapped scene
     context->RSSetState(rasterizer);
+    if (relayout) {
+        REQUIRE(SUCCEEDED(foveation->SetRasterizationRateMap(map2.map)));
+        const D3D11_RECT left = {0, 0, LONG(N / 2), LONG(N)};
+        context->RSSetState(scissored);
+        context->RSSetScissorRects(1, &left);
+        context->OMSetRenderTargets(1, &rtvs[0], nullptr);
+        context->PSSetShader(pixel[0], nullptr, 0);
+        context->PSSetShaderResources(0, 1, &no_srv);
+        context->Draw(3, 0);   // the left half again, under map 2, over map 1's contents
+        context->RSSetState(rasterizer);
+    }
     if (compute_write) {
         ID3DBlob *cs = compile("cs_scene", "cs_5_0");
         REQUIRE(cs);
@@ -275,7 +290,7 @@ int main(int argc, char **argv)
                     if (row[x * 4] || row[x * 4 + 1]) { x0 = std::min(x0, x); x1 = std::max(x1, x + 1); y0 = std::min(y0, y); y1 = std::max(y1, y + 1); }
                     continue;
                 }
-                const bool centre = !unfoveated && !two_maps && x + .5 > cx0 && x + .5 < cx1 && y + .5 > cy0 && y + .5 < cy1;
+                const bool centre = !unfoveated && !two_maps && !relayout && x + .5 > cx0 && x + .5 < cx1 && y + .5 > cy0 && y + .5 < cy1;
                 const double expected[4] = {x + .5, y + .5, x + 7.5, y + .5};
                 for (unsigned c = 0; c < 4; ++c) {
                     if (c == 2 && x + 16 >= N) continue; // offset read clamps at the edge
@@ -320,7 +335,7 @@ int main(int argc, char **argv)
     for (unsigned i = 0; i < 5; ++i) { srvs[i]->Release(); rtvs[i]->Release(); textures[i]->Release(); }
     scissored->Release(); staging->Release(); samplers[0]->Release(); samplers[1]->Release(); rasterizer->Release(); vertex->Release();
     REQUIRE(probe(FOVEATION_RELEASE, &map) == 0);
-    if (two_maps) REQUIRE(probe(FOVEATION_RELEASE, &map2) == 0);
+    if (two_maps || relayout) REQUIRE(probe(FOVEATION_RELEASE, &map2) == 0);
     foveation->Release(); native->Release(); context->Release(); device->Release();
     FreeLibrary(helper);
     return ok ? 0 : 1;
