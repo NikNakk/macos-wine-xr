@@ -301,7 +301,14 @@ With patch 0013 the game opened on the Mac and was playable in the headset with 
   PS VR2's lopsided per-eye fields of view the two eyes' gaze points are some 15% of the
   image width apart (an estimate), so the map covering both has a full-rate band about a
   third wider than one eye's.
-  Built into `gaze-gate`; not yet seen in the game. That run also quit without a crash:
+  First run (2026-11-16 21:44): every 2800x2856 eye pass was mapped (51 in the three
+  audited frames), with the map alternating between two maps frame by frame, and the
+  run quit cleanly through the exit guard. The bridge's "per eye" line was missing:
+  nothing `graphics.cpp` writes to stderr reached `game.log` (not even its long-standing
+  "projection layer with N views"), so each of its messages is now flushed. The bridge
+  (`gaze-gate`) also logs the submitted frame rate every 10 s
+  (`wineopenxr: N frames per second`).
+  Built into `gaze-gate`. The run before it also quit without a crash:
   the guard skipped the `Realloc(Ptr, 0)` free, and no crash dump was written.
 - **Synchronized Sequential** (`VR_RenderingMethod=1`, as in Gruntled's community
   profile, 14 Jan 2024: settings only, no UObjectHook, scripts or plugins; it also sets

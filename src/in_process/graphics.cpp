@@ -79,7 +79,7 @@ static void follow_scene_size(SessionState *session, mw_gaze_foveation_params &g
             const bool one_eye = !(width == gaze.width && height == gaze.height) &&
                                  !shape_matches(width, height, gaze.width, gaze.height);
             fprintf(stderr, "wineopenxr: gaze foveation follows the scene at %ux%u (output %ux%u%s)\n", width, height,
-                    gaze.width, gaze.height, one_eye ? ", one eye at a time" : "");
+                    gaze.width, gaze.height, one_eye ? ", one eye at a time" : ""); fflush(stderr);
             session->scene_width = width; session->scene_height = height;
         }
     } else {
@@ -155,7 +155,7 @@ extern "C" XrResult WINAPI xrCreateSession(XrInstance instance, const XrSessionC
     state->device = binding->device; state->device->AddRef();
     HRESULT hr = mw_graphics_interop_open(state->device, native_host, &state->interop);
     if (FAILED(hr)) {
-        fprintf(stderr, "wineopenxr: ERROR no graphics interop backend for this D3D11 device hr=%#lx\n", hr);
+        fprintf(stderr, "wineopenxr: ERROR no graphics interop backend for this D3D11 device hr=%#lx\n", hr); fflush(stderr);
         destroy_state(state); free(wrapper); return XR_ERROR_GRAPHICS_DEVICE_INVALID;
     }
     if (parent->foveation_d3d11_enabled && !state->interop->supports_target_foveation()) {
@@ -173,10 +173,10 @@ extern "C" XrResult WINAPI xrCreateSession(XrInstance instance, const XrSessionC
             char caps[256];
             mw_graphics_format_caps(state->interop->capabilities(), caps, sizeof(caps));
             fprintf(stderr, "wineopenxr: session backend=%s api=D3D11 sync=%s caps=%s\n", state->interop->name(),
-                    mw_graphics_sync_name(state->interop->sync()), caps);
+                    mw_graphics_sync_name(state->interop->sync()), caps); fflush(stderr);
         }
         else {
-            fprintf(stderr, "wineopenxr: ERROR %s completion-event binding failed hr=%#lx\n", state->interop->name(), hr);
+            fprintf(stderr, "wineopenxr: ERROR %s completion-event binding failed hr=%#lx\n", state->interop->name(), hr); fflush(stderr);
             struct xrDestroySession_params rollback = {(XrSession)wrapper};
             UNIX_CALL(xrDestroySession, &rollback);
             result = XR_ERROR_GRAPHICS_DEVICE_INVALID;
@@ -242,12 +242,12 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
             HRESULT hr = interop->import_image(metal[i].texture, desc, &images[i]);
             if (FAILED(hr)) {
                 fprintf(stderr, "wineopenxr: ERROR %s import rejected image=%u Metal=%p hr=%#lx; no implicit copy\n",
-                        interop->name(), i, metal[i].texture, hr);
+                        interop->name(), i, metal[i].texture, hr); fflush(stderr);
                 result = XR_ERROR_RUNTIME_FAILURE; break;
             }
             zero_copy += images[i].zero_copy; iosurface += images[i].iosurface;
             fprintf(stderr, "wineopenxr: %s image=%u Metal=%p D3D11=%p array=%u\n", images[i].zero_copy ? "zero-copy" : "COPY",
-                    i, metal[i].texture, images[i].texture, desc.ArraySize);
+                    i, metal[i].texture, images[i].texture, desc.ArraySize); fflush(stderr);
         }
         if (XR_FAILED(result)) {
             for (uint32_t i = 0; i < state->count; ++i) interop->release_image(&images[i]);
@@ -258,7 +258,7 @@ extern "C" XrResult WINAPI xrEnumerateSwapchainImages(XrSwapchain swapchain, uin
                 "native=MTLTexture iosurface=%u/%u sync=%s zero-copy=%s%s\n", (void *)wrapper, interop->name(),
                 state->count, desc.Width, desc.Height, desc.ArraySize, (unsigned)desc.Format, iosurface, state->count,
                 mw_graphics_sync_name(interop->sync()), zero_copy == state->count ? "yes" : "no",
-                zero_copy == state->count ? "" : " fallback=explicit-gpu-blit");
+                zero_copy == state->count ? "" : " fallback=explicit-gpu-blit"); fflush(stderr);
         state->images = images; state->metal = metal; state->acquired = acquired;
     }
     *count = state->count;
@@ -369,7 +369,7 @@ extern "C" XrResult WINAPI xrAcquireSwapchainImage(XrSwapchain swapchain, const 
                 session->eye_mode_logged = mode;
                 fprintf(stderr, "wineopenxr: gaze foveation per eye: %s\n",
                         mode ? "eyes alternate; each frame gets the next eye's map"
-                             : "eyes do not alternate; one map covers both eyes");
+                             : "eyes do not alternate; one map covers both eyes"); fflush(stderr);
             }
         }
         // An application that copies its own eye textures into the swapchain (OpenVR through
@@ -421,7 +421,7 @@ extern "C" XrResult WINAPI xrReleaseSwapchainImage(XrSwapchain swapchain, const 
     HRESULT hr = state->interop->signal_completion(++session->fence_value);
     if (FAILED(hr)) {
         LeaveCriticalSection(&state->release_lock);
-        fprintf(stderr, "wineopenxr: ERROR %s producer completion signal failed hr=%#lx\n", state->interop->name(), hr);
+        fprintf(stderr, "wineopenxr: ERROR %s producer completion signal failed hr=%#lx\n", state->interop->name(), hr); fflush(stderr);
         return XR_ERROR_RUNTIME_FAILURE;
     }
     if (swap->foveation_applied) {
@@ -529,6 +529,19 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
     if (!info || info->next) return XR_ERROR_LAYER_INVALID;
     if (info->layerCount > MAX_FRAME_LAYERS) return XR_ERROR_LAYER_LIMIT_EXCEEDED;
     if (info->layerCount && !info->layers) return XR_ERROR_LAYER_INVALID;
+    {
+        // The frame rate the application submits, every 10 s (headset frames, not engine
+        // frames: UEVR's Synchronized Sequential draws two engine frames per headset frame).
+        static LARGE_INTEGER frequency, since; static uint32_t frames;
+        LARGE_INTEGER now; QueryPerformanceCounter(&now);
+        if (!frequency.QuadPart) { QueryPerformanceFrequency(&frequency); since = now; }
+        ++frames;
+        const double seconds = double(now.QuadPart - since.QuadPart) / frequency.QuadPart;
+        if (seconds >= 10.0) {
+            fprintf(stderr, "wineopenxr: %.1f frames per second\n", frames / seconds); fflush(stderr);
+            frames = 0; since = now;
+        }
+    }
     XrFrameEndInfo native = *info;
     NativeLayer copies[MAX_FRAME_LAYERS];
     XrCompositionLayerProjectionView views[MAX_FRAME_LAYERS][4];
@@ -557,7 +570,7 @@ extern "C" XrResult WINAPI xrEndFrame(XrSession session, const XrFrameEndInfo *i
         static uint32_t logged_view_count;
         if (projection.viewCount != logged_view_count) {
             logged_view_count = projection.viewCount;
-            fprintf(stderr, "wineopenxr: projection layer with %u views\n", projection.viewCount);
+            fprintf(stderr, "wineopenxr: projection layer with %u views\n", projection.viewCount); fflush(stderr);
         }
         // Gaze foveation and the Vulkan bridge follow the frame's first projection layer, the
         // scene. Gaze covers one swapchain holding both eyes: side by side in one layer, or
