@@ -320,8 +320,29 @@ flat picture in the headset, with its menu out of reach on the Mac. Patch
 of Wine's monitors, display modes and desktop rectangle; the main display is never
 hidden. Installed in `runtime-unified` and `wine-foveation-unified` (previous
 `winemac.so` beside it as `winemac.so.pre-hidden-displays`). With only the Mac's own
-display Wine reports the same single monitor as before; hiding the headset itself is
-still to be seen with it connected.
+display Wine reports the same single monitor as before. On 2026-11-16 the game opened on
+the Mac with the headset connected, so the headset was hidden.
+
+## The Mac's display mode
+
+A full-screen game sets the display mode it asks for, and the largest one Wine offers on
+a Retina display is its full pixel size without scaling (2880x1864 on the M5 MacBook's
+display, against the usual 1710x1107 points). Wine sets the mode back when the game does,
+but macOS keeps a mode after the process that set it has gone, so a game that crashes on
+quit leaves the display unscaled. The Turing Test with UEVR did this every time
+(2026-11-16; UEVR's crash on quit, [uevr.md](uevr.md#headset-runs-2026-11-16)).
+
+`run-windows-game.zsh` saves every display's mode before the game starts
+(`tools/steam_play/display_modes.py save`) and, on exit, sets back any that differ
+(`restore`, which prints what it changed). It does not stop the change while the game
+runs. To set the main display back by hand, use System Settings, Displays, or:
+
+```sh
+python3 tools/steam_play/display_modes.py show
+python3 tools/steam_play/display_modes.py restore FILE   # a file written by save
+```
+
+Tests: `python3 tests/macos/test_display_modes.py` (no display is changed).
 
 ## Launch Options
 

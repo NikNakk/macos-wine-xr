@@ -180,9 +180,15 @@ saved=()
 for f in "${MWXR_IN_PROCESS_PREFIX}"/drive_c/users/*/AppData/Local/openvr/openvrpaths.vrpath(N); do
   cp -p "$f" "${keep}/${#saved}"; saved+=("$f")
 done
+# A full-screen game changes the Mac's display mode through Wine, and a game that crashes
+# leaves it changed (docs/steam-play.md, The Mac's display mode): save the modes, and put
+# back any that differ on exit.
+python3 "${repo}/tools/steam_play/display_modes.py" save "${keep}/display-modes.json" || true
 restore() {
   local i
   for (( i = 1; i <= ${#saved}; i++ )); do cp -p "${keep}/$((i - 1))" "${saved[$i]}"; done
+  [[ -f ${keep}/display-modes.json ]] &&
+    python3 "${repo}/tools/steam_play/display_modes.py" restore "${keep}/display-modes.json" || true
   rm -rf "${keep}"
 }
 trap restore EXIT

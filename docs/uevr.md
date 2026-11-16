@@ -138,6 +138,30 @@ Insert menu needs act. The session ended after three minutes when the connection
 Monado broke (`XR_ERROR_INSTANCE_LOST`). Patch 0013 keeps the headset display from the
 game; to be tried again.
 
+## Headset runs, 2026-11-16
+
+With patch 0013 the game opened on the Mac and was playable in the headset with UEVR
+(four runs: two with gaze foveation, two without). Found:
+
+- **The Mac's display left unscaled.** The game sets 2880x1864, the display's full pixel
+  size, and the crash on quit kept it from setting it back. The runner now restores the
+  modes on exit ([steam-play.md](steam-play.md#the-macs-display-mode)).
+- **Crash on quit, every run.** UE's crash reporter wrote a minidump each time
+  (`Saved/Logs/UE4CC-Windows-*` in the game's `AppData/Local/VenusPrototype`): an access
+  violation reading address 0x2 at `TheTuringTest.exe+0x279eed` on the main thread, under
+  the C runtime's exit, the same address each time. A crash on exit is common with UEVR
+  on Windows too; whether this game also does it flat has not been checked.
+- **The player's arms in the left eye only.** UEVR's default rendering method, Native
+  Stereo (`VR_RenderingMethod=0`), draws some meshes in one eye in many games. UEVR's
+  remedies, in its menu (Runtime): Native Stereo Fix, or Rendering Method Synchronized
+  Sequential.
+- **Gaze foveation: parts of the image in the warped layout.** 6,328 `Rate-map read:
+  second layout in one pass left untranslated` warnings in a gaze run, none without
+  foveation. Every gaze update makes a new rate map, and a pass that reads this frame's
+  target and one rendered under an earlier map (UE's temporal AA history, say) can
+  translate only one of them; the other is read in its physical layout. Fixed foveation
+  has one map, so it should not hit this (the 2026-11-14 fixed run had no warnings).
+
 ## Limits
 
 - **Foveation.** UEVR works with `MWXR_FOVEATION` too: patch 0025 carries the
