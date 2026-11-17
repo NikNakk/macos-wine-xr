@@ -85,8 +85,12 @@ if [[ -n ${MWXR_EXD_SERVICE_ENV:-} ]]; then
  export XRT_MACOS_METAL_IPC_SERVICE_NAME=${service_label}.metal-ipc
  export XDG_RUNTIME_DIR=/private/tmp/mwxr-exd-service.${UID}.$$
  mkdir -p "${XDG_RUNTIME_DIR}"
+ # EXD's first level load after a DXMT shader change compiles for 10 s or more on the
+ # render thread, so the frame's GPU signal comes late; the service's default 5 s
+ # (XRT_MACOS_CLIENT_GPU_HUNG_MS) then calls the session lost. 30 s is its maximum;
+ # MWXR_EXD_SERVICE_ENV can still set another value.
  python3 -I - "$HOME/Library/LaunchAgents/org.freedesktop.monado.service.plist" "${out}/service.plist" \
-  "${service_label}" "${out}" ${=MWXR_EXD_SERVICE_ENV} <<'PY2'
+  "${service_label}" "${out}" XRT_MACOS_CLIENT_GPU_HUNG_MS=30000 ${=MWXR_EXD_SERVICE_ENV} <<'PY2'
 import os, plistlib, sys
 source, target, label, out, *overrides = sys.argv[1:]
 plist = plistlib.load(open(source, 'rb'))
