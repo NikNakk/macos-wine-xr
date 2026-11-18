@@ -1,5 +1,11 @@
 # macOS Wine XR
 
+Shared public bridge development and Windows Steam releases are maintained in
+[threshold-wine-xr](https://github.com/NikNakk/threshold-wine-xr). This repository
+retains the private macOS Steam integration and research. Its public-profile path
+uses the pinned `components/threshold-wine-xr` submodule; see
+[profile separation](docs/managed-stacks.md).
+
 Bridge code and tooling for running Windows XR applications under Wine on macOS against native macOS OpenXR runtimes.
 
 The repository split is intentional:

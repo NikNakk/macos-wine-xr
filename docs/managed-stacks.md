@@ -13,9 +13,19 @@ launch planning, and records the stack's provenance in `run.json`. It refuses a
 Monado service/client tag mismatch and detects a different running service passively.
 The same selected file reaches framework launches from Threshold XR and Threshold Home.
 
-## Public package and local compatibility runtime
+## Public Windows Steam profile (default)
 
-The public package builder produces only our launcher, compat gate/scanner, scripts,
+Shared bridge development now lives in [threshold-wine-xr](https://github.com/NikNakk/threshold-wine-xr). This repository pins it at `components/threshold-wine-xr`; initialize it with `git submodule update --init components/threshold-wine-xr`. Do not copy shared bridge fixes between repositories. Update the public core first, then advance the private pin after testing. `scripts/build-public-bridge.zsh` builds the pinned shared DXMT core into a separate `build-in-process/public-core` directory; its output works as the bridge input for either integration profile. The older in-tree backend experiments remain explicitly private and do not overwrite this build.
+
+New profiles use the ordinary Windows Steam client and separate runtime/prefix directories. Prepare them with the public tool described in [managed profiles](https://github.com/NikNakk/threshold-wine-xr/blob/main/docs/managed-profiles.md), or this repository's preparation CLI without a stand-in (`--integration windows-steam`). The CLI delegates to the pinned public implementation. Its default prefix is `<prefixes>/windows-steam`; it does not reuse the private native-Steam per-game prefixes.
+
+Public records use `windows_xr.integration: windows-steam`; private records use `steam_play.integration: native-steam`. Existing `steam_play` records without a mode retain their private native-Steam meaning. Mixed records are rejected. Threshold XR can verify and select either prepared file through **Components → Launch Stack → Select Windows XR Profile…**. Selection does not activate or migrate a runtime.
+
+For a public profile, the private managed runner accepts `APPID --executable GAME.EXE [--openvr] [arguments]` and starts only the public helper. It clears inherited native-Steam redirects. The prebuilt macOS Steam launcher installer refuses public profiles. For ordinary setup and Steam launch, use the public `tools/run_profile.py` actions from the pinned core.
+
+## Private native Steam package and local runtime
+
+The private integration package builder produces our launcher, compat gate/scanner, scripts,
 compatibility-tool definitions and the corresponding launcher sources. It does not
 bundle Steam, Steamworks SDK files or lsteamclient. Public binary uploads are held in
 the release workflow while the Steam client/SDK licensing questions are reviewed.
@@ -33,6 +43,7 @@ permitted. No Steamworks source is downloaded by the preparation tool.
 
 ```sh
 python3 tools/steam_play/prepare_runtime.py \
+  --integration native-steam \
   --stack '/path/to/selected-launch-stack.json' \
   --wine-runtime '/path/to/existing/wine-with-lsteamclient' \
   --bridge-build '/path/to/existing/in-process-gate-build' \

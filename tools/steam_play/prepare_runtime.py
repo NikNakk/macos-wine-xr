@@ -38,8 +38,18 @@ def clone(source, destination):
         shutil.copytree(source, destination, symlinks=True)
 
 
-def prepare(stack_path, wine, bridge, windows_loader, stand_in, output, prefixes, relocate_binaries=True):
+def prepare(stack_path, wine, bridge, windows_loader, stand_in, output, prefixes, relocate_binaries=True, integration=None):
+    mode = integration or ('native-steam' if stand_in is not None else 'windows-steam')
+    if mode == 'windows-steam':
+        if stand_in is not None:
+            raise ValueError('The Windows Steam profile does not use a Steam stand-in')
+        from public_bridge import module
+        return module('prepare_runtime').prepare(stack_path, wine, bridge, windows_loader, output,
+                                                Path(prefixes) / 'windows-steam')
+    if mode != 'native-steam' or stand_in is None:
+        raise ValueError('Private native Steam requires --integration native-steam and --stand-in')
     stack = load_stack(stack_path)
+    stack.pop('windows_xr', None)
     if output.exists():
         raise ValueError(f'Refusing to overwrite an existing runtime: {output}')
     wine, bridge = Path(wine).resolve(), Path(bridge).resolve()
@@ -84,6 +94,8 @@ def prepare(stack_path, wine, bridge, windows_loader, stand_in, output, prefixes
                 target = runtime / 'bridge' / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
+        if (bridge / 'lib').is_dir():
+            clone(bridge / 'lib', runtime / 'bridge/lib')
         shutil.copy2(stand_in, runtime / 'bin/mwxr-steam.exe')
         shutil.copy2(windows_loader, runtime / 'lib/wine/x86_64-windows/openxr_loader.dll')
         clone(xrizer, runtime / 'openvr')
@@ -104,7 +116,7 @@ def prepare(stack_path, wine, bridge, windows_loader, stand_in, output, prefixes
             'MWXR_GAME_PREFIXES': str(Path(prefixes).resolve()),
         }
         stack.pop('_path', None)
-        stack['steam_play'] = {'environment': env, 'distribution': 'local-external-components',
+        stack['steam_play'] = {'integration': 'native-steam', 'environment': env, 'distribution': 'local-external-components',
                               'external_inputs': {str(p): sha256(p) for p in [wine / 'lib/wine/x86_64-unix/ntdll.so',
                                   wine / 'lib/wine/x86_64-windows/ntdll.dll', wine / 'lib/wine/i386-windows/ntdll.dll',
                                   bridge / 'x86_64-unix/wineopenxr.so', bridge / 'x86_64-windows/wineopenxr.dll',
@@ -124,11 +136,13 @@ def prepare(stack_path, wine, bridge, windows_loader, stand_in, output, prefixes
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ('stack', 'wine-runtime', 'bridge-build', 'windows-loader', 'stand-in', 'output'):
+    for name in ('stack', 'wine-runtime', 'bridge-build', 'windows-loader', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--stand-in', type=Path, help='Private native Steam only; preserves legacy explicit stand-in invocations')
+    parser.add_argument('--integration', choices=('windows-steam', 'native-steam'), help='Defaults to Windows Steam, or native Steam for legacy --stand-in invocations')
     parser.add_argument('--prefixes', type=Path, default=Path.home() / 'Library/Application Support/Threshold XR/Prefixes')
     args = parser.parse_args()
-    print(prepare(args.stack, args.wine_runtime, args.bridge_build, args.windows_loader, args.stand_in, args.output, args.prefixes))
+    print(prepare(args.stack, args.wine_runtime, args.bridge_build, args.windows_loader, args.stand_in, args.output, args.prefixes, integration=args.integration))
 
 
 if __name__ == '__main__':

@@ -8,7 +8,7 @@ import signal
 import subprocess
 import sys
 
-from managed_stack import load_stack, native_selection, steam_environment, check_monado
+from managed_stack import load_stack, native_selection, steam_environment, check_monado, integration_mode
 
 STANDARD_ALYX = ['-vr', '-steam', '-noasserts', '-nopassiveasserts', '+map', 'startup']
 
@@ -64,14 +64,31 @@ def main(argv=None):
     stack = load_stack(path)
     if not stack:
         raise ValueError('No Threshold XR launch stack is selected')
+    mode = integration_mode(stack)  # reject mixed/unknown records before either launch path
     environment = dict(os.environ, THRESHOLD_LAUNCH_STACK=stack['_path'])
-    if native_only or (args[0] == '546560' and environment.get('MWXR_ALYX') == 'native'):
+    if native_only or (args[0] == '546560' and stack.get('windows_xr') is None and environment.get('MWXR_ALYX') == 'native'):
         command = native_command(stack, args[1:], environment)
     else:
         environment.update(steam_environment(stack))
         check_monado(stack, environment['MWXR_NATIVE_RUNTIME_JSON'])
-        bridge = Path(__file__).resolve().parents[2]
-        command = [str(bridge / 'scripts/run-windows-game.zsh')] + args
+        if mode == 'windows-steam':
+            from public_bridge import module
+            public = module('managed_profiles')
+            for key in public.NATIVE_ENV:
+                environment.pop(key, None)
+            if len(args) < 3 or args[1] != '--executable':
+                raise ValueError('Windows Steam: give APPID --executable GAME.EXE [--openvr] [game arguments]')
+            executable, extra = args[2], args[3:]
+            action = 'openvr' if extra[:1] == ['--openvr'] else 'openxr'
+            if action == 'openvr':
+                extra = extra[1:]
+            environment['SteamAppId'] = environment['SteamGameId'] = args[0]
+            command = ['zsh', str(Path(environment['MWXR_PUBLIC_BRIDGE_ROOT']) / 'scripts' /
+                ('run-openvr-game.zsh' if action == 'openvr' else 'run-in-process-openxr.zsh')), executable, *extra]
+        else:
+            environment.pop('MWXR_PUBLIC_BRIDGE_ROOT', None)
+            bridge = Path(__file__).resolve().parents[2]
+            command = [str(bridge / 'scripts/run-windows-game.zsh')] + args
     return wait_for_command(command, environment)
 
 

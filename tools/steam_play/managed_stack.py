@@ -40,7 +40,28 @@ def native_selection(stack):
     return components, native
 
 
+def integration_mode(stack):
+    public = stack.get('windows_xr') if stack else None
+    private = stack.get('steam_play') if stack else None
+    if public is not None and private is not None:
+        raise ValueError('Select separate Windows Steam and private native Steam profiles')
+    if public is not None:
+        mode = public.get('integration', 'windows-steam') if isinstance(public, dict) else None
+        if mode != 'windows-steam':
+            raise ValueError('Unknown Windows Steam integration mode')
+        return mode
+    if private is not None:
+        # Existing profiles predate the integration field and remain native Steam.
+        if not isinstance(private, dict) or private.get('integration', 'native-steam') != 'native-steam':
+            raise ValueError('Unknown native Steam integration mode')
+        return 'native-steam'
+    return 'windows-steam'
+
+
 def steam_environment(stack):
+    if integration_mode(stack) == 'windows-steam':
+        from public_bridge import module
+        return module('managed_profiles').public_environment(stack)
     selection = stack.get('steam_play') if stack else None
     if not isinstance(selection, dict) or not isinstance(selection.get('environment'), dict):
         raise ValueError('Prepare a Steam Play compatibility runtime for this stack first')
@@ -54,6 +75,9 @@ def steam_environment(stack):
         'lib/wine/x86_64-unix/ntdll.so', 'lib/wine/x86_64-windows/ntdll.dll',
         'lib/wine/i386-windows/ntdll.dll', 'lib/wine/x86_64-unix/winemetal.so',
         'lib/wine/x86_64-windows/d3d11.dll', 'lib/wine/x86_64-windows/dxgi.dll']]
+    packaged_loader = Path(env['MWXR_IN_PROCESS_BUILD']) / 'lib/libopenxr_loader.dylib'
+    if packaged_loader.is_file():
+        files.append(packaged_loader)
     files += [Path(env['MWXR_IN_PROCESS_WINE']) / 'bin/wine',
              Path(env['MWXR_IN_PROCESS_WINE']) / 'bin/wineserver',
              Path(env['MWXR_IN_PROCESS_WINE']) / 'lib/wine/x86_64-windows/lsteamclient.dll',

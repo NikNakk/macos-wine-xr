@@ -88,6 +88,16 @@ class ManagedSteamPlay(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'changed'):
             contract.steam_environment(contract.load_stack(result))
 
+    def test_private_profile_can_adopt_the_packaged_public_loader(self):
+        self.write(self.bridge, 'lib/libopenxr_loader.dylib', b'packaged loader')
+        value = contract.load_stack(self.prepare())
+        contract.steam_environment(value)
+        target = self.output / 'wine/bridge/lib/libopenxr_loader.dylib'
+        self.assertEqual(target.read_bytes(), b'packaged loader')
+        target.write_bytes(b'tampered')
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            contract.steam_environment(value)
+
     def test_missing_bridge_leaves_no_partial_runtime(self):
         (self.bridge / 'x86_64-unix/wineopenxr.so').unlink()
         with self.assertRaises(ValueError):
@@ -168,6 +178,56 @@ class ManagedSteamPlay(unittest.TestCase):
         self.assertIn("'" + str(destination / 'launch-stack.json') + "'", runner)
         self.assertEqual((destination / 'payload/compatibilitytools.d/macos-wine-xr-proton/runner').read_text(), str(destination / 'runner') + '\n')
         self.assertFalse(self.prefixes.exists())
+
+    def prepare_public(self):
+        for name in ['lib/wine/x86_64-unix/lsteamclient.so', 'lib/wine/x86_64-windows/lsteamclient.dll',
+                     'lib/wine/i386-windows/lsteamclient.dll']:
+            (self.wine / name).unlink()
+        for name in ['run-in-process-openxr', 'run-openvr-game', 'run-windows-steam', 'install-windows-steam',
+                     'windows-steam-env', 'openxr-launch-settings']:
+            self.write(self.bridge, 'scripts/' + name + '.zsh')
+        return prepare_runtime.prepare(self.stack, self.wine, self.bridge, self.loader, None,
+                                       self.output, self.prefixes, relocate_binaries=False)
+
+    def test_legacy_private_mode_and_new_public_default(self):
+        self.assertEqual(contract.integration_mode(self.document), 'windows-steam')
+        result = self.prepare()
+        value = contract.load_stack(result)
+        self.assertEqual(contract.integration_mode(value), 'native-steam')
+        del value['steam_play']['integration']
+        self.assertEqual(contract.integration_mode(value), 'native-steam')
+        contract.steam_environment(value)
+
+    def test_public_profile_uses_separate_prefix_and_has_no_stand_in(self):
+        result = self.prepare_public()
+        value = contract.load_stack(result)
+        env = contract.steam_environment(value)
+        self.assertEqual(contract.integration_mode(value), 'windows-steam')
+        self.assertEqual(env['MWXR_IN_PROCESS_PREFIX'], str(self.prefixes / 'windows-steam'))
+        self.assertNotIn('ALYX_STEAM_STAND_IN', env)
+        self.assertFalse(self.prefixes.exists())
+        with self.assertRaisesRegex(ValueError, 'private native-steam'):
+            install.assemble(self.root / 'package', result, self.root / 'installation', sign=False)
+
+    def test_public_runner_clears_private_redirect_and_uses_public_helper(self):
+        result = self.prepare_public()
+        with mock.patch.dict(os.environ, {'MWXR_LSTEAMCLIENT': '1', 'ALYX_STEAM_STAND_IN': '/private/stand-in', 'MWXR_ALYX': 'native'}), \
+             mock.patch.object(managed_runner, 'check_monado'), \
+             mock.patch.object(managed_runner, 'wait_for_command', return_value=0) as run:
+            self.assertEqual(managed_runner.main(['--stack', str(result), '546560', '--executable', '/games/test.exe', '--openvr', 'argument with spaces']), 0)
+        command, env = run.call_args.args
+        self.assertTrue(command[1].endswith('/bridge/scripts/run-openvr-game.zsh'))
+        self.assertEqual(command[-2:], ['/games/test.exe', 'argument with spaces'])
+        self.assertNotIn('MWXR_LSTEAMCLIENT', env)
+        self.assertNotIn('ALYX_STEAM_STAND_IN', env)
+        self.assertNotIn('MWXR_ALYX', env)
+        self.assertEqual(env['SteamAppId'], '546560')
+
+    def test_mixed_public_private_profiles_are_rejected(self):
+        value = contract.load_stack(self.prepare())
+        value['windows_xr'] = {'integration': 'windows-steam'}
+        with self.assertRaisesRegex(ValueError, 'separate'):
+            contract.steam_environment(value)
 
 
 if __name__ == '__main__':

@@ -14,11 +14,13 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/steam_play'))
-from managed_stack import load_stack, steam_environment
+from managed_stack import load_stack, steam_environment, integration_mode
 
 
 def assemble(package, stack_path, destination, games=None, sign=True):
     stack = load_stack(stack_path)
+    if integration_mode(stack) != 'native-steam':
+        raise ValueError('The macOS Steam launcher requires a private native-steam profile; use the public Windows Steam helpers instead')
     steam_environment(stack)
     package, destination = Path(package).resolve(), Path(destination).resolve()
     if destination.exists() or destination.is_relative_to(package):

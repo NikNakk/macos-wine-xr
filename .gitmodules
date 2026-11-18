@@ -1,0 +1,3 @@
+[submodule "components/threshold-wine-xr"]
+	path = components/threshold-wine-xr
+	url = https://github.com/NikNakk/threshold-wine-xr.git
